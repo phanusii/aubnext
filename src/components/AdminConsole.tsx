@@ -48,6 +48,7 @@ type CalculatedResult = {
   status: "PASSED" | "FAILED" | "REVIEW";
   reason: string;
   room: string;
+  scoreBreakdown: Record<string, number>;
 };
 type ImportValidation = {
   rowCount: number;
@@ -120,6 +121,13 @@ export function AdminConsole() {
     }
   }, []);
 
+  const loadStoredResults = useCallback(async (examId: string) => {
+    const response = await fetch(`/api/exams/${examId}/results`);
+    if (!response.ok) return;
+    const data = await response.json();
+    setCalculatedResults(data.results ?? []);
+  }, []);
+
   useEffect(() => {
     fetch("/api/settings")
       .then((response) => response.json())
@@ -160,8 +168,9 @@ export function AdminConsole() {
       );
       setImportRoom(selectedExam.roomQuotas[0]?.room ?? "");
       setCalculatedResults([]);
+      void loadStoredResults(selectedExam.id);
     });
-  }, [selectedExam]);
+  }, [loadStoredResults, selectedExam]);
 
   async function login() {
     setBusy(true);
@@ -344,6 +353,7 @@ export function AdminConsole() {
     }
 
     setPasteText("");
+    setCalculatedResults([]);
     setMessage(`นำเข้า ${data.imported} คนในห้อง ${importRoom} แล้ว`);
     await loadExams();
   }
@@ -365,6 +375,7 @@ export function AdminConsole() {
       return;
     }
 
+    setCalculatedResults([]);
     setMessage(`นำเข้า ${data.imported} คนในห้อง ${importRoom} แล้ว`);
     await loadExams();
   }
@@ -386,9 +397,17 @@ export function AdminConsole() {
       setMessage(`คำนวณแล้ว ${data.results?.length ?? 0} รายการ`);
     } else {
       setMessage("ประกาศผลแล้ว");
+      await loadStoredResults(selectedExam.id);
       await loadExams();
     }
   }
+
+  const resultSummary = useMemo(() => {
+    const passed = calculatedResults.filter((result) => result.status === "PASSED").length;
+    const review = calculatedResults.filter((result) => result.status === "REVIEW").length;
+    const failed = calculatedResults.filter((result) => result.status === "FAILED").length;
+    return { passed, review, failed, total: calculatedResults.length };
+  }, [calculatedResults]);
 
   const resultsByRoom = useMemo(() => {
     const grouped = new Map<string, CalculatedResult[]>();
@@ -645,22 +664,32 @@ export function AdminConsole() {
                   </div>
                 </Panel>
 
-                {calculatedResults.length > 0 && (
-                  <Panel icon={<Calculator size={18} />} title="ตัวอย่างผลคำนวณก่อนประกาศ">
-                    {selectedExam.selectionMode === "WHOLE_LEVEL" ? (
-                      <ResultTable results={calculatedResults} />
+                <Panel icon={<Calculator size={18} />} title="ผลคะแนน อันดับ และผู้ผ่านเกณฑ์">
+                  <div className="mb-4 grid gap-3 md:grid-cols-4">
+                    <Metric label="ทั้งหมด" value={`${resultSummary.total} คน`} />
+                    <Metric label="ผ่านเกณฑ์" value={`${resultSummary.passed} คน`} />
+                    <Metric label="รอตรวจ" value={`${resultSummary.review} คน`} />
+                    <Metric label="ไม่ผ่าน" value={`${resultSummary.failed} คน`} />
+                  </div>
+                  {calculatedResults.length > 0 ? (
+                    selectedExam.selectionMode === "WHOLE_LEVEL" ? (
+                      <ResultTable results={calculatedResults} subjects={subjects} />
                     ) : (
                       <div className="space-y-5">
                         {resultsByRoom.map(([room, results]) => (
                           <section key={room}>
                             <h3 className="mb-2 font-semibold text-[var(--primary-blue)]">ห้อง {room}</h3>
-                            <ResultTable results={results} />
+                            <ResultTable results={results} subjects={subjects} />
                           </section>
                         ))}
                       </div>
-                    )}
-                  </Panel>
-                )}
+                    )
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--blue-wash)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
+                      นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล
+                    </div>
+                  )}
+                </Panel>
               </>
             )}
           </section>
@@ -766,13 +795,26 @@ function validateImportPreview(text: string, subjects: Subject[]): ImportValidat
   };
 }
 
-function ResultTable({ results }: { results: CalculatedResult[] }) {
+function formatScore(value: number | undefined) {
+  if (value == null) return "-";
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function statusLabel(status: CalculatedResult["status"]) {
+  if (status === "PASSED") return "ผ่าน";
+  if (status === "REVIEW") return "รอตรวจ";
+  return "ไม่ผ่าน";
+}
+
+function ResultTable({ results, subjects }: { results: CalculatedResult[]; subjects: Subject[] }) {
+  const scoreSubjects = subjects.filter((subject) => subject.id);
+
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--border-soft)]">
       <table className="min-w-full text-left text-sm">
         <thead className="bg-[var(--blue-wash)] text-[var(--text-muted)]">
           <tr>
-            {["อันดับ", "รหัสนักเรียน", "ชื่อ", "ห้อง", "คะแนนรวม", "สถานะ", "เหตุผล"].map((header) => (
+            {["อันดับ", "รหัสนักเรียน", "ชื่อ", "ห้อง", ...scoreSubjects.map((subject) => subject.name), "คะแนนรวม", "สถานะ", "เหตุผล"].map((header) => (
               <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
             ))}
           </tr>
@@ -784,10 +826,13 @@ function ResultTable({ results }: { results: CalculatedResult[] }) {
               <td className="px-3 py-2">{result.examNo}</td>
               <td className="px-3 py-2">{result.name}</td>
               <td className="px-3 py-2">{result.room}</td>
-              <td className="px-3 py-2 font-semibold">{result.totalScore}</td>
+              {scoreSubjects.map((subject) => (
+                <td key={subject.id} className="px-3 py-2">{formatScore(result.scoreBreakdown[subject.id!])}</td>
+              ))}
+              <td className="px-3 py-2 font-semibold">{formatScore(result.totalScore)}</td>
               <td className="px-3 py-2">
                 <span className={cx("rounded-full px-2 py-1 text-xs font-semibold", result.status === "PASSED" ? "bg-sky-100 text-sky-700" : result.status === "REVIEW" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600")}>
-                  {result.status}
+                  {statusLabel(result.status)}
                 </span>
               </td>
               <td className="min-w-72 px-3 py-2 text-[var(--text-muted)]">{result.reason}</td>

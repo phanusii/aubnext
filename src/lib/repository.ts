@@ -268,6 +268,9 @@ export async function importRoomStudents(input: {
   if (normalized.errors.length > 0) {
     return { ok: false as const, errors: normalized.errors };
   }
+  if (normalized.rows.length === 0) {
+    return { ok: false as const, errors: ["ไม่พบข้อมูลนักเรียน"] };
+  }
 
   const examNos = normalized.rows.map((row) => row.examNo);
   const duplicateOutsideRoom = await prisma.student.findFirst({
@@ -286,25 +289,39 @@ export async function importRoomStudents(input: {
       where: { examSessionId: input.examSessionId, room: input.room },
     });
 
-    for (const row of normalized.rows) {
-      const student = await tx.student.create({
-        data: {
-          examSessionId: input.examSessionId,
-          examNo: row.examNo,
-          name: row.studentName,
-          classLevel: exam.classLevel,
-          room: input.room,
-          verifierHash: verifierHash(row.examNo),
-        },
-      });
+    await tx.student.createMany({
+      data: normalized.rows.map((row) => ({
+        examSessionId: input.examSessionId,
+        examNo: row.examNo,
+        name: row.studentName,
+        classLevel: exam.classLevel,
+        room: input.room,
+        verifierHash: verifierHash(row.examNo),
+      })),
+    });
 
-      await tx.score.createMany({
-        data: Object.entries(row.scores).map(([subjectId, value]) => ({
-          studentId: student.id,
-          subjectId,
-          value,
-        })),
-      });
+    const students = await tx.student.findMany({
+      where: {
+        examSessionId: input.examSessionId,
+        room: input.room,
+        examNo: { in: examNos },
+      },
+      select: { id: true, examNo: true },
+    });
+    const studentIdByExamNo = new Map(students.map((student) => [student.examNo, student.id]));
+
+    const scoreRows = normalized.rows.flatMap((row) => {
+      const studentId = studentIdByExamNo.get(row.examNo);
+      if (!studentId) return [];
+      return Object.entries(row.scores).map(([subjectId, value]) => ({
+        studentId,
+        subjectId,
+        value,
+      }));
+    });
+
+    if (scoreRows.length > 0) {
+      await tx.score.createMany({ data: scoreRows });
     }
 
     await tx.importBatch.create({
@@ -315,9 +332,44 @@ export async function importRoomStudents(input: {
         rawPreview: input.rawRows.slice(0, 10) as never,
       },
     });
-  });
+  }, { timeout: 20_000 });
 
   return { ok: true as const, imported: normalized.rows.length };
+}
+
+export async function getExamResultSnapshots(examSessionId: string) {
+  const prisma = getPrisma();
+  const exam = await prisma.examSession.findUnique({
+    where: { id: examSessionId },
+    select: { selectionMode: true },
+  });
+  if (!exam) throw new Error("ไม่พบรอบสอบ");
+
+  const snapshots = await prisma.resultSnapshot.findMany({
+    where: { examSessionId },
+    include: { student: true },
+    orderBy: [
+      { student: { room: "asc" } },
+      { rank: "asc" },
+      { student: { examNo: "asc" } },
+    ],
+  });
+
+  return snapshots.map((snapshot) => ({
+    studentId: snapshot.studentId,
+    examNo: snapshot.student.examNo,
+    name: snapshot.student.name,
+    rank: snapshot.rank,
+    rankScope: exam.selectionMode === "WHOLE_LEVEL" ? "WHOLE_LEVEL" : "ROOM",
+    selectionMode: exam.selectionMode,
+    totalScore: snapshot.totalScore,
+    status: snapshot.status,
+    reason: snapshot.reason,
+    tieBreakReason: null,
+    room: snapshot.student.room,
+    scoreBreakdown: snapshot.scoreBreakdown as Record<string, number>,
+    tieBreakValues: snapshot.tieBreakValues as Record<string, number>,
+  }));
 }
 
 export async function calculateExamResults(examSessionId: string) {
