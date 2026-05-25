@@ -209,13 +209,13 @@ export function normalizeRoomImportRows(input: {
   }
 
   const rows = input.rawRows.map((row, index) => {
-    const examNo = String(row.exam_no ?? row["เลขประจำตัว"] ?? row["เลขที่สอบ"] ?? "").trim();
-    const studentName = String(row.student_name ?? row["ชื่อ-สกุล"] ?? row["ชื่อ"] ?? row.name ?? "").trim();
+    const examNo = String(row.student_id ?? row.exam_no ?? row["รหัสนักเรียน"] ?? row["เลขประจำตัว"] ?? row["เลขที่สอบ"] ?? row["รหัสสอบ"] ?? "").trim();
+    const studentName = String(row.student_name ?? row["ชื่อนักเรียน"] ?? row["ชื่อ-สกุล"] ?? row["ชื่อ"] ?? row.name ?? "").trim();
     const scores: Record<string, number> = {};
 
-    if (!examNo) errors.push(`แถว ${index + 2}: ไม่พบเลขประจำตัว`);
+    if (!examNo) errors.push(`แถว ${index + 2}: ไม่พบรหัสนักเรียน`);
     if (!studentName) errors.push(`แถว ${index + 2}: ไม่พบชื่อนักเรียน`);
-    if (examNo && seenExamNos.has(examNo)) errors.push(`แถว ${index + 2}: เลขประจำตัวซ้ำ (${examNo})`);
+    if (examNo && seenExamNos.has(examNo)) errors.push(`แถว ${index + 2}: รหัสนักเรียนซ้ำ (${examNo})`);
     seenExamNos.add(examNo);
 
     for (const subject of subjectsByName.values()) {
@@ -228,6 +228,9 @@ export function normalizeRoomImportRows(input: {
       if (!Number.isFinite(value)) {
         errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} ไม่ใช่ตัวเลข`);
         scores[subject.id] = 0;
+      } else if (value < 0) {
+        errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} ต้องไม่ติดลบ`);
+        scores[subject.id] = value;
       } else if (subject.maxScore != null && value > subject.maxScore) {
         errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} เกินคะแนนเต็ม ${subject.maxScore}`);
         scores[subject.id] = value;
@@ -275,7 +278,7 @@ export async function importRoomStudents(input: {
     },
   });
   if (duplicateOutsideRoom) {
-    return { ok: false as const, errors: [`เลขประจำตัว ${duplicateOutsideRoom.examNo} มีอยู่ในห้องอื่นแล้ว`] };
+    return { ok: false as const, errors: [`รหัสนักเรียน ${duplicateOutsideRoom.examNo} มีอยู่ในห้องอื่นแล้ว`] };
   }
 
   await prisma.$transaction(async (tx) => {

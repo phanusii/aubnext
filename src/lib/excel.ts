@@ -19,7 +19,7 @@ export type ImportedStudentRow = {
 };
 
 const aliases: Record<keyof Omit<ImportMapping, "subjects">, string[]> = {
-  examNo: ["exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ", "student_id"],
+  examNo: ["student_id", "รหัสนักเรียน", "exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ"],
   studentName: ["student_name", "ชื่อ", "ชื่อ-สกุล", "ชื่อนักเรียน", "name"],
   classLevel: ["class_level", "ระดับชั้น", "ชั้น", "grade"],
   room: ["room", "ห้อง", "ห้องเรียน", "classroom"],
@@ -190,7 +190,7 @@ export function normalizeImportRows(rows: Record<string, unknown>[], mapping: Im
     }
 
     if (item.examNo && seenExamNos.has(item.examNo)) {
-      errors.push(`แถว ${index + 2}: เลขประจำตัวผู้สอบซ้ำ (${item.examNo})`);
+      errors.push(`แถว ${index + 2}: รหัสนักเรียนซ้ำ (${item.examNo})`);
     }
     seenExamNos.add(item.examNo);
 

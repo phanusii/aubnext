@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { FocusEvent, ReactNode } from "react";
 import {
   BadgeCheck,
   BookOpen,
@@ -49,6 +49,13 @@ type CalculatedResult = {
   reason: string;
   room: string;
 };
+type ImportValidation = {
+  rowCount: number;
+  subjectCount: number;
+  scoreCellCount: number;
+  errors: string[];
+  isReady: boolean;
+};
 
 const emptySubject = (sortOrder = 0): Subject => ({
   name: "",
@@ -59,6 +66,10 @@ const emptySubject = (sortOrder = 0): Subject => ({
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
+}
+
+function selectNumberInput(event: FocusEvent<HTMLInputElement>) {
+  event.currentTarget.select();
 }
 
 export function AdminConsole() {
@@ -90,6 +101,10 @@ export function AdminConsole() {
   const selectedExam = useMemo(
     () => exams.find((exam) => exam.id === selectedExamId),
     [exams, selectedExamId],
+  );
+  const pasteValidation = useMemo(
+    () => validateImportPreview(pasteText, subjects),
+    [pasteText, subjects],
   );
 
   const loadExams = useCallback(async (preferredExamId?: string) => {
@@ -298,6 +313,21 @@ export function AdminConsole() {
 
   async function importPastedRows() {
     if (!selectedExam || !importRoom) return;
+    if (!pasteValidation?.isReady) {
+      setMessage(pasteValidation?.errors.join(" / ") || "กรุณาตรวจข้อมูลรหัสนักเรียน ชื่อ และคะแนนก่อนนำเข้า");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      [
+        `ตรวจข้อมูลแล้ว ${pasteValidation.rowCount} คน`,
+        `วิชาที่พบ ${pasteValidation.subjectCount} วิชา`,
+        `คะแนนถูกต้อง ${pasteValidation.scoreCellCount} ช่อง`,
+        `ยืนยันนำเข้าห้อง ${importRoom} หรือไม่`,
+      ].join("\n"),
+    );
+    if (!confirmed) return;
+
     const { rows } = parseDelimitedTable(pasteText);
     setBusy(true);
     const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import`, {
@@ -485,11 +515,11 @@ export function AdminConsole() {
               </div>
               {newSelectionMode === "WHOLE_LEVEL" && (
                 <Field label="จำนวนผู้ผ่านทั้งชั้น">
-                  <input className="app-input" type="number" min={0} value={newWholeQuota} onChange={(event) => setNewWholeQuota(Number(event.target.value))} />
+                  <input className="app-input" type="number" min={0} value={newWholeQuota} onFocus={selectNumberInput} onChange={(event) => setNewWholeQuota(Number(event.target.value))} />
                 </Field>
               )}
               <Field label="จำนวนห้องในชั้น">
-                <input className="app-input" type="number" min={1} value={roomCount} onChange={(event) => setRoomCount(Number(event.target.value))} />
+                <input className="app-input" type="number" min={1} value={roomCount} onFocus={selectNumberInput} onChange={(event) => setRoomCount(Number(event.target.value))} />
               </Field>
               <button type="button" onClick={createExam} disabled={busy} className="app-button-primary mt-4">
                 <Plus size={16} />
@@ -532,7 +562,7 @@ export function AdminConsole() {
                     {rooms.map((room, index) => (
                       <div key={room.id ?? `room-${index}`} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
                         <input className="app-input" value={room.room} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === index ? { ...item, room: event.target.value } : item))} />
-                        <input className="app-input" type="number" min={0} value={room.quota} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === index ? { ...item, quota: Number(event.target.value) } : item))} />
+                        <input className="app-input" type="number" min={0} value={room.quota} onFocus={selectNumberInput} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === index ? { ...item, quota: Number(event.target.value) } : item))} />
                         <button type="button" className="app-icon-button" onClick={() => setRooms(rooms.filter((_, itemIndex) => itemIndex !== index))}>
                           <Trash2 size={16} />
                         </button>
@@ -556,8 +586,8 @@ export function AdminConsole() {
                     {subjects.map((subject, index) => (
                       <div key={subject.id ?? `subject-${index}`} className="grid gap-2 lg:grid-cols-[1fr_120px_130px_auto]">
                         <input className="app-input" placeholder="ชื่อวิชา" value={subject.name} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
-                        <input className="app-input" type="number" min={1} value={subject.maxScore} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
-                        <input className="app-input" type="number" min={1} placeholder="tie-break" value={subject.tieBreakOrder ?? ""} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
+                        <input className="app-input" type="number" min={1} value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
+                        <input className="app-input" type="number" min={1} placeholder="tie-break" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
                         <button type="button" className="app-icon-button" onClick={() => setSubjects(subjects.filter((_, itemIndex) => itemIndex !== index))}>
                           <Trash2 size={16} />
                         </button>
@@ -586,15 +616,22 @@ export function AdminConsole() {
                       </select>
                     </Field>
                     <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                      คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">exam_no, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"}
+                      คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"}
                     </div>
                   </div>
                   <textarea
                     className="app-input mt-3 min-h-36 font-mono text-sm"
                     value={pasteText}
                     onChange={(event) => setPasteText(event.target.value)}
-                    placeholder={"exam_no\tstudent_name\tคณิตศาสตร์\tวิทยาศาสตร์\nP001\tเด็กชายตัวอย่าง\t85\t78"}
+                    placeholder={"student_id\tstudent_name\tคณิตศาสตร์\tวิทยาศาสตร์\n65001\tเด็กชายตัวอย่าง\t85\t78"}
                   />
+                  {pasteValidation && (
+                    <div className={cx("mt-3 rounded-xl border px-4 py-3 text-sm", pasteValidation.isReady ? "border-sky-200 bg-sky-50 text-sky-800" : "border-[var(--pink-soft)] bg-[var(--pink-wash)] text-[var(--accent-pink-strong)]")}>
+                      {pasteValidation.isReady
+                        ? `ตรวจข้อมูลพร้อมนำเข้า: รหัสนักเรียนและชื่อครบ ${pasteValidation.rowCount} คน, วิชา ${pasteValidation.subjectCount} วิชา, คะแนนถูกต้อง ${pasteValidation.scoreCellCount} ช่อง`
+                        : pasteValidation.errors.slice(0, 4).join(" / ")}
+                    </div>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" className="app-button-primary" onClick={importPastedRows} disabled={busy || !pasteText.trim()}>
                       <ClipboardList size={16} />
@@ -663,13 +700,79 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function normalizeColumnName(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function findColumn(headers: string[], aliases: string[]) {
+  const normalizedAliases = aliases.map(normalizeColumnName);
+  return headers.find((header) => normalizedAliases.includes(normalizeColumnName(header)));
+}
+
+function validateImportPreview(text: string, subjects: Subject[]): ImportValidation | null {
+  if (!text.trim()) return null;
+
+  const parsed = parseDelimitedTable(text);
+  const activeSubjects = subjects.filter((subject) => subject.name.trim());
+  const errors: string[] = [];
+  const studentIdColumn = findColumn(parsed.headers, ["student_id", "รหัสนักเรียน", "exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ"]);
+  const studentNameColumn = findColumn(parsed.headers, ["student_name", "ชื่อนักเรียน", "ชื่อ-สกุล", "ชื่อ", "name"]);
+  const seenStudentIds = new Set<string>();
+  let scoreCellCount = 0;
+
+  if (!studentIdColumn) errors.push("ไม่พบคอลัมน์ student_id หรือ รหัสนักเรียน");
+  if (!studentNameColumn) errors.push("ไม่พบคอลัมน์ student_name หรือ ชื่อนักเรียน");
+  if (activeSubjects.length === 0) errors.push("ต้องสร้างวิชาก่อนตรวจข้อมูลนำเข้า");
+  if (parsed.rows.length === 0) errors.push("ไม่พบข้อมูลนักเรียน");
+
+  for (const subject of activeSubjects) {
+    if (!parsed.headers.includes(subject.name)) {
+      errors.push(`ไม่พบคอลัมน์วิชา ${subject.name}`);
+    }
+  }
+
+  parsed.rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const studentId = studentIdColumn ? String(row[studentIdColumn] ?? "").trim() : "";
+    const studentName = studentNameColumn ? String(row[studentNameColumn] ?? "").trim() : "";
+
+    if (!studentId) errors.push(`แถว ${rowNumber}: ไม่พบรหัสนักเรียน`);
+    if (!studentName) errors.push(`แถว ${rowNumber}: ไม่พบชื่อนักเรียน`);
+    if (studentId && seenStudentIds.has(studentId)) errors.push(`แถว ${rowNumber}: รหัสนักเรียนซ้ำ (${studentId})`);
+    seenStudentIds.add(studentId);
+
+    for (const subject of activeSubjects) {
+      if (!parsed.headers.includes(subject.name)) continue;
+      const rawScore = row[subject.name];
+      const score = Number(rawScore);
+      if (!Number.isFinite(score)) {
+        errors.push(`แถว ${rowNumber}: คะแนนวิชา ${subject.name} ไม่ใช่ตัวเลข`);
+      } else if (score < 0) {
+        errors.push(`แถว ${rowNumber}: คะแนนวิชา ${subject.name} ต้องไม่ติดลบ`);
+      } else if (subject.maxScore != null && score > subject.maxScore) {
+        errors.push(`แถว ${rowNumber}: คะแนนวิชา ${subject.name} เกินคะแนนเต็ม ${subject.maxScore}`);
+      } else {
+        scoreCellCount += 1;
+      }
+    }
+  });
+
+  return {
+    rowCount: parsed.rows.length,
+    subjectCount: activeSubjects.length,
+    scoreCellCount,
+    errors: [...new Set(errors)],
+    isReady: errors.length === 0,
+  };
+}
+
 function ResultTable({ results }: { results: CalculatedResult[] }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--border-soft)]">
       <table className="min-w-full text-left text-sm">
         <thead className="bg-[var(--blue-wash)] text-[var(--text-muted)]">
           <tr>
-            {["อันดับ", "เลขประจำตัว", "ชื่อ", "ห้อง", "คะแนนรวม", "สถานะ", "เหตุผล"].map((header) => (
+            {["อันดับ", "รหัสนักเรียน", "ชื่อ", "ห้อง", "คะแนนรวม", "สถานะ", "เหตุผล"].map((header) => (
               <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
             ))}
           </tr>

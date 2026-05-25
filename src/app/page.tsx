@@ -15,7 +15,7 @@ export default function Home() {
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--text-muted)]">
               สร้างรอบสอบ ห้องเรียน วิชาสอบ นำเข้ารายชื่อพร้อมคะแนนทีละห้อง และประกาศผลแบบทั้งชั้นหรือรายห้อง
-              พร้อมให้นักเรียนเช็คผลด้วยเลขประจำตัวผู้สอบ
+              พร้อมให้นักเรียนเช็คผลด้วยรหัสนักเรียน
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <a href="/check-result" className="app-button-primary">

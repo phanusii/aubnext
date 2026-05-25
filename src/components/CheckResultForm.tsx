@@ -61,13 +61,13 @@ export function CheckResultForm() {
             <Award size={28} />
           </div>
           <h1 className="text-3xl font-semibold md:text-5xl">เช็คผลสอบส่วนตัว</h1>
-          <p className="mt-3 text-[var(--text-muted)]">กรอกเลขประจำตัวผู้สอบเพื่อดูผลของรอบสอบที่โรงเรียนประกาศ</p>
+          <p className="mt-3 text-[var(--text-muted)]">กรอกรหัสนักเรียนเพื่อดูผลของรอบสอบที่โรงเรียนประกาศ</p>
         </div>
 
         <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
           <div className="grid gap-3 md:grid-cols-[1fr_auto]">
             <label className="text-sm font-medium">
-              เลขประจำตัวผู้สอบ
+              รหัสนักเรียน
               <input
                 value={examNo}
                 onChange={(event) => setExamNo(event.target.value)}

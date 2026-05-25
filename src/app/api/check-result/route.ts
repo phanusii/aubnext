@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
   if (!result) {
     return NextResponse.json(
-      { error: "ไม่พบผลสอบที่ประกาศแล้ว หรือเลขประจำตัวไม่ถูกต้อง" },
+      { error: "ไม่พบผลสอบที่ประกาศแล้ว หรือรหัสนักเรียนไม่ถูกต้อง" },
       { status: 404 },
     );
   }
