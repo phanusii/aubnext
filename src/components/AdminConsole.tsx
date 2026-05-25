@@ -8,6 +8,7 @@ import {
   BookOpen,
   Calculator,
   ClipboardList,
+  Download,
   ImageUp,
   Link2,
   ListChecks,
@@ -65,6 +66,8 @@ type ImportValidation = {
   isReady: boolean;
 };
 type AdminTab = "settings" | "exam" | "rooms" | "import" | "results" | "line";
+type ResultStatusFilter = "ALL" | CalculatedResult["status"];
+type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
 type LineStatus = {
   config: {
     isReady: boolean;
@@ -120,6 +123,8 @@ export function AdminConsole() {
   const [calculatedResults, setCalculatedResults] = useState<CalculatedResult[]>([]);
   const [roomFilter, setRoomFilter] = useState("");
   const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
+  const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
+  const [resultSort, setResultSort] = useState<ResultSort>("rank");
   const [lineStatus, setLineStatus] = useState<LineStatus | null>(null);
 
   const selectedExam = useMemo(
@@ -460,22 +465,36 @@ export function AdminConsole() {
     const values = new Set([...rooms.map((room) => room.room), ...calculatedResults.map((result) => result.room)].filter(Boolean));
     return Array.from(values).sort((first, second) => first.localeCompare(second, "th", { numeric: true }));
   }, [calculatedResults, rooms]);
-  const visibleResults = useMemo(
-    () => (resultRoomFilter === "ALL" ? calculatedResults : calculatedResults.filter((result) => result.room === resultRoomFilter)),
-    [calculatedResults, resultRoomFilter],
-  );
+  const visibleResults = useMemo(() => {
+    const filtered = calculatedResults.filter((result) => {
+      const matchesRoom = resultRoomFilter === "ALL" || result.room === resultRoomFilter;
+      const matchesStatus = resultStatusFilter === "ALL" || result.status === resultStatusFilter;
+      return matchesRoom && matchesStatus;
+    });
+
+    return [...filtered].sort((first, second) => {
+      if (resultSort === "score_desc") {
+        return second.totalScore - first.totalScore || first.rank - second.rank || first.examNo.localeCompare(second.examNo, "th", { numeric: true });
+      }
+      if (resultSort === "score_asc") {
+        return first.totalScore - second.totalScore || first.rank - second.rank || first.examNo.localeCompare(second.examNo, "th", { numeric: true });
+      }
+      if (resultSort === "exam_no") {
+        return first.examNo.localeCompare(second.examNo, "th", { numeric: true });
+      }
+
+      return (
+        first.room.localeCompare(second.room, "th", { numeric: true }) ||
+        first.rank - second.rank ||
+        first.examNo.localeCompare(second.examNo, "th", { numeric: true })
+      );
+    });
+  }, [calculatedResults, resultRoomFilter, resultSort, resultStatusFilter]);
   const visibleResultSummary = useMemo(() => {
     const passed = visibleResults.filter((result) => result.status === "PASSED").length;
     const review = visibleResults.filter((result) => result.status === "REVIEW").length;
     const failed = visibleResults.filter((result) => result.status === "FAILED").length;
     return { passed, review, failed, total: visibleResults.length };
-  }, [visibleResults]);
-  const visibleResultsByRoom = useMemo(() => {
-    const grouped = new Map<string, CalculatedResult[]>();
-    for (const result of visibleResults) {
-      grouped.set(result.room, [...(grouped.get(result.room) ?? []), result]);
-    }
-    return Array.from(grouped.entries());
   }, [visibleResults]);
 
   if (!isLoggedIn) {
@@ -815,33 +834,66 @@ export function AdminConsole() {
 
         {activeTab === "results" && selectedExam && (
           <Panel icon={<ListChecks size={18} />} title="ผลคะแนน อันดับ และผู้ผ่านเกณฑ์">
-            <div className="mb-4 grid gap-3 md:grid-cols-[repeat(4,minmax(0,1fr))_220px]">
+            <div className="mb-4 flex gap-2 overflow-x-auto rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-2">
+              <button
+                type="button"
+                onClick={() => setResultRoomFilter("ALL")}
+                className={cx("min-w-max rounded-lg px-4 py-2 text-sm font-semibold text-[var(--text-muted)]", resultRoomFilter === "ALL" && "bg-white text-[var(--primary-blue-strong)] shadow-sm")}
+              >
+                ทุกห้อง
+              </button>
+              {roomOptions.map((room) => (
+                <button
+                  key={room}
+                  type="button"
+                  onClick={() => setResultRoomFilter(room)}
+                  className={cx("min-w-max rounded-lg px-4 py-2 text-sm font-semibold text-[var(--text-muted)]", resultRoomFilter === room && "bg-white text-[var(--primary-blue-strong)] shadow-sm")}
+                >
+                  ห้อง {room}
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-4 grid gap-3 md:grid-cols-4">
               <Metric label="ที่แสดง" value={`${visibleResultSummary.total} คน`} />
               <Metric label="ผ่านเกณฑ์" value={`${visibleResultSummary.passed} คน`} />
               <Metric label="รอตรวจ" value={`${visibleResultSummary.review} คน`} />
               <Metric label="ไม่ผ่าน" value={`${visibleResultSummary.failed} คน`} />
-              <Field label="ดูตามห้อง">
-                <select className="app-input" value={resultRoomFilter} onChange={(event) => setResultRoomFilter(event.target.value)}>
-                  <option value="ALL">ทุกห้อง</option>
-                  {roomOptions.map((room) => (
-                    <option key={room} value={room}>ห้อง {room}</option>
-                  ))}
+            </div>
+
+            <div className="mb-4 grid gap-3 lg:grid-cols-[220px_240px_auto]">
+              <Field label="สถานะ">
+                <select className="app-input" value={resultStatusFilter} onChange={(event) => setResultStatusFilter(event.target.value as ResultStatusFilter)}>
+                  <option value="ALL">ทั้งหมด</option>
+                  <option value="PASSED">ผ่านเกณฑ์</option>
+                  <option value="REVIEW">รอตรวจ</option>
+                  <option value="FAILED">ไม่ผ่าน</option>
                 </select>
               </Field>
+              <Field label="เรียงลำดับ">
+                <select className="app-input" value={resultSort} onChange={(event) => setResultSort(event.target.value as ResultSort)}>
+                  <option value="rank">อันดับ</option>
+                  <option value="score_desc">คะแนนมากไปน้อย</option>
+                  <option value="score_asc">คะแนนน้อยไปมาก</option>
+                  <option value="exam_no">รหัสนักเรียน</option>
+                </select>
+              </Field>
+              <div className="flex items-end">
+                {calculatedResults.length > 0 ? (
+                  <a href={`/api/exams/${selectedExam.id}/results/export`} className="app-button-primary">
+                    <Download size={16} />
+                    ดาวน์โหลด Excel ทั้งหมด
+                  </a>
+                ) : (
+                  <button type="button" className="app-button-secondary" disabled>
+                    <Download size={16} />
+                    ดาวน์โหลด Excel ทั้งหมด
+                  </button>
+                )}
+              </div>
             </div>
             {visibleResults.length > 0 ? (
-              resultRoomFilter !== "ALL" || selectedExam.selectionMode === "WHOLE_LEVEL" ? (
-                <ResultTable results={visibleResults} subjects={subjects} />
-              ) : (
-                <div className="space-y-5">
-                  {visibleResultsByRoom.map(([room, results]) => (
-                    <section key={room}>
-                      <h3 className="mb-2 font-semibold text-[var(--primary-blue)]">ห้อง {room}</h3>
-                      <ResultTable results={results} subjects={subjects} />
-                    </section>
-                  ))}
-                </div>
-              )
+              <ResultTable results={visibleResults} subjects={subjects} />
             ) : (
               <EmptyState text="นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล" />
             )}
