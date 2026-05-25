@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ระบบประกาศผลสอบ
 
-## Getting Started
+MVP สำหรับนำเข้าคะแนนจาก Excel/CSV, รวมคะแนนรายวิชา, จัดอันดับตามโควตารายห้องหรือทั้งชั้น, ประกาศผลเป็น snapshot และให้นักเรียนเช็คผลส่วนตัวผ่านเว็บหรือ LINE LIFF
 
-First, run the development server:
+## Run
+
+1. สร้างไฟล์ `.env` จาก `.env.example`
+2. เตรียม PostgreSQL แล้วตั้งค่า `DATABASE_URL`
+3. รันคำสั่ง:
 
 ```bash
+npm install
+npm run prisma:generate
+npm run prisma:migrate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ค่าเริ่มต้นสำหรับแอดมินถ้าไม่ได้ตั้ง `ADMIN_PASSWORD` คือ `admin1234`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Pages
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/` หน้าแรก
+- `/admin` หน้าผู้ดูแลสำหรับตั้งค่าโรงเรียน นำเข้าไฟล์ คำนวณ และประกาศผล
+- `/check-result` หน้าเช็คผลส่วนตัว ใช้ URL เดียวกันสำหรับเปิดผ่าน LINE LIFF/Rich menu
 
-## Learn More
+## Excel Template
 
-To learn more about Next.js, take a look at the following resources:
+ไฟล์ตัวอย่างอยู่ที่ `/exam-template.csv`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+คอลัมน์หลัก:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `exam_no`
+- `student_name`
+- `class_level`
+- `room`
+- `birthdate_or_pin`
+- คอลัมน์คะแนนรายวิชา เช่น `คณิตศาสตร์`, `วิทยาศาสตร์`, `ภาษาไทย`
 
-## Deploy on Vercel
+## Verification
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test
+npm run lint
+npm run build
+```

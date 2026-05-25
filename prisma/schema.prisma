@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum SelectionMode {
+  PER_ROOM
+  WHOLE_LEVEL
+}
+
+enum ResultStatus {
+  PASSED
+  FAILED
+  REVIEW
+}
+
+model SchoolSettings {
+  id        String   @id @default("main")
+  schoolName String @default("โรงเรียนตัวอย่าง")
+  examTitle  String @default("ประกาศผลสอบแข่งขัน")
+  logoUrl    String?
+  updatedAt DateTime @updatedAt
+}
+
+model ExamSession {
+  id              String        @id @default(cuid())
+  name            String
+  classLevel      String
+  selectionMode   SelectionMode @default(PER_ROOM)
+  wholeLevelQuota Int?
+  status          ExamStatus    @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  subjects        Subject[]
+  students        Student[]
+  roomQuotas      RoomQuota[]
+  importBatches   ImportBatch[]
+  resultSnapshots ResultSnapshot[]
+}
+
+model Subject {
+  id            String      @id @default(cuid())
+  examSessionId String
+  name          String
+  sortOrder     Int
+  maxScore      Float?
+  isTieBreak    Boolean     @default(false)
+  tieBreakOrder Int?
+
+  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+  scores      Score[]
+
+  @@unique([examSessionId, name])
+  @@index([examSessionId])
+}
+
+model Student {
+  id            String   @id @default(cuid())
+  examSessionId String
+  examNo        String
+  name          String
+  classLevel    String
+  room          String
+  verifierHash  String
+  createdAt     DateTime @default(now())
+
+  examSession     ExamSession      @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+  scores          Score[]
+  resultSnapshots ResultSnapshot[]
+
+  @@unique([examSessionId, examNo])
+  @@index([examSessionId, room])
+}
+
+model Score {
+  id        String @id @default(cuid())
+  studentId String
+  subjectId String
+  value     Float
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, subjectId])
+  @@index([subjectId])
+}
+
+model RoomQuota {
+  id            String @id @default(cuid())
+  examSessionId String
+  room          String
+  quota         Int
+
+  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([examSessionId, room])
+}
+
+model ImportBatch {
+  id            String   @id @default(cuid())
+  examSessionId String?
+  filename      String
+  status        String
+  rawPreview    Json
+  errors        Json?
+  createdAt     DateTime @default(now())
+
+  examSession ExamSession? @relation(fields: [examSessionId], references: [id], onDelete: SetNull)
+}
+
+model ResultSnapshot {
+  id            String       @id @default(cuid())
+  examSessionId String
+  studentId      String
+  rank           Int
+  totalScore     Float
+  status         ResultStatus
+  reason         String
+  scoreBreakdown Json
+  tieBreakValues Json
+  publishedAt    DateTime?
+  createdAt      DateTime     @default(now())
+
+  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([examSessionId, studentId])
+  @@index([examSessionId, status])
+}
