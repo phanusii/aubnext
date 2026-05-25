@@ -699,7 +699,13 @@ export function AdminConsole() {
               <div className="mb-3 grid gap-3 md:grid-cols-[1fr_auto]">
                 <label className="relative block">
                   <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                  <input className="app-input pl-9" value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)} placeholder="ค้นหาห้อง" />
+                  <input
+                    className="app-input"
+                    style={{ paddingLeft: "2.5rem" }}
+                    value={roomFilter}
+                    onChange={(event) => setRoomFilter(event.target.value)}
+                    placeholder="ค้นหาห้อง"
+                  />
                 </label>
                 <button type="button" className="app-button-secondary" onClick={() => setRooms([...rooms, { room: String(rooms.length + 1), quota: 0 }])}>
                   <Plus size={16} />
@@ -731,12 +737,21 @@ export function AdminConsole() {
             </Panel>
 
             <Panel icon={<BookOpen size={18} />} title="วิชาสอบและคะแนนเต็ม">
+              <div className="mb-3 rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                หากคะแนนรวมเท่ากัน ระบบจะดูคะแนนรายวิชาตามลำดับที่กำหนดในช่อง <span className="font-semibold text-[var(--text-main)]">ลำดับตัดสิน</span> เช่น ใส่ 1 ที่วิทยาศาสตร์เพื่อดูวิชานี้ก่อน และใส่ 2 ที่คณิตศาสตร์เพื่อดูถัดไป
+              </div>
+              <div className="mb-2 hidden grid-cols-[1fr_110px_120px_44px] gap-2 px-1 text-xs font-semibold text-[var(--text-muted)] lg:grid">
+                <span>วิชา</span>
+                <span>คะแนนเต็ม</span>
+                <span>ลำดับตัดสิน</span>
+                <span />
+              </div>
               <div className="space-y-2">
                 {subjects.map((subject, index) => (
                   <div key={subject.id ?? `subject-${index}`} className="grid gap-2 lg:grid-cols-[1fr_110px_120px_auto]">
                     <input className="app-input" placeholder="ชื่อวิชา" value={subject.name} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
-                    <input className="app-input" type="number" min={1} value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
-                    <input className="app-input" type="number" min={1} placeholder="ลำดับตัดสิน" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
+                    <input className="app-input" type="number" min={1} aria-label="คะแนนเต็ม" value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
+                    <input className="app-input" type="number" min={1} aria-label="ลำดับตัดสินเมื่อคะแนนเท่ากัน" placeholder="เช่น 1" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
                     <button type="button" className="app-icon-button" onClick={() => setSubjects(subjects.filter((_, itemIndex) => itemIndex !== index))}>
                       <Trash2 size={16} />
                     </button>
