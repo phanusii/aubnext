@@ -4,15 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import {
   BadgeCheck,
+  Bell,
   BookOpen,
   Calculator,
   ClipboardList,
   ImageUp,
+  Link2,
+  ListChecks,
   LogIn,
   Megaphone,
   Plus,
   Save,
   School,
+  Search,
+  Settings,
+  Table2,
   Trash2,
   UploadCloud,
   Users,
@@ -58,6 +64,18 @@ type ImportValidation = {
   errors: string[];
   isReady: boolean;
 };
+type AdminTab = "settings" | "exam" | "rooms" | "import" | "results" | "line";
+type LineStatus = {
+  config: {
+    isReady: boolean;
+    hasToken: boolean;
+    hasSecret: boolean;
+    hasLiffId: boolean;
+  };
+  bindings: number;
+  sent: number;
+  failed: number;
+};
 
 const emptySubject = (sortOrder = 0): Subject => ({
   name: "",
@@ -88,6 +106,7 @@ export function AdminConsole() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [logoChanged, setLogoChanged] = useState(false);
+  const [activeTab, setActiveTab] = useState<AdminTab>("settings");
 
   const [newExamName, setNewExamName] = useState("สอบแข่งขันประจำปี");
   const [newClassLevel, setNewClassLevel] = useState("ป.6");
@@ -99,6 +118,9 @@ export function AdminConsole() {
   const [importRoom, setImportRoom] = useState("");
   const [pasteText, setPasteText] = useState("");
   const [calculatedResults, setCalculatedResults] = useState<CalculatedResult[]>([]);
+  const [roomFilter, setRoomFilter] = useState("");
+  const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
+  const [lineStatus, setLineStatus] = useState<LineStatus | null>(null);
 
   const selectedExam = useMemo(
     () => exams.find((exam) => exam.id === selectedExamId),
@@ -127,6 +149,17 @@ export function AdminConsole() {
     if (!response.ok) return;
     const data = await response.json();
     setCalculatedResults(data.results ?? []);
+  }, []);
+
+  const loadLineStatus = useCallback(async (examId?: string) => {
+    if (!examId) {
+      setLineStatus(null);
+      return;
+    }
+
+    const response = await fetch(`/api/line/status?examSessionId=${encodeURIComponent(examId)}`);
+    if (!response.ok) return;
+    setLineStatus(await response.json());
   }, []);
 
   useEffect(() => {
@@ -169,9 +202,16 @@ export function AdminConsole() {
       );
       setImportRoom(selectedExam.roomQuotas[0]?.room ?? "");
       setCalculatedResults([]);
+      setResultRoomFilter("ALL");
       void loadStoredResults(selectedExam.id);
     });
   }, [loadStoredResults, selectedExam]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void loadLineStatus(selectedExam?.id);
+    });
+  }, [loadLineStatus, selectedExam?.id]);
 
   async function login() {
     setBusy(true);
@@ -397,26 +437,46 @@ export function AdminConsole() {
       setCalculatedResults(data.results ?? []);
       setMessage(`คำนวณแล้ว ${data.results?.length ?? 0} รายการ`);
     } else {
-      setMessage("ประกาศผลแล้ว");
+      const lineNotice = data.lineNotification?.message
+        ? ` · ${data.lineNotification.message}`
+        : data.lineNotification
+          ? ` · ส่ง LINE สำเร็จ ${data.lineNotification.sent ?? 0} / ล้มเหลว ${data.lineNotification.failed ?? 0}`
+          : "";
+      setMessage(`ประกาศผลแล้ว${lineNotice}`);
       await loadStoredResults(selectedExam.id);
+      await loadLineStatus(selectedExam.id);
       await loadExams();
     }
   }
 
-  const resultSummary = useMemo(() => {
-    const passed = calculatedResults.filter((result) => result.status === "PASSED").length;
-    const review = calculatedResults.filter((result) => result.status === "REVIEW").length;
-    const failed = calculatedResults.filter((result) => result.status === "FAILED").length;
-    return { passed, review, failed, total: calculatedResults.length };
-  }, [calculatedResults]);
-
-  const resultsByRoom = useMemo(() => {
+  const visibleRooms = useMemo(
+    () =>
+      rooms
+        .map((room, index) => ({ ...room, index }))
+        .filter((room) => room.room.toLowerCase().includes(roomFilter.trim().toLowerCase())),
+    [roomFilter, rooms],
+  );
+  const roomOptions = useMemo(() => {
+    const values = new Set([...rooms.map((room) => room.room), ...calculatedResults.map((result) => result.room)].filter(Boolean));
+    return Array.from(values).sort((first, second) => first.localeCompare(second, "th", { numeric: true }));
+  }, [calculatedResults, rooms]);
+  const visibleResults = useMemo(
+    () => (resultRoomFilter === "ALL" ? calculatedResults : calculatedResults.filter((result) => result.room === resultRoomFilter)),
+    [calculatedResults, resultRoomFilter],
+  );
+  const visibleResultSummary = useMemo(() => {
+    const passed = visibleResults.filter((result) => result.status === "PASSED").length;
+    const review = visibleResults.filter((result) => result.status === "REVIEW").length;
+    const failed = visibleResults.filter((result) => result.status === "FAILED").length;
+    return { passed, review, failed, total: visibleResults.length };
+  }, [visibleResults]);
+  const visibleResultsByRoom = useMemo(() => {
     const grouped = new Map<string, CalculatedResult[]>();
-    for (const result of calculatedResults) {
+    for (const result of visibleResults) {
       grouped.set(result.room, [...(grouped.get(result.room) ?? []), result]);
     }
     return Array.from(grouped.entries());
-  }, [calculatedResults]);
+  }, [visibleResults]);
 
   if (!isLoggedIn) {
     return (
@@ -455,10 +515,19 @@ export function AdminConsole() {
     );
   }
 
+  const tabs: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
+    { id: "settings", label: "ตั้งค่า", icon: <Settings size={16} /> },
+    { id: "exam", label: "รอบสอบ", icon: <Megaphone size={16} /> },
+    { id: "rooms", label: "ห้องและวิชา", icon: <Table2 size={16} /> },
+    { id: "import", label: "นำเข้าคะแนน", icon: <ClipboardList size={16} /> },
+    { id: "results", label: "ผลคะแนน", icon: <Calculator size={16} /> },
+    { id: "line", label: "แจ้งเตือน LINE", icon: <Bell size={16} /> },
+  ];
+
   return (
     <main className="min-h-screen bg-[var(--app-bg)] text-[var(--text-main)]">
       <div className="mx-auto w-full max-w-7xl px-5 py-6">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-4 shadow-[var(--shadow-soft)]">
+        <header className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-4 shadow-[var(--shadow-soft)]">
           <div className="flex items-center gap-4">
             {settings.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -473,9 +542,15 @@ export function AdminConsole() {
               <p className="text-sm text-[var(--text-muted)]">{selectedExam?.name ?? "จัดการรอบสอบและประกาศผล"}</p>
             </div>
           </div>
-          <a href="/check-result" className="app-button-secondary">
-            หน้าเช็คผล
-          </a>
+          <div className="flex flex-wrap gap-2">
+            <a href="/line" className="app-button-secondary">
+              <Link2 size={16} />
+              หน้า LINE
+            </a>
+            <a href="/check-result" className="app-button-secondary">
+              หน้าเช็คผล
+            </a>
+          </div>
         </header>
 
         {message && (
@@ -484,33 +559,67 @@ export function AdminConsole() {
           </div>
         )}
 
-        <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
-          <section className="space-y-5">
-            <Panel icon={<Save size={18} />} title="ตั้งค่าระบบ">
-              <Field label="ชื่อโรงเรียน">
-                <input className="app-input" value={settings.schoolName} onChange={(event) => setSettings({ ...settings, schoolName: event.target.value })} />
-              </Field>
-              <Field label="โลโก้โรงเรียน">
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--blue-wash)] px-3 py-3 text-sm text-[var(--text-muted)]">
-                  <ImageUp size={18} className="text-[var(--primary-blue)]" />
-                  อัปโหลดรูปภาพไม่เกิน 1MB
-                  <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => event.target.files?.[0] && uploadLogo(event.target.files[0])} />
-                </label>
-              </Field>
-              <Field label="รอบสอบที่แสดงในหน้าเช็คผล">
-                <select className="app-input" value={settings.activeExamSessionId} onChange={(event) => setSettings({ ...settings, activeExamSessionId: event.target.value })}>
-                  <option value="">ใช้รอบสอบที่ประกาศล่าสุด</option>
-                  {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
-                  ))}
-                </select>
-              </Field>
-              <button type="button" onClick={saveSettings} disabled={busy} className="app-button-primary mt-4">
-                <Save size={16} />
-                บันทึกตั้งค่า
-              </button>
-            </Panel>
+        <nav className="mb-5 flex gap-2 overflow-x-auto rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 shadow-[var(--shadow-soft)]">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cx(
+                "flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text-muted)] transition",
+                activeTab === tab.id && "bg-[var(--primary-blue)] text-white shadow-sm",
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
 
+        {activeTab === "settings" && (
+          <Panel icon={<Save size={18} />} title="ตั้งค่าระบบ">
+            <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+              <div>
+                <Field label="ชื่อโรงเรียน">
+                  <input className="app-input" value={settings.schoolName} onChange={(event) => setSettings({ ...settings, schoolName: event.target.value })} />
+                </Field>
+                <Field label="โลโก้โรงเรียน">
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--blue-wash)] px-3 py-3 text-sm text-[var(--text-muted)]">
+                    <ImageUp size={18} className="text-[var(--primary-blue)]" />
+                    อัปโหลดรูปภาพไม่เกิน 1MB
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => event.target.files?.[0] && uploadLogo(event.target.files[0])} />
+                  </label>
+                </Field>
+                <Field label="รอบสอบที่แสดงในหน้าเช็คผล">
+                  <select className="app-input" value={settings.activeExamSessionId} onChange={(event) => setSettings({ ...settings, activeExamSessionId: event.target.value })}>
+                    <option value="">ใช้รอบสอบที่ประกาศล่าสุด</option>
+                    {exams.map((exam) => (
+                      <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
+                    ))}
+                  </select>
+                </Field>
+                <button type="button" onClick={saveSettings} disabled={busy} className="app-button-primary mt-4">
+                  <Save size={16} />
+                  บันทึกตั้งค่า
+                </button>
+              </div>
+              <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
+                {settings.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={settings.logoUrl} alt="" className="mx-auto size-28 rounded-2xl object-cover ring-2 ring-white" />
+                ) : (
+                  <div className="mx-auto grid size-28 place-items-center rounded-2xl bg-[var(--primary-blue)] text-white">
+                    <School size={40} />
+                  </div>
+                )}
+                <p className="mt-3 text-center text-sm font-semibold">{settings.schoolName}</p>
+              </div>
+            </div>
+          </Panel>
+        )}
+
+        {activeTab === "exam" && (
+          <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
             <Panel icon={<Plus size={18} />} title="สร้างรอบสอบ">
               <Field label="ชื่อรอบสอบ">
                 <input className="app-input" value={newExamName} onChange={(event) => setNewExamName(event.target.value)} />
@@ -546,9 +655,7 @@ export function AdminConsole() {
                 สร้างรอบสอบ
               </button>
             </Panel>
-          </section>
 
-          <section className="space-y-5">
             <Panel icon={<Megaphone size={18} />} title="รอบสอบและการประกาศผล">
               <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
                 <select className="app-input" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
@@ -566,135 +673,198 @@ export function AdminConsole() {
                   ประกาศผล
                 </button>
               </div>
-              {selectedExam && (
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {selectedExam ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
                   <Metric label="ชั้นเรียน" value={selectedExam.classLevel} />
                   <Metric label="รูปแบบ" value={selectedExam.selectionMode === "PER_ROOM" ? "รายห้อง" : "ทั้งชั้น"} />
                   <Metric label="นักเรียน" value={`${selectedExam._count?.students ?? 0} คน`} />
+                  <Metric label="สถานะ" value={selectedExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"} />
                 </div>
+              ) : (
+                <EmptyState text="ยังไม่มีรอบสอบ เลือกสร้างรอบสอบใหม่ก่อนตั้งห้อง วิชา และนำเข้าคะแนน" />
               )}
             </Panel>
+          </div>
+        )}
 
-            {selectedExam && (
-              <>
-                <Panel icon={<Users size={18} />} title="ห้องเรียนและโควตา">
-                  <div className="space-y-2">
-                    {rooms.map((room, index) => (
-                      <div key={room.id ?? `room-${index}`} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
-                        <input className="app-input" value={room.room} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === index ? { ...item, room: event.target.value } : item))} />
-                        <input className="app-input" type="number" min={0} value={room.quota} onFocus={selectNumberInput} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === index ? { ...item, quota: Number(event.target.value) } : item))} />
-                        <button type="button" className="app-icon-button" onClick={() => setRooms(rooms.filter((_, itemIndex) => itemIndex !== index))}>
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" className="app-button-secondary" onClick={() => setRooms([...rooms, { room: String(rooms.length + 1), quota: 0 }])}>
-                      <Plus size={16} />
-                      เพิ่มห้อง
-                    </button>
-                    <button type="button" className="app-button-primary" onClick={saveRooms} disabled={busy}>
-                      <Save size={16} />
-                      บันทึกห้อง
-                    </button>
-                  </div>
-                </Panel>
+        {activeTab !== "settings" && activeTab !== "exam" && !selectedExam && (
+          <Panel icon={<Megaphone size={18} />} title="เลือกรอบสอบก่อน">
+            <EmptyState text="กรุณาเลือกหรือสร้างรอบสอบในแท็บรอบสอบก่อนทำงานส่วนนี้" />
+          </Panel>
+        )}
 
-                <Panel icon={<BookOpen size={18} />} title="วิชาสอบและคะแนนเต็ม">
-                  <div className="space-y-2">
-                    {subjects.map((subject, index) => (
-                      <div key={subject.id ?? `subject-${index}`} className="grid gap-2 lg:grid-cols-[1fr_120px_130px_auto]">
-                        <input className="app-input" placeholder="ชื่อวิชา" value={subject.name} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
-                        <input className="app-input" type="number" min={1} value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
-                        <input className="app-input" type="number" min={1} placeholder="tie-break" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
-                        <button type="button" className="app-icon-button" onClick={() => setSubjects(subjects.filter((_, itemIndex) => itemIndex !== index))}>
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" className="app-button-secondary" onClick={() => setSubjects([...subjects, emptySubject(subjects.length)])}>
-                      <Plus size={16} />
-                      เพิ่มวิชา
-                    </button>
-                    <button type="button" className="app-button-primary" onClick={saveSubjects} disabled={busy}>
-                      <Save size={16} />
-                      บันทึกวิชา
-                    </button>
-                  </div>
-                </Panel>
-
-                <Panel icon={<ClipboardList size={18} />} title="นำเข้ารายชื่อพร้อมคะแนนทีละห้อง">
-                  <div className="grid gap-3 md:grid-cols-[220px_1fr]">
-                    <Field label="เลือกห้อง">
-                      <select className="app-input" value={importRoom} onChange={(event) => setImportRoom(event.target.value)}>
-                        {rooms.map((room) => (
-                          <option key={room.room} value={room.room}>{room.room}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                      คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"} หรือวางแบบไม่มีหัวตารางตามลำดับนี้ได้
+        {activeTab === "rooms" && selectedExam && (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.85fr)]">
+            <Panel icon={<Users size={18} />} title="ห้องเรียนและโควตา">
+              <div className="mb-3 grid gap-3 md:grid-cols-[1fr_auto]">
+                <label className="relative block">
+                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                  <input className="app-input pl-9" value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)} placeholder="ค้นหาห้อง" />
+                </label>
+                <button type="button" className="app-button-secondary" onClick={() => setRooms([...rooms, { room: String(rooms.length + 1), quota: 0 }])}>
+                  <Plus size={16} />
+                  เพิ่มห้อง
+                </button>
+              </div>
+              <div className="max-h-[460px] overflow-y-auto rounded-xl border border-[var(--border-soft)]">
+                <div className="grid grid-cols-[1fr_130px_56px] gap-2 bg-[var(--blue-wash)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <span>ห้อง</span>
+                  <span>โควตา</span>
+                  <span />
+                </div>
+                <div className="divide-y divide-[var(--border-soft)]">
+                  {visibleRooms.map((room) => (
+                    <div key={room.id ?? `room-${room.index}`} className="grid grid-cols-[1fr_130px_56px] gap-2 p-2">
+                      <input className="app-input" value={room.room} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === room.index ? { ...item, room: event.target.value } : item))} />
+                      <input className="app-input" type="number" min={0} value={room.quota} onFocus={selectNumberInput} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === room.index ? { ...item, quota: Number(event.target.value) } : item))} />
+                      <button type="button" className="app-icon-button" onClick={() => setRooms(rooms.filter((_, itemIndex) => itemIndex !== room.index))}>
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-                  </div>
-                  <textarea
-                    className="app-input mt-3 min-h-36 font-mono text-sm"
-                    value={pasteText}
-                    onChange={(event) => setPasteText(event.target.value)}
-                    placeholder={"student_id\tstudent_name\tคณิตศาสตร์\tวิทยาศาสตร์\n65001\tเด็กชายตัวอย่าง\t85\t78"}
-                  />
-                  {pasteValidation && (
-                    <div className={cx("mt-3 rounded-xl border px-4 py-3 text-sm", pasteValidation.isReady ? "border-sky-200 bg-sky-50 text-sky-800" : "border-[var(--pink-soft)] bg-[var(--pink-wash)] text-[var(--accent-pink-strong)]")}>
-                      {pasteValidation.isReady
-                        ? `ตรวจข้อมูลพร้อมนำเข้า: รหัสนักเรียนและชื่อครบ ${pasteValidation.rowCount} คน, วิชา ${pasteValidation.subjectCount} วิชา, คะแนนถูกต้อง ${pasteValidation.scoreCellCount} ช่อง`
-                        : pasteValidation.errors.slice(0, 4).join(" / ")}
-                    </div>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" className="app-button-primary" onClick={importPastedRows} disabled={busy || !pasteText.trim()}>
-                      <ClipboardList size={16} />
-                      นำเข้าจากข้อมูลที่วาง
-                    </button>
-                    <label className="app-button-secondary cursor-pointer">
-                      <UploadCloud size={16} />
-                      อัปโหลด Excel/CSV
-                      <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(event) => event.target.files?.[0] && importFile(event.target.files[0])} />
-                    </label>
-                  </div>
-                </Panel>
+                  ))}
+                </div>
+              </div>
+              <button type="button" className="app-button-primary mt-3" onClick={saveRooms} disabled={busy}>
+                <Save size={16} />
+                บันทึกห้อง
+              </button>
+            </Panel>
 
-                <Panel icon={<Calculator size={18} />} title="ผลคะแนน อันดับ และผู้ผ่านเกณฑ์">
-                  <div className="mb-4 grid gap-3 md:grid-cols-4">
-                    <Metric label="ทั้งหมด" value={`${resultSummary.total} คน`} />
-                    <Metric label="ผ่านเกณฑ์" value={`${resultSummary.passed} คน`} />
-                    <Metric label="รอตรวจ" value={`${resultSummary.review} คน`} />
-                    <Metric label="ไม่ผ่าน" value={`${resultSummary.failed} คน`} />
+            <Panel icon={<BookOpen size={18} />} title="วิชาสอบและคะแนนเต็ม">
+              <div className="space-y-2">
+                {subjects.map((subject, index) => (
+                  <div key={subject.id ?? `subject-${index}`} className="grid gap-2 lg:grid-cols-[1fr_110px_120px_auto]">
+                    <input className="app-input" placeholder="ชื่อวิชา" value={subject.name} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
+                    <input className="app-input" type="number" min={1} value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
+                    <input className="app-input" type="number" min={1} placeholder="ลำดับตัดสิน" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
+                    <button type="button" className="app-icon-button" onClick={() => setSubjects(subjects.filter((_, itemIndex) => itemIndex !== index))}>
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  {calculatedResults.length > 0 ? (
-                    selectedExam.selectionMode === "WHOLE_LEVEL" ? (
-                      <ResultTable results={calculatedResults} subjects={subjects} />
-                    ) : (
-                      <div className="space-y-5">
-                        {resultsByRoom.map(([room, results]) => (
-                          <section key={room}>
-                            <h3 className="mb-2 font-semibold text-[var(--primary-blue)]">ห้อง {room}</h3>
-                            <ResultTable results={results} subjects={subjects} />
-                          </section>
-                        ))}
-                      </div>
-                    )
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--blue-wash)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
-                      นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล
-                    </div>
-                  )}
-                </Panel>
-              </>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="app-button-secondary" onClick={() => setSubjects([...subjects, emptySubject(subjects.length)])}>
+                  <Plus size={16} />
+                  เพิ่มวิชา
+                </button>
+                <button type="button" className="app-button-primary" onClick={saveSubjects} disabled={busy}>
+                  <Save size={16} />
+                  บันทึกวิชา
+                </button>
+              </div>
+            </Panel>
+          </div>
+        )}
+
+        {activeTab === "import" && selectedExam && (
+          <Panel icon={<ClipboardList size={18} />} title="นำเข้ารายชื่อพร้อมคะแนนทีละห้อง">
+            <div className="grid gap-3 md:grid-cols-[220px_1fr]">
+              <Field label="เลือกห้อง">
+                <select className="app-input" value={importRoom} onChange={(event) => setImportRoom(event.target.value)}>
+                  {rooms.map((room) => (
+                    <option key={room.room} value={room.room}>{room.room}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"} หรือวางแบบไม่มีหัวตารางตามลำดับนี้ได้
+              </div>
+            </div>
+            <textarea
+              className="app-input mt-3 min-h-56 font-mono text-sm"
+              value={pasteText}
+              onChange={(event) => setPasteText(event.target.value)}
+              placeholder={"student_id\tstudent_name\tคณิตศาสตร์\tวิทยาศาสตร์\n65001\tเด็กชายตัวอย่าง\t85\t78"}
+            />
+            {pasteValidation && (
+              <div className={cx("mt-3 rounded-xl border px-4 py-3 text-sm", pasteValidation.isReady ? "border-sky-200 bg-sky-50 text-sky-800" : "border-[var(--pink-soft)] bg-[var(--pink-wash)] text-[var(--accent-pink-strong)]")}>
+                {pasteValidation.isReady
+                  ? `ตรวจข้อมูลพร้อมนำเข้า: รหัสนักเรียนและชื่อครบ ${pasteValidation.rowCount} คน, วิชา ${pasteValidation.subjectCount} วิชา, คะแนนถูกต้อง ${pasteValidation.scoreCellCount} ช่อง`
+                  : pasteValidation.errors.slice(0, 4).join(" / ")}
+              </div>
             )}
-          </section>
-        </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className="app-button-primary" onClick={importPastedRows} disabled={busy || !pasteText.trim()}>
+                <ClipboardList size={16} />
+                นำเข้าจากข้อมูลที่วาง
+              </button>
+              <label className="app-button-secondary cursor-pointer">
+                <UploadCloud size={16} />
+                อัปโหลด Excel/CSV
+                <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(event) => event.target.files?.[0] && importFile(event.target.files[0])} />
+              </label>
+            </div>
+          </Panel>
+        )}
+
+        {activeTab === "results" && selectedExam && (
+          <Panel icon={<ListChecks size={18} />} title="ผลคะแนน อันดับ และผู้ผ่านเกณฑ์">
+            <div className="mb-4 grid gap-3 md:grid-cols-[repeat(4,minmax(0,1fr))_220px]">
+              <Metric label="ที่แสดง" value={`${visibleResultSummary.total} คน`} />
+              <Metric label="ผ่านเกณฑ์" value={`${visibleResultSummary.passed} คน`} />
+              <Metric label="รอตรวจ" value={`${visibleResultSummary.review} คน`} />
+              <Metric label="ไม่ผ่าน" value={`${visibleResultSummary.failed} คน`} />
+              <Field label="ดูตามห้อง">
+                <select className="app-input" value={resultRoomFilter} onChange={(event) => setResultRoomFilter(event.target.value)}>
+                  <option value="ALL">ทุกห้อง</option>
+                  {roomOptions.map((room) => (
+                    <option key={room} value={room}>ห้อง {room}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            {visibleResults.length > 0 ? (
+              resultRoomFilter !== "ALL" || selectedExam.selectionMode === "WHOLE_LEVEL" ? (
+                <ResultTable results={visibleResults} subjects={subjects} />
+              ) : (
+                <div className="space-y-5">
+                  {visibleResultsByRoom.map(([room, results]) => (
+                    <section key={room}>
+                      <h3 className="mb-2 font-semibold text-[var(--primary-blue)]">ห้อง {room}</h3>
+                      <ResultTable results={results} subjects={subjects} />
+                    </section>
+                  ))}
+                </div>
+              )
+            ) : (
+              <EmptyState text="นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล" />
+            )}
+          </Panel>
+        )}
+
+        {activeTab === "line" && selectedExam && (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <Panel icon={<Bell size={18} />} title="สถานะ LINE/LIFF">
+              <div className="grid gap-3 md:grid-cols-4">
+                <Metric label="LIFF ID" value={lineStatus?.config.hasLiffId ? "ตั้งค่าแล้ว" : "ยังไม่มี"} />
+                <Metric label="Channel Token" value={lineStatus?.config.hasToken ? "ตั้งค่าแล้ว" : "ยังไม่มี"} />
+                <Metric label="Channel Secret" value={lineStatus?.config.hasSecret ? "ตั้งค่าแล้ว" : "ยังไม่มี"} />
+                <Metric label="พร้อมส่ง" value={lineStatus?.config.isReady ? "พร้อม" : "ยังไม่พร้อม"} />
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <Metric label="บัญชีที่ผูกแล้ว" value={`${lineStatus?.bindings ?? 0} บัญชี`} />
+                <Metric label="ส่งสำเร็จ" value={`${lineStatus?.sent ?? 0} รายการ`} />
+                <Metric label="ส่งล้มเหลว" value={`${lineStatus?.failed ?? 0} รายการ`} />
+              </div>
+              <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                ตั้งค่า env ใน Vercel: <span className="font-medium text-[var(--text-main)]">NEXT_PUBLIC_LIFF_ID, LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET</span> แล้วผูก Rich Menu ให้เปิดหน้า <span className="font-medium text-[var(--text-main)]">/line</span>
+              </div>
+            </Panel>
+
+            <Panel icon={<Link2 size={18} />} title="เมนู LINE ที่แนะนำ">
+              <div className="space-y-3 text-sm text-[var(--text-muted)]">
+                <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> เปิด LIFF ให้กรอกรหัสนักเรียนและบันทึก LINE userId</p>
+                <p><span className="font-semibold text-[var(--text-main)]">2. ดูผลคะแนน</span> เปิดหน้าเดียวกัน ถ้าผูกแล้วแสดงการ์ดผลทันที</p>
+                <p><span className="font-semibold text-[var(--text-main)]">3. ประกาศผล</span> เมื่อกดประกาศ ระบบส่ง Flex Message ให้บัญชีที่ผูกแล้วและกันส่งซ้ำ</p>
+              </div>
+              <a href="/line" className="app-button-primary mt-4">
+                <Link2 size={16} />
+                เปิดหน้า LIFF
+              </a>
+            </Panel>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -726,6 +896,14 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl bg-[var(--blue-wash)] p-4">
       <div className="text-xs font-medium text-[var(--text-muted)]">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--blue-wash)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
+      {text}
     </div>
   );
 }

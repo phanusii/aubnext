@@ -1,8 +1,32 @@
 import { getPrisma } from "@/lib/prisma";
+import { buildLineResultFlex, lineConfigStatus, pushLineMessage } from "@/lib/line";
 import { calculateResults } from "@/lib/ranking";
 import { verifierHash } from "@/lib/security";
 import type { ImportedStudentRow } from "@/lib/excel";
 import type { CandidateInput, RankingRule, SubjectInput } from "@/lib/types";
+
+type ResultStudent = {
+  examNo: string;
+  name: string;
+  classLevel: string;
+  room: string;
+  examSession: {
+    id: string;
+    name: string;
+    classLevel: string;
+    selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
+    publishedAt: Date | null;
+    subjects: Array<{ id: string; name: string }>;
+  };
+  resultSnapshots: Array<{
+    examSessionId: string;
+    rank: number;
+    totalScore: number;
+    status: "PASSED" | "FAILED" | "REVIEW";
+    reason: string;
+    scoreBreakdown: unknown;
+  }>;
+};
 
 export async function upsertSchoolSettings(input: {
   schoolName: string;
@@ -452,33 +476,13 @@ export async function publishExam(examSessionId: string) {
     }),
   ]);
 
-  return { publishedAt };
+  const lineNotification = await notifyLineBindingsForExam(examSessionId);
+  return { publishedAt, lineNotification };
 }
 
-export async function checkPrivateResult(input: { examNo: string }) {
-  const prisma = getPrisma();
-  const settings = await getSchoolSettings();
-  const activeExam = settings.activeExamSessionId
-    ? await prisma.examSession.findUnique({ where: { id: settings.activeExamSessionId } })
-    : await prisma.examSession.findFirst({ where: { status: "PUBLISHED" }, orderBy: { publishedAt: "desc" } });
-
-  if (!activeExam || activeExam.status !== "PUBLISHED") return null;
-
-  const student = await prisma.student.findFirst({
-    where: {
-      examNo: input.examNo.trim(),
-      examSessionId: activeExam.id,
-    },
-    include: {
-      examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
-      resultSnapshots: true,
-    },
-  });
-
-  if (!student) return null;
-
+function buildPrivateResult(settings: Awaited<ReturnType<typeof getSchoolSettings>>, student: ResultStudent) {
   const result = student.resultSnapshots.find(
-    (snapshot) => snapshot.examSessionId === student.examSessionId,
+    (snapshot) => snapshot.examSessionId === student.examSession.id,
   );
   if (!result) return null;
 
@@ -513,6 +517,209 @@ export async function checkPrivateResult(input: { examNo: string }) {
       ),
     },
   };
+}
+
+export async function checkPrivateResult(input: { examNo: string }) {
+  const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const activeExam = settings.activeExamSessionId
+    ? await prisma.examSession.findUnique({ where: { id: settings.activeExamSessionId } })
+    : await prisma.examSession.findFirst({ where: { status: "PUBLISHED" }, orderBy: { publishedAt: "desc" } });
+
+  if (!activeExam || activeExam.status !== "PUBLISHED") return null;
+
+  const student = await prisma.student.findFirst({
+    where: {
+      examNo: input.examNo.trim(),
+      examSessionId: activeExam.id,
+    },
+    include: {
+      examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
+      resultSnapshots: true,
+    },
+  });
+
+  if (!student) return null;
+
+  return buildPrivateResult(settings, student);
+}
+
+export async function bindLineStudent(input: { lineUserId: string; examNo: string; lineName?: string | null }) {
+  const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const trimmedExamNo = input.examNo.trim();
+
+  const student = await prisma.student.findFirst({
+    where: {
+      examNo: trimmedExamNo,
+      ...(settings.activeExamSessionId ? { examSessionId: settings.activeExamSessionId } : {}),
+    },
+    include: {
+      examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
+      resultSnapshots: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!student) {
+    return { ok: false as const, error: "ไม่พบรหัสนักเรียนนี้ในรอบสอบ" };
+  }
+
+  const existingStudentBinding = await prisma.lineBinding.findUnique({
+    where: {
+      studentId_examSessionId: {
+        studentId: student.id,
+        examSessionId: student.examSessionId,
+      },
+    },
+  });
+  if (existingStudentBinding && existingStudentBinding.lineUserId !== input.lineUserId) {
+    return { ok: false as const, error: "รหัสนักเรียนนี้ผูกกับบัญชี LINE อื่นแล้ว" };
+  }
+
+  await prisma.lineBinding.upsert({
+    where: {
+      lineUserId_examSessionId: {
+        lineUserId: input.lineUserId,
+        examSessionId: student.examSessionId,
+      },
+    },
+    update: {
+      studentId: student.id,
+      lineName: input.lineName ?? null,
+    },
+    create: {
+      lineUserId: input.lineUserId,
+      lineName: input.lineName ?? null,
+      studentId: student.id,
+      examSessionId: student.examSessionId,
+    },
+  });
+
+  const result = student.examSession.status === "PUBLISHED" ? buildPrivateResult(settings, student) : null;
+  return {
+    ok: true as const,
+    student: {
+      examNo: student.examNo,
+      name: student.name,
+      classLevel: student.classLevel,
+      room: student.room,
+    },
+    exam: {
+      id: student.examSession.id,
+      name: student.examSession.name,
+      status: student.examSession.status,
+    },
+    result,
+  };
+}
+
+export async function getLineBoundResult(input: { lineUserId: string }) {
+  const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const binding = await prisma.lineBinding.findFirst({
+    where: {
+      lineUserId: input.lineUserId,
+      ...(settings.activeExamSessionId ? { examSessionId: settings.activeExamSessionId } : {}),
+    },
+    include: {
+      student: {
+        include: {
+          examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
+          resultSnapshots: true,
+        },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (!binding) return { ok: false as const, error: "ยังไม่ได้ผูกบัญชี LINE กับรหัสนักเรียน" };
+  if (binding.student.examSession.status !== "PUBLISHED") {
+    return { ok: false as const, error: "ผูกบัญชีแล้ว แต่รอบสอบยังไม่ได้ประกาศผล" };
+  }
+
+  const result = buildPrivateResult(settings, binding.student);
+  if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
+  return { ok: true as const, result };
+}
+
+export async function getLineNotificationStats(examSessionId?: string) {
+  const prisma = getPrisma();
+  const config = lineConfigStatus();
+  const where = examSessionId ? { examSessionId } : {};
+  const [bindings, sent, failed] = await Promise.all([
+    prisma.lineBinding.count({ where }),
+    prisma.lineNotificationLog.count({ where: { ...where, status: "SENT" } }),
+    prisma.lineNotificationLog.count({ where: { ...where, status: "FAILED" } }),
+  ]);
+
+  return { config, bindings, sent, failed };
+}
+
+async function notifyLineBindingsForExam(examSessionId: string) {
+  const config = lineConfigStatus();
+  if (!config.isReady) {
+    return { attempted: 0, sent: 0, failed: 0, skipped: true, message: "ยังไม่ได้ตั้งค่า LINE แจ้งเตือน" };
+  }
+
+  const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const bindings = await prisma.lineBinding.findMany({
+    where: { examSessionId },
+    include: {
+      student: {
+        include: {
+          examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
+          resultSnapshots: true,
+        },
+      },
+      notificationLogs: true,
+    },
+  });
+
+  let sent = 0;
+  let failed = 0;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || "https://aubnext.vercel.app";
+  const normalizedBaseUrl = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+
+  for (const binding of bindings) {
+    if (binding.notificationLogs.some((log) => log.examSessionId === examSessionId && log.status === "SENT")) {
+      continue;
+    }
+
+    const result = buildPrivateResult(settings, binding.student);
+    if (!result) continue;
+
+    const message = buildLineResultFlex({
+      schoolName: result.school.schoolName,
+      examName: result.exam.name,
+      studentName: result.student.name,
+      examNo: result.student.examNo,
+      rank: result.result.rank,
+      totalScore: result.result.totalScore,
+      status: result.result.status,
+      resultUrl: `${normalizedBaseUrl}/line`,
+    });
+    const pushed = await pushLineMessage(binding.lineUserId, [message]);
+
+    if (pushed.ok) {
+      sent += 1;
+      await prisma.lineNotificationLog.upsert({
+        where: { bindingId_examSessionId: { bindingId: binding.id, examSessionId } },
+        update: { status: "SENT", error: null, sentAt: new Date() },
+        create: { bindingId: binding.id, examSessionId, status: "SENT", sentAt: new Date() },
+      });
+    } else {
+      failed += 1;
+      await prisma.lineNotificationLog.upsert({
+        where: { bindingId_examSessionId: { bindingId: binding.id, examSessionId } },
+        update: { status: "FAILED", error: pushed.error },
+        create: { bindingId: binding.id, examSessionId, status: "FAILED", error: pushed.error },
+      });
+    }
+  }
+
+  return { attempted: bindings.length, sent, failed, skipped: false, message: null };
 }
 
 export async function findUnpublishedStudentExam(input: { examNo: string }) {

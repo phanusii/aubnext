@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 360" role="img" aria-labelledby="title desc">
+  <title id="title">Happy student mascot</title>
+  <desc id="desc">A cheerful cartoon student holding a trophy with stars.</desc>
+  <defs>
+    <linearGradient id="sky" x1="70" x2="350" y1="30" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#FFF0F7"/>
+    </linearGradient>
+    <linearGradient id="shirt" x1="154" x2="275" y1="188" y2="323" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#F472B6"/>
+    </linearGradient>
+  </defs>
+  <rect width="420" height="360" rx="48" fill="url(#sky)"/>
+  <circle cx="90" cy="80" r="22" fill="#FBCFE8"/>
+  <circle cx="340" cy="72" r="28" fill="#BAE6FD"/>
+  <path d="M64 178l13 26 29 4-21 20 5 29-26-14-26 14 5-29-21-20 29-4 13-26z" fill="#FBBF24"/>
+  <path d="M345 176l9 19 21 3-15 15 3 21-18-10-19 10 4-21-15-15 21-3 9-19z" fill="#F472B6"/>
+  <ellipse cx="210" cy="315" rx="118" ry="18" fill="#93C5FD" opacity=".28"/>
+  <path d="M146 233c-22 6-44 2-56-13-10-13-8-30 6-35 13-5 25 5 28 21 4 20 14 30 31 27" fill="none" stroke="#0EA5E9" stroke-width="16" stroke-linecap="round"/>
+  <path d="M274 233c22 6 44 2 56-13 10-13 8-30-6-35-13-5-25 5-28 21-4 20-14 30-31 27" fill="none" stroke="#F472B6" stroke-width="16" stroke-linecap="round"/>
+  <path d="M141 304c5-72 31-113 69-113s64 41 69 113H141z" fill="url(#shirt)"/>
+  <path d="M167 224c18 20 66 20 84 0" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" opacity=".85"/>
+  <circle cx="210" cy="137" r="67" fill="#FDE68A"/>
+  <path d="M143 141c5-52 31-90 73-90 37 0 65 29 63 78-21-5-48-18-64-40-13 25-39 43-72 52z" fill="#172033"/>
+  <circle cx="184" cy="143" r="8" fill="#172033"/>
+  <circle cx="237" cy="143" r="8" fill="#172033"/>
+  <path d="M187 173c15 17 34 17 49 0" fill="none" stroke="#BE185D" stroke-width="8" stroke-linecap="round"/>
+  <path d="M174 210c10 17 23 25 36 25s26-8 36-25c-10 9-22 14-36 14s-26-5-36-14z" fill="#fff"/>
+  <path d="M302 116h49v35c0 31-20 55-49 61-29-6-49-30-49-61v-35h49z" fill="#FBBF24" stroke="#F59E0B" stroke-width="8"/>
+  <path d="M286 144h32M302 128v46" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M253 137c-26 25-38 52-39 80" fill="none" stroke="#FBBF24" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="128" cy="63" r="8" fill="#0EA5E9"/>
+  <circle cx="318" cy="262" r="9" fill="#F472B6"/>
+  <circle cx="81" cy="270" r="7" fill="#FBBF24"/>
+</svg>

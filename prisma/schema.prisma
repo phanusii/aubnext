@@ -42,20 +42,22 @@ model ExamSession {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  subjects        Subject[]
-  students        Student[]
-  roomQuotas      RoomQuota[]
-  importBatches   ImportBatch[]
-  resultSnapshots ResultSnapshot[]
+  subjects          Subject[]
+  students          Student[]
+  roomQuotas        RoomQuota[]
+  importBatches     ImportBatch[]
+  resultSnapshots   ResultSnapshot[]
+  lineBindings      LineBinding[]
+  lineNotifications LineNotificationLog[]
 }
 
 model Subject {
-  id            String      @id @default(cuid())
+  id            String  @id @default(cuid())
   examSessionId String
   name          String
   sortOrder     Int
   maxScore      Float?
-  isTieBreak    Boolean     @default(false)
+  isTieBreak    Boolean @default(false)
   tieBreakOrder Int?
 
   examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
@@ -78,9 +80,44 @@ model Student {
   examSession     ExamSession      @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
   scores          Score[]
   resultSnapshots ResultSnapshot[]
+  lineBindings    LineBinding[]
 
   @@unique([examSessionId, examNo])
   @@index([examSessionId, room])
+}
+
+model LineBinding {
+  id            String   @id @default(cuid())
+  lineUserId    String
+  lineName      String?
+  studentId     String
+  examSessionId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student          Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  examSession      ExamSession           @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+  notificationLogs LineNotificationLog[]
+
+  @@unique([lineUserId, examSessionId])
+  @@unique([studentId, examSessionId])
+  @@index([examSessionId])
+}
+
+model LineNotificationLog {
+  id            String    @id @default(cuid())
+  bindingId     String
+  examSessionId String
+  status        String
+  error         String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  binding     LineBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
+  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([bindingId, examSessionId])
+  @@index([examSessionId, status])
 }
 
 model Score {
@@ -120,8 +157,8 @@ model ImportBatch {
 }
 
 model ResultSnapshot {
-  id            String       @id @default(cuid())
-  examSessionId String
+  id             String       @id @default(cuid())
+  examSessionId  String
   studentId      String
   rank           Int
   totalScore     Float
@@ -133,7 +170,7 @@ model ResultSnapshot {
   createdAt      DateTime     @default(now())
 
   examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
-  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([examSessionId, studentId])
   @@index([examSessionId, status])
