@@ -48,6 +48,7 @@ function classNames(...values: Array<string | false | null | undefined>) {
 
 export function AdminConsole() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [settings, setSettings] = useState({
     schoolName: "โรงเรียนตัวอย่าง",
@@ -101,7 +102,7 @@ export function AdminConsole() {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ email, password }),
     });
     setBusy(false);
     if (!response.ok) {
@@ -109,6 +110,7 @@ export function AdminConsole() {
       return;
     }
     setIsLoggedIn(true);
+    setEmail("");
     setPassword("");
     setMessage("เข้าสู่ระบบแล้ว");
     await loadExams();
@@ -235,7 +237,17 @@ export function AdminConsole() {
                 <p className="text-sm text-[#65736d]">{settings.examTitle}</p>
               </div>
             </div>
-            <label className="text-sm font-medium" htmlFor="password">
+            <label className="text-sm font-medium" htmlFor="email">
+              อีเมลผู้ดูแล
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="mt-2 h-11 w-full rounded-md border border-[#cfc7b8] px-3 outline-none focus:border-[#1d5c4a]"
+            />
+            <label className="mt-3 block text-sm font-medium" htmlFor="password">
               รหัสผ่านผู้ดูแล
             </label>
             <input

@@ -15,7 +15,7 @@ npm run prisma:migrate
 npm run dev
 ```
 
-ค่าเริ่มต้นสำหรับแอดมินถ้าไม่ได้ตั้ง `ADMIN_PASSWORD` คือ `admin1234`
+ค่าเริ่มต้นสำหรับแอดมินถ้าไม่ได้ตั้ง env คือ `ADMIN_EMAIL=admin@example.com` และ `ADMIN_PASSWORD=admin1234`
 
 ## Pages
 
