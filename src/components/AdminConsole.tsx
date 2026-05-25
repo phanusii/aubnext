@@ -17,7 +17,7 @@ import {
   UploadCloud,
   Users,
 } from "lucide-react";
-import { parseDelimitedTable } from "@/lib/table";
+import { prepareRoomImportTable } from "@/lib/room-import-table";
 
 type RoomQuota = { id?: string; room: string; quota: number };
 type Subject = {
@@ -328,7 +328,7 @@ export function AdminConsole() {
     );
     if (!confirmed) return;
 
-    const { rows } = parseDelimitedTable(pasteText);
+    const { rows } = prepareRoomImportTable(pasteText, subjects);
     setBusy(true);
     const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import`, {
       method: "POST",
@@ -616,7 +616,7 @@ export function AdminConsole() {
                       </select>
                     </Field>
                     <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                      คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"}
+                      คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"} หรือวางแบบไม่มีหัวตารางตามลำดับนี้ได้
                     </div>
                   </div>
                   <textarea
@@ -712,7 +712,7 @@ function findColumn(headers: string[], aliases: string[]) {
 function validateImportPreview(text: string, subjects: Subject[]): ImportValidation | null {
   if (!text.trim()) return null;
 
-  const parsed = parseDelimitedTable(text);
+  const parsed = prepareRoomImportTable(text, subjects);
   const activeSubjects = subjects.filter((subject) => subject.name.trim());
   const errors: string[] = [];
   const studentIdColumn = findColumn(parsed.headers, ["student_id", "รหัสนักเรียน", "exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ"]);
@@ -732,7 +732,7 @@ function validateImportPreview(text: string, subjects: Subject[]): ImportValidat
   }
 
   parsed.rows.forEach((row, index) => {
-    const rowNumber = index + 2;
+    const rowNumber = parsed.firstDataRowNumber + index;
     const studentId = studentIdColumn ? String(row[studentIdColumn] ?? "").trim() : "";
     const studentName = studentNameColumn ? String(row[studentNameColumn] ?? "").trim() : "";
 

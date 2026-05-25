@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeImportRows, readWorkbookRows, suggestMapping } from "@/lib/excel";
 import { normalizeRoomImportRows } from "@/lib/repository";
+import { prepareRoomImportTable } from "@/lib/room-import-table";
 import { parseDelimitedTable } from "@/lib/table";
 
 describe("excel import helpers", () => {
@@ -54,6 +55,33 @@ describe("excel import helpers", () => {
     expect(parsed.headers).toEqual(["student_id", "student_name", "คณิตศาสตร์", "วิทยาศาสตร์"]);
     expect(normalized.errors).toEqual([]);
     expect(normalized.rows[0].scores.math).toBe(85);
+  });
+
+  it("prepares headerless pasted room import rows from configured subject order", () => {
+    const table = [
+      "21283\tเด็กชายทีปกร หมื่นพัน\t26\t15",
+      "21284\tเด็กชายธนธัส รุ่งโรจน์\t27\t10",
+    ].join("\n");
+
+    const prepared = prepareRoomImportTable(table, [
+      { name: "วิทยาศาสตร์" },
+      { name: "คณิตศาสตร์" },
+    ]);
+    const normalized = normalizeRoomImportRows({
+      rawRows: prepared.rows,
+      subjects: [
+        { id: "science", name: "วิทยาศาสตร์", maxScore: 30 },
+        { id: "math", name: "คณิตศาสตร์", maxScore: 20 },
+      ],
+    });
+
+    expect(prepared.hasHeader).toBe(false);
+    expect(prepared.firstDataRowNumber).toBe(1);
+    expect(prepared.headers).toEqual(["student_id", "student_name", "วิทยาศาสตร์", "คณิตศาสตร์"]);
+    expect(normalized.errors).toEqual([]);
+    expect(normalized.rows[0].examNo).toBe("21283");
+    expect(normalized.rows[0].scores.science).toBe(26);
+    expect(normalized.rows[0].scores.math).toBe(15);
   });
 
   it("rejects scores over max score and missing subject columns", () => {

@@ -1,4 +1,19 @@
 export function parseDelimitedTable(text: string) {
+  const parsedRows = parseDelimitedRows(text);
+
+  if (parsedRows.length === 0) {
+    return { headers: [] as string[], rows: [] as Record<string, unknown>[] };
+  }
+
+  const headers = parsedRows[0].filter(Boolean);
+  const rows = parsedRows.slice(1).map((values) => {
+    return Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ""]));
+  });
+
+  return { headers, rows };
+}
+
+export function parseDelimitedRows(text: string) {
   const lines = text
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
@@ -6,17 +21,11 @@ export function parseDelimitedTable(text: string) {
     .filter((line) => line.trim().length > 0);
 
   if (lines.length === 0) {
-    return { headers: [] as string[], rows: [] as Record<string, unknown>[] };
+    return [] as string[][];
   }
 
   const delimiter = lines[0].includes("\t") ? "\t" : ",";
-  const headers = splitLine(lines[0], delimiter).map((header) => header.trim()).filter(Boolean);
-  const rows = lines.slice(1).map((line) => {
-    const values = splitLine(line, delimiter);
-    return Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ""]));
-  });
-
-  return { headers, rows };
+  return lines.map((line) => splitLine(line, delimiter).map((value) => value.trim()));
 }
 
 function splitLine(line: string, delimiter: string) {
