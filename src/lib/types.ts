@@ -5,6 +5,7 @@ export type SubjectInput = {
   id: string;
   name: string;
   sortOrder: number;
+  maxScore?: number | null;
   tieBreakOrder?: number | null;
 };
 
@@ -26,10 +27,15 @@ export type RankingRule = {
 
 export type CalculatedResult = {
   studentId: string;
+  examNo: string;
+  name: string;
   rank: number;
+  rankScope: "WHOLE_LEVEL" | "ROOM";
+  selectionMode: SelectionMode;
   totalScore: number;
   status: ResultStatus;
   reason: string;
+  tieBreakReason?: string | null;
   room: string;
   scoreBreakdown: Record<string, number>;
   tieBreakValues: Record<string, number>;

@@ -5,7 +5,7 @@ export type ImportMapping = {
   studentName: string;
   classLevel: string;
   room: string;
-  verifier: string;
+  verifier?: string;
   subjects: string[];
 };
 
@@ -26,14 +26,14 @@ const aliases: Record<keyof Omit<ImportMapping, "subjects">, string[]> = {
   verifier: ["birthdate_or_pin", "วันเกิด", "pin", "รหัสยืนยัน", "password"],
 };
 
-const requiredKeys = ["examNo", "studentName", "classLevel", "room", "verifier"] as const;
+const requiredKeys = ["examNo", "studentName", "classLevel", "room"] as const;
 
 const importedRowSchema = z.object({
   examNo: z.string().min(1),
   studentName: z.string().min(1),
   classLevel: z.string().min(1),
   room: z.string().min(1),
-  verifier: z.string().min(1),
+  verifier: z.string(),
   scores: z.record(z.string(), z.number().min(0)),
 });
 
@@ -129,7 +129,7 @@ export function suggestMapping(headers: string[]): ImportMapping {
     normalized: normalizeHeader(header),
   }));
 
-  for (const key of requiredKeys) {
+  for (const key of [...requiredKeys, "verifier"] as Array<keyof Omit<ImportMapping, "subjects">>) {
     const found = normalizedHeaders.find((header) =>
       aliases[key].some((alias) => header.normalized === normalizeHeader(alias)),
     );
@@ -180,7 +180,7 @@ export function normalizeImportRows(rows: Record<string, unknown>[], mapping: Im
       studentName: stringifyCell(row[mapping.studentName]),
       classLevel: stringifyCell(row[mapping.classLevel]),
       room: stringifyCell(row[mapping.room]),
-      verifier: stringifyCell(row[mapping.verifier]),
+      verifier: mapping.verifier ? stringifyCell(row[mapping.verifier]) : itemExamNo(row, mapping),
       scores,
     };
 
@@ -201,4 +201,8 @@ export function normalizeImportRows(rows: Record<string, unknown>[], mapping: Im
     rows: normalized,
     errors: [...new Set(errors)],
   };
+}
+
+function itemExamNo(row: Record<string, unknown>, mapping: ImportMapping) {
+  return stringifyCell(row[mapping.examNo]);
 }

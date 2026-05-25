@@ -52,6 +52,7 @@ describe("calculateResults", () => {
 
     expect(results.find((result) => result.studentId === "s2")?.status).toBe("PASSED");
     expect(results.find((result) => result.studentId === "s1")?.status).toBe("FAILED");
+    expect(results.find((result) => result.studentId === "s2")?.tieBreakReason).toContain("คณิตศาสตร์");
   });
 
   it("marks a tied boundary as review", () => {

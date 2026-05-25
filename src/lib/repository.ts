@@ -8,6 +8,7 @@ export async function upsertSchoolSettings(input: {
   schoolName: string;
   examTitle: string;
   logoUrl?: string | null;
+  activeExamSessionId?: string | null;
 }) {
   const prisma = getPrisma();
   return prisma.schoolSettings.upsert({
@@ -24,6 +25,90 @@ export async function getSchoolSettings() {
     update: {},
     create: { id: "main" },
   });
+}
+
+export async function createExamSession(input: {
+  name: string;
+  classLevel: string;
+  selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
+  wholeLevelQuota?: number | null;
+  rooms: Array<{ room: string; quota: number }>;
+}) {
+  const prisma = getPrisma();
+  return prisma.$transaction(async (tx) => {
+    const exam = await tx.examSession.create({
+      data: {
+        name: input.name,
+        classLevel: input.classLevel,
+        selectionMode: input.selectionMode,
+        wholeLevelQuota: input.selectionMode === "WHOLE_LEVEL" ? Number(input.wholeLevelQuota ?? 0) : null,
+      },
+    });
+
+    if (input.rooms.length > 0) {
+      await tx.roomQuota.createMany({
+        data: input.rooms.map((room) => ({
+          examSessionId: exam.id,
+          room: room.room,
+          quota: Number(room.quota || 0),
+        })),
+      });
+    }
+
+    return exam;
+  });
+}
+
+export async function saveExamRooms(
+  examSessionId: string,
+  rooms: Array<{ room: string; quota: number }>,
+) {
+  const prisma = getPrisma();
+  const uniqueRooms = new Set(rooms.map((room) => room.room.trim()).filter(Boolean));
+  if (uniqueRooms.size !== rooms.length) {
+    throw new Error("ชื่อห้องซ้ำหรือว่าง");
+  }
+
+  return prisma.$transaction([
+    prisma.roomQuota.deleteMany({ where: { examSessionId } }),
+    prisma.roomQuota.createMany({
+      data: rooms.map((room) => ({
+        examSessionId,
+        room: room.room.trim(),
+        quota: Number(room.quota || 0),
+      })),
+    }),
+  ]);
+}
+
+export async function saveExamSubjects(
+  examSessionId: string,
+  subjects: Array<{ name: string; maxScore: number; sortOrder: number; tieBreakOrder?: number | null }>,
+) {
+  const prisma = getPrisma();
+  const studentCount = await prisma.student.count({ where: { examSessionId } });
+  if (studentCount > 0) {
+    throw new Error("มีรายชื่อนักเรียนแล้ว กรุณาลบ/สร้างรอบสอบใหม่ก่อนแก้รายวิชา");
+  }
+
+  const uniqueNames = new Set(subjects.map((subject) => subject.name.trim()).filter(Boolean));
+  if (uniqueNames.size !== subjects.length) {
+    throw new Error("ชื่อวิชาซ้ำหรือว่าง");
+  }
+
+  return prisma.$transaction([
+    prisma.subject.deleteMany({ where: { examSessionId } }),
+    prisma.subject.createMany({
+      data: subjects.map((subject, index) => ({
+        examSessionId,
+        name: subject.name.trim(),
+        maxScore: Number(subject.maxScore),
+        sortOrder: Number.isFinite(subject.sortOrder) ? subject.sortOrder : index,
+        isTieBreak: subject.tieBreakOrder != null,
+        tieBreakOrder: subject.tieBreakOrder ?? null,
+      })),
+    }),
+  ]);
 }
 
 export async function importExam(input: {
@@ -111,6 +196,127 @@ export async function importExam(input: {
   });
 }
 
+export function normalizeRoomImportRows(input: {
+  rawRows: Record<string, unknown>[];
+  subjects: Array<{ id: string; name: string; maxScore: number | null }>;
+}) {
+  const errors: string[] = [];
+  const subjectsByName = new Map(input.subjects.map((subject) => [subject.name, subject]));
+  const seenExamNos = new Set<string>();
+
+  if (input.subjects.length === 0) {
+    errors.push("ต้องสร้างวิชาก่อนนำเข้ารายชื่อ");
+  }
+
+  const rows = input.rawRows.map((row, index) => {
+    const examNo = String(row.exam_no ?? row["เลขประจำตัว"] ?? row["เลขที่สอบ"] ?? "").trim();
+    const studentName = String(row.student_name ?? row["ชื่อ-สกุล"] ?? row["ชื่อ"] ?? row.name ?? "").trim();
+    const scores: Record<string, number> = {};
+
+    if (!examNo) errors.push(`แถว ${index + 2}: ไม่พบเลขประจำตัว`);
+    if (!studentName) errors.push(`แถว ${index + 2}: ไม่พบชื่อนักเรียน`);
+    if (examNo && seenExamNos.has(examNo)) errors.push(`แถว ${index + 2}: เลขประจำตัวซ้ำ (${examNo})`);
+    seenExamNos.add(examNo);
+
+    for (const subject of subjectsByName.values()) {
+      if (!(subject.name in row)) {
+        errors.push(`แถว ${index + 2}: ไม่พบคอลัมน์วิชา ${subject.name}`);
+        continue;
+      }
+
+      const value = Number(row[subject.name]);
+      if (!Number.isFinite(value)) {
+        errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} ไม่ใช่ตัวเลข`);
+        scores[subject.id] = 0;
+      } else if (subject.maxScore != null && value > subject.maxScore) {
+        errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} เกินคะแนนเต็ม ${subject.maxScore}`);
+        scores[subject.id] = value;
+      } else {
+        scores[subject.id] = value;
+      }
+    }
+
+    return { examNo, studentName, scores };
+  });
+
+  return { rows, errors: [...new Set(errors)] };
+}
+
+export async function importRoomStudents(input: {
+  examSessionId: string;
+  room: string;
+  rawRows: Record<string, unknown>[];
+}) {
+  const prisma = getPrisma();
+  const exam = await prisma.examSession.findUnique({
+    where: { id: input.examSessionId },
+    include: { subjects: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!exam) throw new Error("ไม่พบรอบสอบ");
+
+  const normalized = normalizeRoomImportRows({
+    rawRows: input.rawRows,
+    subjects: exam.subjects.map((subject) => ({
+      id: subject.id,
+      name: subject.name,
+      maxScore: subject.maxScore,
+    })),
+  });
+  if (normalized.errors.length > 0) {
+    return { ok: false as const, errors: normalized.errors };
+  }
+
+  const examNos = normalized.rows.map((row) => row.examNo);
+  const duplicateOutsideRoom = await prisma.student.findFirst({
+    where: {
+      examSessionId: input.examSessionId,
+      examNo: { in: examNos },
+      NOT: { room: input.room },
+    },
+  });
+  if (duplicateOutsideRoom) {
+    return { ok: false as const, errors: [`เลขประจำตัว ${duplicateOutsideRoom.examNo} มีอยู่ในห้องอื่นแล้ว`] };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.student.deleteMany({
+      where: { examSessionId: input.examSessionId, room: input.room },
+    });
+
+    for (const row of normalized.rows) {
+      const student = await tx.student.create({
+        data: {
+          examSessionId: input.examSessionId,
+          examNo: row.examNo,
+          name: row.studentName,
+          classLevel: exam.classLevel,
+          room: input.room,
+          verifierHash: verifierHash(row.examNo),
+        },
+      });
+
+      await tx.score.createMany({
+        data: Object.entries(row.scores).map(([subjectId, value]) => ({
+          studentId: student.id,
+          subjectId,
+          value,
+        })),
+      });
+    }
+
+    await tx.importBatch.create({
+      data: {
+        examSessionId: input.examSessionId,
+        filename: `room-${input.room}`,
+        status: "ROOM_COMMITTED",
+        rawPreview: input.rawRows.slice(0, 10) as never,
+      },
+    });
+  });
+
+  return { ok: true as const, imported: normalized.rows.length };
+}
+
 export async function calculateExamResults(examSessionId: string) {
   const prisma = getPrisma();
   const exam = await prisma.examSession.findUnique({
@@ -128,6 +334,7 @@ export async function calculateExamResults(examSessionId: string) {
     id: subject.id,
     name: subject.name,
     sortOrder: subject.sortOrder,
+    maxScore: subject.maxScore,
     tieBreakOrder: subject.tieBreakOrder,
   }));
 
@@ -193,15 +400,20 @@ export async function publishExam(examSessionId: string) {
   return { publishedAt };
 }
 
-export async function checkPrivateResult(input: { examNo: string; verifier: string }) {
+export async function checkPrivateResult(input: { examNo: string }) {
   const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const activeExam = settings.activeExamSessionId
+    ? await prisma.examSession.findUnique({ where: { id: settings.activeExamSessionId } })
+    : await prisma.examSession.findFirst({ where: { status: "PUBLISHED" }, orderBy: { publishedAt: "desc" } });
+
+  if (!activeExam || activeExam.status !== "PUBLISHED") return null;
+
   const student = await prisma.student.findFirst({
     where: {
       examNo: input.examNo.trim(),
-      verifierHash: verifierHash(input.verifier),
-      examSession: { status: "PUBLISHED" },
+      examSessionId: activeExam.id,
     },
-    orderBy: { createdAt: "desc" },
     include: {
       examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
       resultSnapshots: true,
@@ -215,7 +427,6 @@ export async function checkPrivateResult(input: { examNo: string; verifier: stri
   );
   if (!result) return null;
 
-  const settings = await getSchoolSettings();
   const subjectNameById = new Map(student.examSession.subjects.map((subject) => [subject.id, subject.name]));
   const rawBreakdown = result.scoreBreakdown as Record<string, number>;
 
@@ -225,6 +436,7 @@ export async function checkPrivateResult(input: { examNo: string; verifier: stri
       id: student.examSession.id,
       name: student.examSession.name,
       classLevel: student.examSession.classLevel,
+      selectionMode: student.examSession.selectionMode,
       publishedAt: student.examSession.publishedAt,
     },
     student: {

@@ -2,7 +2,22 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #172033;
+  --app-bg: #f8fbff;
+  --surface: rgba(255, 255, 255, 0.88);
+  --surface-solid: #ffffff;
+  --primary-blue: #0ea5e9;
+  --primary-blue-strong: #0369a1;
+  --blue-wash: #eaf7ff;
+  --accent-pink: #f472b6;
+  --accent-pink-strong: #be185d;
+  --pink-wash: #fff0f7;
+  --pink-soft: #fbcfe8;
+  --text-main: #172033;
+  --text-muted: #667085;
+  --border-soft: #dbeafe;
+  --border-strong: #93c5fd;
+  --shadow-soft: 0 24px 70px rgba(14, 165, 233, 0.12);
 }
 
 @theme inline {
@@ -10,13 +25,6 @@
   --color-foreground: var(--foreground);
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
@@ -30,4 +38,85 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+.app-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.65rem 0.8rem;
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.app-input:focus {
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
+}
+
+.app-button-primary,
+.app-button-secondary,
+.app-button-pink,
+.app-icon-button,
+.app-segment {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.app-button-primary {
+  background: linear-gradient(135deg, var(--primary-blue), #38bdf8);
+  color: white;
+  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.22);
+}
+
+.app-button-pink {
+  background: linear-gradient(135deg, var(--accent-pink), #fb7185);
+  color: white;
+  box-shadow: 0 12px 28px rgba(244, 114, 182, 0.24);
+}
+
+.app-button-secondary,
+.app-segment {
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--primary-blue-strong);
+}
+
+.app-segment-active {
+  border-color: var(--primary-blue);
+  background: var(--blue-wash);
+  color: var(--primary-blue-strong);
+}
+
+.app-icon-button {
+  border: 1px solid var(--pink-soft);
+  background: var(--pink-wash);
+  color: var(--accent-pink-strong);
+  padding-inline: 0.75rem;
+}
+
+.app-button-primary:disabled,
+.app-button-secondary:disabled,
+.app-button-pink:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.app-button-primary:not(:disabled):hover,
+.app-button-secondary:not(:disabled):hover,
+.app-button-pink:not(:disabled):hover,
+.app-icon-button:hover,
+.app-segment:hover {
+  transform: translateY(-1px);
 }

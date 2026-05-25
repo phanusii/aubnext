@@ -7,6 +7,7 @@ const schema = z.object({
   schoolName: z.string().min(1),
   examTitle: z.string().min(1),
   logoUrl: z.string().optional().nullable(),
+  activeExamSessionId: z.string().optional().nullable(),
 });
 
 export async function GET() {

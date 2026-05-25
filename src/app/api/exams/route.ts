@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { getPrisma } from "@/lib/prisma";
+import { createExamSession } from "@/lib/repository";
+
+const createSchema = z.object({
+  name: z.string().min(1),
+  classLevel: z.string().min(1),
+  selectionMode: z.enum(["PER_ROOM", "WHOLE_LEVEL"]),
+  wholeLevelQuota: z.number().int().nonnegative().optional().nullable(),
+  rooms: z.array(z.object({ room: z.string().min(1), quota: z.number().int().nonnegative() })).default([]),
+});
 
 export async function GET() {
   if (!(await requireAdmin())) {
@@ -18,4 +28,18 @@ export async function GET() {
   });
 
   return NextResponse.json(exams);
+}
+
+export async function POST(request: Request) {
+  if (!(await requireAdmin())) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const parsed = createSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: "ข้อมูลรอบสอบไม่ถูกต้อง", issues: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const exam = await createExamSession(parsed.data);
+  return NextResponse.json({ ok: true, exam });
 }

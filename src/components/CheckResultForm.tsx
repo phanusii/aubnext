@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Search, ShieldCheck, XCircle } from "lucide-react";
+import { Award, Search, ShieldCheck, XCircle } from "lucide-react";
 
 type ResultResponse = {
   school: { schoolName: string; examTitle: string; logoUrl?: string | null };
-  exam: { name: string; classLevel: string; publishedAt: string | null };
+  exam: {
+    name: string;
+    classLevel: string;
+    selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
+    publishedAt: string | null;
+  };
   student: { examNo: string; name: string; classLevel: string; room: string };
   result: {
     rank: number;
@@ -24,7 +29,6 @@ const statusText = {
 
 export function CheckResultForm() {
   const [examNo, setExamNo] = useState("");
-  const [birthdateOrPin, setBirthdateOrPin] = useState("");
   const [result, setResult] = useState<ResultResponse | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,7 +40,7 @@ export function CheckResultForm() {
     const response = await fetch("/api/check-result", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ examNo, birthdateOrPin }),
+      body: JSON.stringify({ examNo }),
     });
     const data = await response.json();
     setBusy(false);
@@ -50,44 +54,35 @@ export function CheckResultForm() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f3ed] text-[#16211d]">
+    <main className="min-h-screen bg-[var(--app-bg)] text-[var(--text-main)]">
       <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-5 py-8">
-        <div className="mb-5 text-center">
-          <h1 className="text-3xl font-semibold">เช็คผลสอบส่วนตัว</h1>
-          <p className="mt-2 text-[#65736d]">กรอกข้อมูลยืนยันตัวตนเพื่อดูผลของตนเอง</p>
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-[var(--pink-wash)] text-[var(--accent-pink-strong)]">
+            <Award size={28} />
+          </div>
+          <h1 className="text-3xl font-semibold md:text-5xl">เช็คผลสอบส่วนตัว</h1>
+          <p className="mt-3 text-[var(--text-muted)]">กรอกเลขประจำตัวผู้สอบเพื่อดูผลของรอบสอบที่โรงเรียนประกาศ</p>
         </div>
 
-        <div className="rounded-lg border border-[#d7cdbb] bg-white p-5 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
+          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
             <label className="text-sm font-medium">
               เลขประจำตัวผู้สอบ
               <input
                 value={examNo}
                 onChange={(event) => setExamNo(event.target.value)}
-                className="mt-1 h-11 w-full rounded-md border border-[#cfc7b8] px-3 outline-none focus:border-[#1d5c4a]"
+                onKeyDown={(event) => event.key === "Enter" && checkResult()}
+                className="app-input mt-1"
               />
             </label>
-            <label className="text-sm font-medium">
-              วันเกิดหรือ PIN
-              <input
-                value={birthdateOrPin}
-                onChange={(event) => setBirthdateOrPin(event.target.value)}
-                className="mt-1 h-11 w-full rounded-md border border-[#cfc7b8] px-3 outline-none focus:border-[#1d5c4a]"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={checkResult}
-              disabled={busy}
-              className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#1d5c4a] px-5 font-medium text-white disabled:opacity-60 md:mt-auto"
-            >
+            <button type="button" onClick={checkResult} disabled={busy} className="app-button-primary mt-6 md:mt-auto">
               <Search size={18} />
               ตรวจผล
             </button>
           </div>
 
           {error && (
-            <div className="mt-5 flex items-start gap-2 rounded-md border border-[#e2b7a4] bg-[#fff5f1] p-3 text-sm text-[#8a341d]">
+            <div className="mt-5 flex items-start gap-2 rounded-xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] p-3 text-sm text-[var(--accent-pink-strong)]">
               <XCircle size={18} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -95,19 +90,19 @@ export function CheckResultForm() {
         </div>
 
         {result && (
-          <div className="mt-5 rounded-lg border border-[#d7cdbb] bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e3dccf] pb-4">
+          <div className="mt-5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border-soft)] pb-4">
               <div>
-                <p className="text-sm text-[#65736d]">{result.school.schoolName}</p>
+                <p className="text-sm text-[var(--text-muted)]">{result.school.schoolName}</p>
                 <h2 className="mt-1 text-xl font-semibold">{result.exam.name}</h2>
               </div>
               <div
                 className={
                   result.result.status === "PASSED"
-                    ? "rounded-md bg-[#e8f4ee] px-3 py-2 text-sm font-semibold text-[#1d5c4a]"
+                    ? "rounded-full bg-sky-100 px-3 py-2 text-sm font-semibold text-sky-700"
                     : result.result.status === "REVIEW"
-                      ? "rounded-md bg-[#fff8e6] px-3 py-2 text-sm font-semibold text-[#8a5a00]"
-                      : "rounded-md bg-[#f5eeee] px-3 py-2 text-sm font-semibold text-[#8a341d]"
+                      ? "rounded-full bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700"
+                      : "rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600"
                 }
               >
                 {statusText[result.result.status]}
@@ -115,21 +110,9 @@ export function CheckResultForm() {
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <div className="rounded-md bg-[#f4f1eb] p-4">
-                <div className="text-sm text-[#65736d]">ผู้เข้าสอบ</div>
-                <div className="mt-1 font-semibold">{result.student.name}</div>
-                <div className="text-sm text-[#65736d]">
-                  {result.student.examNo} · {result.student.classLevel}/{result.student.room}
-                </div>
-              </div>
-              <div className="rounded-md bg-[#eef4f7] p-4">
-                <div className="text-sm text-[#65736d]">อันดับ</div>
-                <div className="mt-1 text-2xl font-semibold">{result.result.rank}</div>
-              </div>
-              <div className="rounded-md bg-[#f3efe7] p-4">
-                <div className="text-sm text-[#65736d]">คะแนนรวม</div>
-                <div className="mt-1 text-2xl font-semibold">{result.result.totalScore}</div>
-              </div>
+              <InfoBlock label="ผู้เข้าสอบ" value={result.student.name} detail={`${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`} />
+              <InfoBlock label={result.exam.selectionMode === "PER_ROOM" ? "อันดับในห้อง" : "อันดับทั้งชั้น"} value={String(result.result.rank)} />
+              <InfoBlock label="คะแนนรวม" value={String(result.result.totalScore)} />
             </div>
 
             <div className="mt-5">
@@ -137,9 +120,9 @@ export function CheckResultForm() {
                 <ShieldCheck size={18} />
                 คะแนนรายวิชา
               </div>
-              <div className="overflow-hidden rounded-md border border-[#e3dccf]">
+              <div className="overflow-hidden rounded-xl border border-[var(--border-soft)]">
                 {Object.entries(result.result.scoreBreakdown).map(([subject, score]) => (
-                  <div key={subject} className="flex justify-between border-b border-[#e3dccf] px-3 py-2 last:border-b-0">
+                  <div key={subject} className="flex justify-between border-b border-[var(--border-soft)] px-3 py-2 last:border-b-0">
                     <span>{subject}</span>
                     <span className="font-semibold">{score}</span>
                   </div>
@@ -147,10 +130,20 @@ export function CheckResultForm() {
               </div>
             </div>
 
-            <p className="mt-4 text-sm text-[#65736d]">{result.result.reason}</p>
+            <p className="mt-4 text-sm text-[var(--text-muted)]">{result.result.reason}</p>
           </div>
         )}
       </section>
     </main>
+  );
+}
+
+function InfoBlock({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div className="rounded-xl bg-[var(--blue-wash)] p-4">
+      <div className="text-sm text-[var(--text-muted)]">{label}</div>
+      <div className="mt-1 text-2xl font-semibold">{value}</div>
+      {detail && <div className="mt-1 text-sm text-[var(--text-muted)]">{detail}</div>}
+    </div>
   );
 }

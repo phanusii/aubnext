@@ -17,7 +17,7 @@ const schema = z.object({
     studentName: z.string().min(1),
     classLevel: z.string().min(1),
     room: z.string().min(1),
-    verifier: z.string().min(1),
+    verifier: z.string().optional(),
     subjects: z.array(z.string()).min(1),
   }),
   rawRows: z.array(z.record(z.string(), z.unknown())),

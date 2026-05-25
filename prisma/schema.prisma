@@ -23,11 +23,12 @@ enum ResultStatus {
 }
 
 model SchoolSettings {
-  id        String   @id @default("main")
-  schoolName String @default("โรงเรียนตัวอย่าง")
-  examTitle  String @default("ประกาศผลสอบแข่งขัน")
-  logoUrl    String?
-  updatedAt DateTime @updatedAt
+  id                  String   @id @default("main")
+  schoolName          String   @default("โรงเรียนตัวอย่าง")
+  examTitle           String   @default("ประกาศผลสอบแข่งขัน")
+  logoUrl             String?
+  activeExamSessionId String?
+  updatedAt           DateTime @updatedAt
 }
 
 model ExamSession {

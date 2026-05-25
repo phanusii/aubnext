@@ -9,6 +9,7 @@ type RankedCandidate = CandidateInput & {
   totalScore: number;
   rank: number;
   tieBreakValues: Record<string, number>;
+  tieBreakReason: string | null;
 };
 
 function scoreFor(candidate: CandidateInput, subjectId: string) {
@@ -47,6 +48,7 @@ function totalScore(candidate: CandidateInput) {
 function rankGroup(
   candidates: CandidateInput[],
   tieBreakSubjectIds: string[],
+  subjectNameById: Map<string, string>,
 ): RankedCandidate[] {
   const sorted = [...candidates].sort((a, b) => compareCandidates(a, b, tieBreakSubjectIds));
   let currentRank = 1;
@@ -56,6 +58,13 @@ function rankGroup(
       currentRank = index + 1;
     }
 
+    const sameTotalCandidates = sorted.filter(
+      (other) => other.studentId !== candidate.studentId && totalScore(other) === totalScore(candidate),
+    );
+    const decidingSubjectId = sameTotalCandidates
+      .flatMap((other) => tieBreakSubjectIds.find((subjectId) => scoreFor(candidate, subjectId) !== scoreFor(other, subjectId)) ?? [])
+      .at(0);
+
     return {
       ...candidate,
       rank: currentRank,
@@ -63,6 +72,9 @@ function rankGroup(
       tieBreakValues: Object.fromEntries(
         tieBreakSubjectIds.map((subjectId) => [subjectId, scoreFor(candidate, subjectId)]),
       ),
+      tieBreakReason: decidingSubjectId
+        ? `คะแนนรวมเท่ากัน ใช้วิชา ${subjectNameById.get(decidingSubjectId) ?? decidingSubjectId} ตามลำดับ tie-break`
+        : null,
     };
   });
 }
@@ -71,6 +83,7 @@ function applyQuota(
   ranked: RankedCandidate[],
   quota: number,
   reasonLabel: string,
+  selectionMode: "PER_ROOM" | "WHOLE_LEVEL",
 ): CalculatedResult[] {
   const results: CalculatedResult[] = [];
 
@@ -98,10 +111,15 @@ function applyQuota(
     for (const candidate of sameRank) {
       results.push({
         studentId: candidate.studentId,
+        examNo: candidate.examNo,
+        name: candidate.name,
         rank: candidate.rank,
+        rankScope: selectionMode === "WHOLE_LEVEL" ? "WHOLE_LEVEL" : "ROOM",
+        selectionMode,
         totalScore: candidate.totalScore,
         status,
-        reason,
+        reason: candidate.tieBreakReason ? `${reason} · ${candidate.tieBreakReason}` : reason,
+        tieBreakReason: candidate.tieBreakReason,
         room: candidate.room,
         scoreBreakdown: candidate.scores,
         tieBreakValues: candidate.tieBreakValues,
@@ -119,6 +137,7 @@ export function calculateResults(
   subjects: SubjectInput[],
   rule: RankingRule,
 ): CalculatedResult[] {
+  const subjectNameById = new Map(subjects.map((subject) => [subject.id, subject.name]));
   const tieBreakSubjectIds =
     rule.tieBreakSubjectIds.length > 0
       ? rule.tieBreakSubjectIds
@@ -128,8 +147,8 @@ export function calculateResults(
           .map((subject) => subject.id);
 
   if (rule.selectionMode === "WHOLE_LEVEL") {
-    const ranked = rankGroup(candidates, tieBreakSubjectIds);
-    return applyQuota(ranked, Number(rule.wholeLevelQuota ?? 0), "ทั้งชั้น");
+    const ranked = rankGroup(candidates, tieBreakSubjectIds, subjectNameById);
+    return applyQuota(ranked, Number(rule.wholeLevelQuota ?? 0), "ทั้งชั้น", "WHOLE_LEVEL");
   }
 
   const rooms = new Map<string, CandidateInput[]>();
@@ -138,8 +157,8 @@ export function calculateResults(
   }
 
   return Array.from(rooms.entries()).flatMap(([room, roomCandidates]) => {
-    const ranked = rankGroup(roomCandidates, tieBreakSubjectIds);
+    const ranked = rankGroup(roomCandidates, tieBreakSubjectIds, subjectNameById);
     const quota = Number(rule.roomQuotas?.[room] ?? 0);
-    return applyQuota(ranked, quota, `ห้อง ${room}`);
+    return applyQuota(ranked, quota, `ห้อง ${room}`, "PER_ROOM");
   });
 }

@@ -1,52 +1,48 @@
-import { ArrowRight, FileSpreadsheet, LineChart, LockKeyhole, School } from "lucide-react";
+import { ArrowRight, BookOpen, FileSpreadsheet, LineChart, LockKeyhole, School, Sparkles } from "lucide-react";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#f7f3ed] text-[#16211d]">
+    <main className="min-h-screen bg-[var(--app-bg)] text-[var(--text-main)]">
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center px-5 py-10">
-        <div className="grid gap-8 lg:grid-cols-[1fr_380px] lg:items-center">
+        <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
           <div>
-            <div className="mb-6 inline-flex items-center gap-2 rounded-md border border-[#d7cdbb] bg-white px-3 py-2 text-sm font-medium">
-              <School size={17} />
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm font-semibold text-[var(--primary-blue-strong)] shadow-[var(--shadow-soft)]">
+              <Sparkles size={17} />
               ระบบประกาศผลสอบสำหรับโรงเรียน
             </div>
-            <h1 className="max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
-              ประกาศผลคะแนนสอบและเช็คผลส่วนตัว
+            <h1 className="max-w-3xl text-4xl font-semibold leading-tight md:text-6xl">
+              ประกาศผลสอบสวยทันสมัย เช็คคะแนนได้ส่วนตัว
             </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-[#56665f]">
-              นำคะแนนจาก Excel เข้าระบบ รวมคะแนนรายวิชา จัดอันดับตามโควตารายห้องหรือทั้งชั้น
-              แล้วให้นักเรียนตรวจผลด้วยเลขประจำตัวและรหัสยืนยัน
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--text-muted)]">
+              สร้างรอบสอบ ห้องเรียน วิชาสอบ นำเข้ารายชื่อพร้อมคะแนนทีละห้อง และประกาศผลแบบทั้งชั้นหรือรายห้อง
+              พร้อมให้นักเรียนเช็คผลด้วยเลขประจำตัวผู้สอบ
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <a
-                href="/check-result"
-                className="inline-flex h-11 items-center gap-2 rounded-md bg-[#1d5c4a] px-5 font-medium text-white"
-              >
+              <a href="/check-result" className="app-button-primary">
                 เช็คผลสอบ
                 <ArrowRight size={18} />
               </a>
-              <a
-                href="/admin"
-                className="inline-flex h-11 items-center gap-2 rounded-md border border-[#1d5c4a] px-5 font-medium text-[#1d5c4a]"
-              >
+              <a href="/admin" className="app-button-secondary">
                 ผู้ดูแลระบบ
               </a>
             </div>
           </div>
 
-          <div className="rounded-lg border border-[#d7cdbb] bg-white p-5 shadow-sm">
+          <div className="rounded-3xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
             {[
-              ["Excel import", "Template และ custom column mapping", FileSpreadsheet],
-              ["Ranking rules", "คะแนนรวมและ tie-break ตามลำดับวิชา", LineChart],
-              ["Private result", "เห็นเฉพาะผลของตัวเองผ่านเว็บหรือ LINE LIFF", LockKeyhole],
+              ["Classrooms", "สร้างชั้นเรียน ห้องเรียน และโควตาผู้ผ่าน", School],
+              ["Subjects", "ตั้งชื่อวิชา คะแนนเต็ม และลำดับ tie-break", BookOpen],
+              ["Import", "อัปโหลด Excel/CSV หรือวางข้อมูลจากเซลล์", FileSpreadsheet],
+              ["Ranking", "เรียงคะแนนทั้งชั้นหรือแยกห้องอย่างชัดเจน", LineChart],
+              ["Private result", "นักเรียนเห็นผลเฉพาะของตัวเอง", LockKeyhole],
             ].map(([title, subtitle, Icon]) => (
-              <div key={title as string} className="flex gap-4 border-b border-[#e4ddd0] py-4 first:pt-0 last:border-b-0 last:pb-0">
-                <div className="grid size-11 shrink-0 place-items-center rounded-md bg-[#eef4f7] text-[#2f5d8c]">
+              <div key={title as string} className="flex gap-4 border-b border-[var(--border-soft)] py-4 first:pt-0 last:border-b-0 last:pb-0">
+                <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-[var(--pink-wash)] text-[var(--accent-pink-strong)]">
                   <Icon size={20} />
                 </div>
                 <div>
                   <div className="font-semibold">{title as string}</div>
-                  <div className="mt-1 text-sm text-[#65736d]">{subtitle as string}</div>
+                  <div className="mt-1 text-sm text-[var(--text-muted)]">{subtitle as string}</div>
                 </div>
               </div>
             ))}
