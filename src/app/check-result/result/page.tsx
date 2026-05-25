@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { Award, ChevronLeft, Medal, School, ShieldCheck } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
-import { checkPrivateResult, getPublicResultSettings } from "@/lib/repository";
+import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
+import { checkPrivateResult } from "@/lib/repository";
 import { readStudentResultCookie, studentResultCookieName } from "@/lib/security";
 
 type StudentResult = NonNullable<Awaited<ReturnType<typeof checkPrivateResult>>>;
@@ -39,7 +40,7 @@ export default async function ResultPage() {
   const result = lookup ? await checkPrivateResult({ examNo: lookup.examNo }) : null;
 
   if (!result) {
-    const settings = await getPublicResultSettings();
+    const settings = await getCachedPublicResultSettings();
     return (
       <main className="min-h-screen bg-[#f7fbff] text-[var(--text-main)]">
         <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-5 py-6 md:py-10">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { School, Search, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
@@ -15,29 +15,12 @@ type PublicSettings = {
   } | null;
 };
 
-export function CheckResultForm() {
+export function CheckResultForm({ initialSettings }: { initialSettings: PublicSettings }) {
   const router = useRouter();
   const [examNo, setExamNo] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [publicSettings, setPublicSettings] = useState<PublicSettings>({
-    schoolName: "โรงเรียนตัวอย่าง",
-    logoUrl: "",
-    activeExam: null,
-  });
-
-  useEffect(() => {
-    fetch("/api/settings")
-      .then((response) => response.json())
-      .then((data) =>
-        setPublicSettings({
-          schoolName: data.schoolName ?? "โรงเรียนตัวอย่าง",
-          logoUrl: data.logoUrl ?? "",
-          activeExam: data.activeExam ?? null,
-        }),
-      )
-      .catch(() => undefined);
-  }, []);
+  const publicSettings = initialSettings;
 
   async function checkResult() {
     if (busy) return;

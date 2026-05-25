@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
-import { getPublicResultSettings, upsertSchoolSettings } from "@/lib/repository";
+import { getCachedPublicResultSettings, publicSettingsCacheTag } from "@/lib/public-settings-cache";
+import { upsertSchoolSettings } from "@/lib/repository";
 
 const schema = z.object({
   schoolName: z.string().min(1),
@@ -11,7 +13,7 @@ const schema = z.object({
 });
 
 export async function GET() {
-  const settings = await getPublicResultSettings();
+  const settings = await getCachedPublicResultSettings();
   return NextResponse.json(settings);
 }
 
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
 
   try {
     const settings = await upsertSchoolSettings(parsed.data);
+    revalidateTag(publicSettingsCacheTag, { expire: 0 });
     return NextResponse.json(settings);
   } catch (error) {
     console.error("Save settings failed", error);

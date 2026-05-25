@@ -1,5 +1,24 @@
 import { CheckResultForm } from "@/components/CheckResultForm";
+import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 
-export default function CheckResultPage() {
-  return <CheckResultForm />;
+export const dynamic = "force-dynamic";
+
+export default async function CheckResultPage() {
+  const settings = await getCachedPublicResultSettings();
+
+  return (
+    <CheckResultForm
+      initialSettings={{
+        schoolName: settings.schoolName,
+        logoUrl: settings.logoUrl,
+        activeExam: settings.activeExam
+          ? {
+              name: settings.activeExam.name,
+              classLevel: settings.activeExam.classLevel,
+              status: settings.activeExam.status,
+            }
+          : null,
+      }}
+    />
+  );
 }
