@@ -6,7 +6,7 @@ import { getSchoolSettings, upsertSchoolSettings } from "@/lib/repository";
 const schema = z.object({
   schoolName: z.string().min(1),
   examTitle: z.string().min(1).optional(),
-  logoUrl: z.string().optional().nullable(),
+  logoUrl: z.string().max(1_400_000, "โลโก้ใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB").optional().nullable(),
   activeExamSessionId: z.string().optional().nullable(),
 });
 
@@ -20,11 +20,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const parsed = schema.safeParse(await request.json());
+  const body = await request.json().catch(() => null);
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "ข้อมูลตั้งค่าไม่ถูกต้อง" }, { status: 400 });
+    const issue = parsed.error.issues[0]?.message;
+    return NextResponse.json({ error: issue ?? "ข้อมูลตั้งค่าไม่ถูกต้อง" }, { status: 400 });
   }
 
-  const settings = await upsertSchoolSettings(parsed.data);
-  return NextResponse.json(settings);
+  try {
+    const settings = await upsertSchoolSettings(parsed.data);
+    return NextResponse.json(settings);
+  } catch (error) {
+    console.error("Save settings failed", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "บันทึกตั้งค่าไม่สำเร็จ" },
+      { status: 500 },
+    );
+  }
 }

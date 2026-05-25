@@ -74,6 +74,7 @@ export function AdminConsole() {
   const [selectedExamId, setSelectedExamId] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [logoChanged, setLogoChanged] = useState(false);
 
   const [newExamName, setNewExamName] = useState("สอบแข่งขันประจำปี");
   const [newClassLevel, setNewClassLevel] = useState("ป.6");
@@ -170,17 +171,37 @@ export function AdminConsole() {
 
   async function saveSettings() {
     setBusy(true);
+    const body = {
+      schoolName: settings.schoolName,
+      activeExamSessionId: settings.activeExamSessionId || null,
+      ...(logoChanged ? { logoUrl: settings.logoUrl } : {}),
+    };
     const response = await fetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        schoolName: settings.schoolName,
-        logoUrl: settings.logoUrl,
-        activeExamSessionId: settings.activeExamSessionId || null,
-      }),
+      body: JSON.stringify(body),
     });
+    const data = await response.json().catch(() => ({}));
     setBusy(false);
-    setMessage(response.ok ? "บันทึกตั้งค่าระบบแล้ว" : "บันทึกตั้งค่าไม่สำเร็จ");
+
+    if (response.status === 401) {
+      setIsLoggedIn(false);
+      setMessage("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+      return;
+    }
+
+    if (!response.ok) {
+      setMessage(data.error ?? "บันทึกตั้งค่าไม่สำเร็จ");
+      return;
+    }
+
+    setLogoChanged(false);
+    setSettings((current) => ({
+      schoolName: data.schoolName ?? current.schoolName,
+      logoUrl: data.logoUrl ?? current.logoUrl,
+      activeExamSessionId: data.activeExamSessionId ?? "",
+    }));
+    setMessage("บันทึกตั้งค่าระบบแล้ว");
   }
 
   function uploadLogo(file: File) {
@@ -194,7 +215,16 @@ export function AdminConsole() {
     }
 
     const reader = new FileReader();
-    reader.onload = () => setSettings((current) => ({ ...current, logoUrl: String(reader.result ?? "") }));
+    reader.onload = () => {
+      const logoUrl = String(reader.result ?? "");
+      if (logoUrl.length > 1_400_000) {
+        setMessage("โลโก้ใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB");
+        return;
+      }
+
+      setLogoChanged(true);
+      setSettings((current) => ({ ...current, logoUrl }));
+    };
     reader.readAsDataURL(file);
   }
 
