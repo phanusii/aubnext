@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   BadgeCheck,
@@ -67,7 +67,6 @@ export function AdminConsole() {
   const [password, setPassword] = useState("");
   const [settings, setSettings] = useState({
     schoolName: "โรงเรียนตัวอย่าง",
-    examTitle: "ประกาศผลสอบแข่งขัน",
     logoUrl: "",
     activeExamSessionId: "",
   });
@@ -92,19 +91,41 @@ export function AdminConsole() {
     [exams, selectedExamId],
   );
 
+  const loadExams = useCallback(async (preferredExamId?: string) => {
+    const response = await fetch("/api/exams");
+    if (response.ok) {
+      const data: Exam[] = await response.json();
+      setExams(data);
+      setSelectedExamId((current) => {
+        const nextId = preferredExamId || current;
+        if (nextId && data.some((exam) => exam.id === nextId)) return nextId;
+        return data[0]?.id ?? "";
+      });
+    }
+  }, []);
+
   useEffect(() => {
     fetch("/api/settings")
       .then((response) => response.json())
       .then((data) =>
         setSettings({
           schoolName: data.schoolName ?? "โรงเรียนตัวอย่าง",
-          examTitle: data.examTitle ?? "ประกาศผลสอบแข่งขัน",
           logoUrl: data.logoUrl ?? "",
           activeExamSessionId: data.activeExamSessionId ?? "",
         }),
       )
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((response) => {
+        if (!response.ok) return;
+        setIsLoggedIn(true);
+        return loadExams();
+      })
+      .catch(() => undefined);
+  }, [loadExams]);
 
   useEffect(() => {
     if (!selectedExam) return;
@@ -124,15 +145,6 @@ export function AdminConsole() {
       setCalculatedResults([]);
     });
   }, [selectedExam]);
-
-  async function loadExams() {
-    const response = await fetch("/api/exams");
-    if (response.ok) {
-      const data: Exam[] = await response.json();
-      setExams(data);
-      if (!selectedExamId && data[0]) setSelectedExamId(data[0].id);
-    }
-  }
 
   async function login() {
     setBusy(true);
@@ -162,7 +174,8 @@ export function AdminConsole() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...settings,
+        schoolName: settings.schoolName,
+        logoUrl: settings.logoUrl,
         activeExamSessionId: settings.activeExamSessionId || null,
       }),
     });
@@ -213,9 +226,8 @@ export function AdminConsole() {
       return;
     }
 
-    setSelectedExamId(data.exam.id);
     setMessage("สร้างรอบสอบแล้ว กรุณาสร้างวิชาและนำเข้ารายชื่อทีละห้อง");
-    await loadExams();
+    await loadExams(data.exam.id);
   }
 
   async function saveRooms() {
@@ -336,7 +348,7 @@ export function AdminConsole() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold">Admin Console</h1>
-                <p className="text-sm text-[var(--text-muted)]">{settings.examTitle}</p>
+                <p className="text-sm text-[var(--text-muted)]">ระบบผู้ดูแล</p>
               </div>
             </div>
             <Field label="อีเมลผู้ดูแล">
@@ -377,7 +389,7 @@ export function AdminConsole() {
             )}
             <div>
               <h1 className="text-2xl font-semibold">{settings.schoolName}</h1>
-              <p className="text-sm text-[var(--text-muted)]">{settings.examTitle}</p>
+              <p className="text-sm text-[var(--text-muted)]">{selectedExam?.name ?? "จัดการรอบสอบและประกาศผล"}</p>
             </div>
           </div>
           <a href="/check-result" className="app-button-secondary">
@@ -396,9 +408,6 @@ export function AdminConsole() {
             <Panel icon={<Save size={18} />} title="ตั้งค่าระบบ">
               <Field label="ชื่อโรงเรียน">
                 <input className="app-input" value={settings.schoolName} onChange={(event) => setSettings({ ...settings, schoolName: event.target.value })} />
-              </Field>
-              <Field label="ชื่อเรื่องการสอบ">
-                <input className="app-input" value={settings.examTitle} onChange={(event) => setSettings({ ...settings, examTitle: event.target.value })} />
               </Field>
               <Field label="โลโก้โรงเรียน">
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--blue-wash)] px-3 py-3 text-sm text-[var(--text-muted)]">

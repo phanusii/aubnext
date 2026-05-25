@@ -5,7 +5,7 @@ import { getSchoolSettings, upsertSchoolSettings } from "@/lib/repository";
 
 const schema = z.object({
   schoolName: z.string().min(1),
-  examTitle: z.string().min(1),
+  examTitle: z.string().min(1).optional(),
   logoUrl: z.string().optional().nullable(),
   activeExamSessionId: z.string().optional().nullable(),
 });

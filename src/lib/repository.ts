@@ -6,7 +6,7 @@ import type { CandidateInput, RankingRule, SubjectInput } from "@/lib/types";
 
 export async function upsertSchoolSettings(input: {
   schoolName: string;
-  examTitle: string;
+  examTitle?: string;
   logoUrl?: string | null;
   activeExamSessionId?: string | null;
 }) {

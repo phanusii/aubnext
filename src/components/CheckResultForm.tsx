@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Award, Search, ShieldCheck, XCircle } from "lucide-react";
 
 type ResultResponse = {
-  school: { schoolName: string; examTitle: string; logoUrl?: string | null };
+  school: { schoolName: string; logoUrl?: string | null };
   exam: {
     name: string;
     classLevel: string;
