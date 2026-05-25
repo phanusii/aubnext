@@ -514,3 +514,29 @@ export async function checkPrivateResult(input: { examNo: string }) {
     },
   };
 }
+
+export async function findUnpublishedStudentExam(input: { examNo: string }) {
+  const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const trimmedExamNo = input.examNo.trim();
+
+  const student = await prisma.student.findFirst({
+    where: {
+      examNo: trimmedExamNo,
+      ...(settings.activeExamSessionId ? { examSessionId: settings.activeExamSessionId } : {}),
+      examSession: { status: { not: "PUBLISHED" } },
+    },
+    include: {
+      examSession: true,
+      resultSnapshots: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!student) return null;
+
+  return {
+    examName: student.examSession.name,
+    hasCalculatedResult: student.resultSnapshots.some((snapshot) => snapshot.examSessionId === student.examSessionId),
+  };
+}
