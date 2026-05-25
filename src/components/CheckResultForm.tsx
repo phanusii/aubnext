@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { School, Search, XCircle } from "lucide-react";
-import { StudentResultCard, type StudentResultResponse } from "@/components/StudentResultCard";
 import { AppFooter } from "@/components/AppFooter";
 
 type PublicSettings = {
@@ -16,8 +16,8 @@ type PublicSettings = {
 };
 
 export function CheckResultForm() {
+  const router = useRouter();
   const [examNo, setExamNo] = useState("");
-  const [result, setResult] = useState<StudentResultResponse | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [publicSettings, setPublicSettings] = useState<PublicSettings>({
@@ -40,10 +40,10 @@ export function CheckResultForm() {
   }, []);
 
   async function checkResult() {
+    if (busy) return;
     setBusy(true);
     setError("");
-    setResult(null);
-    const response = await fetch("/api/check-result", {
+    const response = await fetch("/api/check-result/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ examNo }),
@@ -56,55 +56,66 @@ export function CheckResultForm() {
       return;
     }
 
-    setResult(data);
+    router.push("/check-result/result");
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#f8fbff,#eef8ff)] text-[var(--text-main)]">
-      <section className="mx-auto flex min-h-screen w-full max-w-4xl flex-col justify-center px-5 py-8">
-        <div className="mb-5 flex flex-wrap items-center gap-4 rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-solid)] p-5 shadow-[var(--shadow-soft)]">
-          {publicSettings.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={publicSettings.logoUrl} alt="" className="size-20 rounded-2xl object-cover ring-2 ring-[var(--pink-soft)]" />
-          ) : (
-            <div className="grid size-20 place-items-center rounded-2xl bg-[var(--primary-blue)] text-white">
-              <School size={34} />
-            </div>
-          )}
-          <div>
-            <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{publicSettings.schoolName}</p>
-            <h1 className="mt-1 text-2xl font-semibold leading-tight md:text-3xl">
-              {publicSettings.activeExam?.name ?? "ประกาศผลสอบ"}
-            </h1>
-            {publicSettings.activeExam?.classLevel && (
-              <p className="mt-1 text-sm text-[var(--text-muted)]">ระดับชั้น {publicSettings.activeExam.classLevel}</p>
+    <main className="min-h-screen bg-[#f7fbff] text-[var(--text-main)]">
+      <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-5 py-8">
+        <div className="rounded-[1.5rem] border border-[var(--border-soft)] bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+          <div className="flex items-start gap-4">
+            {publicSettings.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={publicSettings.logoUrl} alt="" className="size-16 shrink-0 rounded-2xl object-cover ring-1 ring-[var(--border-soft)]" />
+            ) : (
+              <div className="grid size-16 shrink-0 place-items-center rounded-2xl bg-[var(--blue-wash)] text-[var(--primary-blue-strong)]">
+                <School size={30} />
+              </div>
             )}
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{publicSettings.schoolName}</p>
+              <h1 className="mt-1 text-2xl font-semibold leading-tight md:text-3xl">
+                {publicSettings.activeExam?.name ?? "ประกาศผลสอบ"}
+              </h1>
+              {publicSettings.activeExam?.classLevel && (
+                <p className="mt-2 text-sm text-[var(--text-muted)]">ระดับชั้น {publicSettings.activeExam.classLevel}</p>
+              )}
+            </div>
           </div>
         </div>
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 max-w-44">
+
+        <div className="mt-6 text-center">
+          <div className="mx-auto mb-4 max-w-28 opacity-95">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/result-mascot.png" alt="การ์ตูนนักเรียนถือถ้วยรางวัล" className="h-auto w-full" />
           </div>
-          <h1 className="text-3xl font-semibold md:text-5xl">เช็คผลสอบส่วนตัว</h1>
-          <p className="mt-3 text-[var(--text-muted)]">กรอกรหัสนักเรียนเพื่อดูผลของรอบสอบที่โรงเรียนประกาศ</p>
+          <h2 className="text-3xl font-semibold tracking-normal md:text-4xl">เช็คผลสอบส่วนตัว</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[var(--text-muted)]">
+            กรอกรหัสนักเรียน แล้วระบบจะเปิดหน้าผลคะแนนเฉพาะบุคคล
+          </p>
         </div>
 
-        <div className="rounded-3xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
-          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+        <form
+          className="mt-6 rounded-[1.5rem] border border-[var(--border-soft)] bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void checkResult();
+          }}
+        >
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <label className="text-sm font-medium">
               รหัสนักเรียน
               <input
                 value={examNo}
                 onChange={(event) => setExamNo(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && checkResult()}
-                className="app-input mt-1"
+                className="app-input mt-2 text-lg"
                 inputMode="numeric"
+                autoComplete="off"
               />
             </label>
-            <button type="button" onClick={checkResult} disabled={busy} className="app-button-primary mt-6 md:mt-auto">
+            <button type="submit" disabled={busy} className="app-button-primary mt-6 sm:mt-auto">
               <Search size={18} />
-              ตรวจผล
+              {busy ? "กำลังตรวจ" : "ตรวจผล"}
             </button>
           </div>
 
@@ -114,13 +125,7 @@ export function CheckResultForm() {
               <span>{error}</span>
             </div>
           )}
-        </div>
-
-        {result && (
-          <div className="mt-5">
-            <StudentResultCard result={result} />
-          </div>
-        )}
+        </form>
         <AppFooter />
       </section>
     </main>
