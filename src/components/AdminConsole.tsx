@@ -17,6 +17,7 @@ import {
   UploadCloud,
   Users,
 } from "lucide-react";
+import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
 
 type RoomQuota = { id?: string; room: string; quota: number };
@@ -500,7 +501,7 @@ export function AdminConsole() {
                 <select className="app-input" value={settings.activeExamSessionId} onChange={(event) => setSettings({ ...settings, activeExamSessionId: event.target.value })}>
                   <option value="">ใช้รอบสอบที่ประกาศล่าสุด</option>
                   {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>{exam.name} / {exam.status}</option>
+                    <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
                   ))}
                 </select>
               </Field>
@@ -553,7 +554,7 @@ export function AdminConsole() {
                 <select className="app-input" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
                   <option value="">เลือกรอบสอบ</option>
                   {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>{exam.name} / {exam.status}</option>
+                    <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
                   ))}
                 </select>
                 <button type="button" onClick={() => runExamAction("calculate")} disabled={busy || !selectedExam} className="app-button-secondary">

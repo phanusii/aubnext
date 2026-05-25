@@ -40,6 +40,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "ข้อมูลรอบสอบไม่ถูกต้อง", issues: parsed.error.flatten() }, { status: 400 });
   }
 
-  const exam = await createExamSession(parsed.data);
+  const prisma = getPrisma();
+  const input = {
+    ...parsed.data,
+    name: parsed.data.name.trim(),
+    classLevel: parsed.data.classLevel.trim(),
+  };
+  const duplicate = await prisma.examSession.findFirst({
+    where: {
+      name: input.name,
+      classLevel: input.classLevel,
+    },
+    select: { id: true },
+  });
+  if (duplicate) {
+    return NextResponse.json({ error: "มีรอบสอบชื่อนี้ในชั้นนี้แล้ว" }, { status: 409 });
+  }
+
+  const exam = await createExamSession(input);
   return NextResponse.json({ ok: true, exam });
 }
