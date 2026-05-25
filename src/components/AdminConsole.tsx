@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import {
   BadgeCheck,
-  Bell,
   BookOpen,
   Calculator,
   ClipboardList,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
+import { AppFooter } from "@/components/AppFooter";
 
 type RoomQuota = { id?: string; room: string; quota: number };
 type Subject = {
@@ -68,17 +68,6 @@ type ImportValidation = {
 type AdminTab = "settings" | "exam" | "rooms" | "import" | "results" | "line";
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
-type LineStatus = {
-  config: {
-    isReady: boolean;
-    hasToken: boolean;
-    hasSecret: boolean;
-    hasLiffId: boolean;
-  };
-  bindings: number;
-  sent: number;
-  failed: number;
-};
 
 const emptySubject = (sortOrder = 0): Subject => ({
   name: "",
@@ -125,7 +114,7 @@ export function AdminConsole() {
   const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
   const [resultSort, setResultSort] = useState<ResultSort>("rank");
-  const [lineStatus, setLineStatus] = useState<LineStatus | null>(null);
+  const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
 
   const selectedExam = useMemo(
     () => exams.find((exam) => exam.id === selectedExamId),
@@ -154,17 +143,6 @@ export function AdminConsole() {
     if (!response.ok) return;
     const data = await response.json();
     setCalculatedResults(data.results ?? []);
-  }, []);
-
-  const loadLineStatus = useCallback(async (examId?: string) => {
-    if (!examId) {
-      setLineStatus(null);
-      return;
-    }
-
-    const response = await fetch(`/api/line/status?examSessionId=${encodeURIComponent(examId)}`);
-    if (!response.ok) return;
-    setLineStatus(await response.json());
   }, []);
 
   useEffect(() => {
@@ -211,12 +189,6 @@ export function AdminConsole() {
       void loadStoredResults(selectedExam.id);
     });
   }, [loadStoredResults, selectedExam]);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      void loadLineStatus(selectedExam?.id);
-    });
-  }, [loadLineStatus, selectedExam?.id]);
 
   async function login() {
     setBusy(true);
@@ -442,14 +414,8 @@ export function AdminConsole() {
       setCalculatedResults(data.results ?? []);
       setMessage(`คำนวณแล้ว ${data.results?.length ?? 0} รายการ`);
     } else {
-      const lineNotice = data.lineNotification?.message
-        ? ` · ${data.lineNotification.message}`
-        : data.lineNotification
-          ? ` · ส่ง LINE สำเร็จ ${data.lineNotification.sent ?? 0} / ล้มเหลว ${data.lineNotification.failed ?? 0}`
-          : "";
-      setMessage(`ประกาศผลแล้ว${lineNotice}`);
+      setMessage("ประกาศผลแล้ว");
       await loadStoredResults(selectedExam.id);
-      await loadLineStatus(selectedExam.id);
       await loadExams();
     }
   }
@@ -529,6 +495,7 @@ export function AdminConsole() {
             </button>
             {message && <p className="mt-4 text-sm text-[var(--accent-pink-strong)]">{message}</p>}
           </div>
+          <AppFooter />
         </section>
       </main>
     );
@@ -540,7 +507,7 @@ export function AdminConsole() {
     { id: "rooms", label: "ห้องและวิชา", icon: <Table2 size={16} /> },
     { id: "import", label: "นำเข้าคะแนน", icon: <ClipboardList size={16} /> },
     { id: "results", label: "ผลคะแนน", icon: <Calculator size={16} /> },
-    { id: "line", label: "แจ้งเตือน LINE", icon: <Bell size={16} /> },
+    { id: "line", label: "LINE เช็คผล", icon: <Link2 size={16} /> },
   ];
 
   return (
@@ -621,6 +588,16 @@ export function AdminConsole() {
                   <Save size={16} />
                   บันทึกตั้งค่า
                 </button>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <a href={lineResultUrl} className="app-button-secondary" target="_blank" rel="noreferrer">
+                    <Link2 size={16} />
+                    ลิงก์ LINE แชท bot
+                  </a>
+                  <a href="/check-result" className="app-button-secondary" target="_blank" rel="noreferrer">
+                    <Search size={16} />
+                    ลิงก์ดูคะแนนหน้าเว็บ
+                  </a>
+                </div>
               </div>
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
                 {settings.logoUrl ? (
@@ -901,37 +878,27 @@ export function AdminConsole() {
         )}
 
         {activeTab === "line" && selectedExam && (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <Panel icon={<Bell size={18} />} title="สถานะ LINE/LIFF">
-              <div className="grid gap-3 md:grid-cols-4">
-                <Metric label="LIFF ID" value={lineStatus?.config.hasLiffId ? "ตั้งค่าแล้ว" : "ยังไม่มี"} />
-                <Metric label="Channel Token" value={lineStatus?.config.hasToken ? "ตั้งค่าแล้ว" : "ยังไม่มี"} />
-                <Metric label="Channel Secret" value={lineStatus?.config.hasSecret ? "ตั้งค่าแล้ว" : "ยังไม่มี"} />
-                <Metric label="พร้อมส่ง" value={lineStatus?.config.isReady ? "พร้อม" : "ยังไม่พร้อม"} />
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <Metric label="บัญชีที่ผูกแล้ว" value={`${lineStatus?.bindings ?? 0} บัญชี`} />
-                <Metric label="ส่งสำเร็จ" value={`${lineStatus?.sent ?? 0} รายการ`} />
-                <Metric label="ส่งล้มเหลว" value={`${lineStatus?.failed ?? 0} รายการ`} />
-              </div>
-              <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                ตั้งค่า env ใน Vercel: <span className="font-medium text-[var(--text-main)]">NEXT_PUBLIC_LIFF_ID, LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET</span> แล้วผูก Rich Menu ให้เปิดหน้า <span className="font-medium text-[var(--text-main)]">/line</span>
-              </div>
-            </Panel>
-
-            <Panel icon={<Link2 size={18} />} title="เมนู LINE ที่แนะนำ">
+          <Panel icon={<Link2 size={18} />} title="LINE เช็คผลด้วยตัวเอง">
+            <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
-                <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> เปิด LIFF ให้กรอกรหัสนักเรียนและบันทึก LINE userId</p>
-                <p><span className="font-semibold text-[var(--text-main)]">2. ดูผลคะแนน</span> เปิดหน้าเดียวกัน ถ้าผูกแล้วแสดงการ์ดผลทันที</p>
-                <p><span className="font-semibold text-[var(--text-main)]">3. ประกาศผล</span> เมื่อกดประกาศ ระบบส่ง Flex Message ให้บัญชีที่ผูกแล้วและกันส่งซ้ำ</p>
+                <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> นักเรียนเปิด LIFF จาก Rich Menu แล้วกรอกรหัสนักเรียน</p>
+                <p><span className="font-semibold text-[var(--text-main)]">2. ดูผลคะแนน</span> เมื่อตรวจพบรหัสที่ผูกไว้ ระบบจะแสดงการ์ดผลสอบทันที</p>
+                <p><span className="font-semibold text-[var(--text-main)]">3. ไม่ส่งแจ้งเตือนอัตโนมัติ</span> นักเรียนเข้ามาเช็คคะแนนเองใน LINE หรือหน้าเว็บ</p>
               </div>
-              <a href="/line" className="app-button-primary mt-4">
-                <Link2 size={16} />
-                เปิดหน้า LIFF
-              </a>
-            </Panel>
-          </div>
+              <div className="space-y-2">
+                <a href={lineResultUrl} className="app-button-primary w-full" target="_blank" rel="noreferrer">
+                  <Link2 size={16} />
+                  เปิดลิงก์ LINE แชท bot
+                </a>
+                <a href="/check-result" className="app-button-secondary w-full" target="_blank" rel="noreferrer">
+                  <Search size={16} />
+                  เปิดหน้าเว็บดูคะแนน
+                </a>
+              </div>
+            </div>
+          </Panel>
         )}
+        <AppFooter />
       </div>
     </main>
   );

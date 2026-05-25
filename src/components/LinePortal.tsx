@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Link2, Loader2, Search, XCircle } from "lucide-react";
+import { Link2, Loader2, School, Search, XCircle } from "lucide-react";
 import { StudentResultCard, type StudentResultResponse } from "@/components/StudentResultCard";
+import { AppFooter } from "@/components/AppFooter";
 
 type LineProfile = {
   userId: string;
   displayName?: string;
+};
+type PublicSettings = {
+  schoolName: string;
+  logoUrl?: string | null;
+  activeExam?: { name: string; classLevel: string } | null;
 };
 
 declare global {
@@ -26,6 +32,11 @@ export function LinePortal() {
   const [result, setResult] = useState<StudentResultResponse | null>(null);
   const [message, setMessage] = useState("กำลังเปิด LINE LIFF...");
   const [busy, setBusy] = useState(false);
+  const [publicSettings, setPublicSettings] = useState<PublicSettings>({
+    schoolName: "โรงเรียนตัวอย่าง",
+    logoUrl: "",
+    activeExam: null,
+  });
 
   const loadBoundResult = useCallback(async (lineUserId: string) => {
     const response = await fetch("/api/line/result", {
@@ -44,6 +55,17 @@ export function LinePortal() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/settings")
+      .then((response) => response.json())
+      .then((data) =>
+        setPublicSettings({
+          schoolName: data.schoolName ?? "โรงเรียนตัวอย่าง",
+          logoUrl: data.logoUrl ?? "",
+          activeExam: data.activeExam ?? null,
+        }),
+      )
+      .catch(() => undefined);
+
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
     if (!liffId) {
       queueMicrotask(() => setMessage("ยังไม่ได้ตั้งค่า NEXT_PUBLIC_LIFF_ID"));
@@ -102,12 +124,29 @@ export function LinePortal() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#e0f2fe,#fff0f7)] text-[var(--text-main)]">
       <section className="mx-auto min-h-screen w-full max-w-3xl px-5 py-8">
+        <div className="mb-5 flex items-center gap-3 rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-solid)] p-4 shadow-[var(--shadow-soft)]">
+          {publicSettings.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={publicSettings.logoUrl} alt="" className="size-16 rounded-2xl object-cover ring-2 ring-[var(--pink-soft)]" />
+          ) : (
+            <div className="grid size-16 place-items-center rounded-2xl bg-[var(--primary-blue)] text-white">
+              <School size={28} />
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{publicSettings.schoolName}</p>
+            <h1 className="text-xl font-semibold leading-tight">{publicSettings.activeExam?.name ?? "LINE ดูผลคะแนน"}</h1>
+            {publicSettings.activeExam?.classLevel && (
+              <p className="text-xs text-[var(--text-muted)]">ระดับชั้น {publicSettings.activeExam.classLevel}</p>
+            )}
+          </div>
+        </div>
         <div className="mb-5 text-center">
           <div className="mx-auto mb-3 max-w-36">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/result-mascot.png" alt="การ์ตูนนักเรียนถือถ้วยรางวัล" className="h-auto w-full" />
           </div>
-          <h1 className="text-3xl font-semibold">LINE ดูผลคะแนน</h1>
+          <h2 className="text-3xl font-semibold">LINE ดูผลคะแนน</h2>
           <p className="mt-2 text-sm text-[var(--text-muted)]">ผูกบัญชีด้วยรหัสนักเรียน แล้วกลับมาดูผลได้ทันทีจากเมนู LINE</p>
         </div>
 
@@ -149,6 +188,7 @@ export function LinePortal() {
             <StudentResultCard result={result} />
           </div>
         )}
+        <AppFooter />
       </section>
     </main>
   );

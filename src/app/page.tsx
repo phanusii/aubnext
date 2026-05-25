@@ -1,4 +1,5 @@
 import { ArrowRight, BookOpen, FileSpreadsheet, LineChart, LockKeyhole, School, Sparkles } from "lucide-react";
+import { AppFooter } from "@/components/AppFooter";
 
 export default function Home() {
   return (
@@ -48,6 +49,7 @@ export default function Home() {
             ))}
           </div>
         </div>
+        <AppFooter />
       </section>
     </main>
   );

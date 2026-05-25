@@ -42,13 +42,12 @@ model ExamSession {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  subjects          Subject[]
-  students          Student[]
-  roomQuotas        RoomQuota[]
-  importBatches     ImportBatch[]
-  resultSnapshots   ResultSnapshot[]
-  lineBindings      LineBinding[]
-  lineNotifications LineNotificationLog[]
+  subjects        Subject[]
+  students        Student[]
+  roomQuotas      RoomQuota[]
+  importBatches   ImportBatch[]
+  resultSnapshots ResultSnapshot[]
+  lineBindings    LineBinding[]
 }
 
 model Subject {
@@ -95,29 +94,12 @@ model LineBinding {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  student          Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  examSession      ExamSession           @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
-  notificationLogs LineNotificationLog[]
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
 
   @@unique([lineUserId, examSessionId])
   @@unique([studentId, examSessionId])
   @@index([examSessionId])
-}
-
-model LineNotificationLog {
-  id            String    @id @default(cuid())
-  bindingId     String
-  examSessionId String
-  status        String
-  error         String?
-  sentAt        DateTime?
-  createdAt     DateTime  @default(now())
-
-  binding     LineBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
-  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
-
-  @@unique([bindingId, examSessionId])
-  @@index([examSessionId, status])
 }
 
 model Score {

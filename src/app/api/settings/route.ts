@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
-import { getSchoolSettings, upsertSchoolSettings } from "@/lib/repository";
+import { getPublicResultSettings, upsertSchoolSettings } from "@/lib/repository";
 
 const schema = z.object({
   schoolName: z.string().min(1),
@@ -11,7 +11,7 @@ const schema = z.object({
 });
 
 export async function GET() {
-  const settings = await getSchoolSettings();
+  const settings = await getPublicResultSettings();
   return NextResponse.json(settings);
 }
 

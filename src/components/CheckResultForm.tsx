@@ -1,14 +1,43 @@
 "use client";
 
-import { useState } from "react";
-import { Search, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { School, Search, XCircle } from "lucide-react";
 import { StudentResultCard, type StudentResultResponse } from "@/components/StudentResultCard";
+import { AppFooter } from "@/components/AppFooter";
+
+type PublicSettings = {
+  schoolName: string;
+  logoUrl?: string | null;
+  activeExam?: {
+    name: string;
+    classLevel: string;
+    status: "DRAFT" | "PUBLISHED";
+  } | null;
+};
 
 export function CheckResultForm() {
   const [examNo, setExamNo] = useState("");
   const [result, setResult] = useState<StudentResultResponse | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [publicSettings, setPublicSettings] = useState<PublicSettings>({
+    schoolName: "โรงเรียนตัวอย่าง",
+    logoUrl: "",
+    activeExam: null,
+  });
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((response) => response.json())
+      .then((data) =>
+        setPublicSettings({
+          schoolName: data.schoolName ?? "โรงเรียนตัวอย่าง",
+          logoUrl: data.logoUrl ?? "",
+          activeExam: data.activeExam ?? null,
+        }),
+      )
+      .catch(() => undefined);
+  }, []);
 
   async function checkResult() {
     setBusy(true);
@@ -33,6 +62,25 @@ export function CheckResultForm() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f8fbff,#eef8ff)] text-[var(--text-main)]">
       <section className="mx-auto flex min-h-screen w-full max-w-4xl flex-col justify-center px-5 py-8">
+        <div className="mb-5 flex flex-wrap items-center gap-4 rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-solid)] p-5 shadow-[var(--shadow-soft)]">
+          {publicSettings.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={publicSettings.logoUrl} alt="" className="size-20 rounded-2xl object-cover ring-2 ring-[var(--pink-soft)]" />
+          ) : (
+            <div className="grid size-20 place-items-center rounded-2xl bg-[var(--primary-blue)] text-white">
+              <School size={34} />
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{publicSettings.schoolName}</p>
+            <h1 className="mt-1 text-2xl font-semibold leading-tight md:text-3xl">
+              {publicSettings.activeExam?.name ?? "ประกาศผลสอบ"}
+            </h1>
+            {publicSettings.activeExam?.classLevel && (
+              <p className="mt-1 text-sm text-[var(--text-muted)]">ระดับชั้น {publicSettings.activeExam.classLevel}</p>
+            )}
+          </div>
+        </div>
         <div className="mb-6 text-center">
           <div className="mx-auto mb-4 max-w-44">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -73,6 +121,7 @@ export function CheckResultForm() {
             <StudentResultCard result={result} />
           </div>
         )}
+        <AppFooter />
       </section>
     </main>
   );
