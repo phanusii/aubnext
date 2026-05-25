@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Award, Medal, School, ShieldCheck, Sparkles } from "lucide-react";
+import { Award, BarChart3, Medal, School, ShieldCheck, Sparkles } from "lucide-react";
 
 export type StudentResultResponse = {
   school: { schoolName: string; logoUrl?: string | null };
@@ -18,6 +18,28 @@ export type StudentResultResponse = {
     status: "PASSED" | "FAILED" | "REVIEW";
     reason: string;
     scoreBreakdown: Record<string, number>;
+  };
+  statistics?: {
+    total: {
+      score: number;
+      roomAverage: number;
+      levelAverage: number;
+      roomRank: number;
+      levelRank: number;
+      roomCount: number;
+      levelCount: number;
+    };
+    subjects: Array<{
+      id: string;
+      name: string;
+      score: number;
+      roomAverage: number;
+      levelAverage: number;
+      roomRank: number;
+      levelRank: number;
+      roomCount: number;
+      levelCount: number;
+    }>;
   };
 };
 
@@ -87,6 +109,19 @@ export function StudentResultCard({ result }: { result: StudentResultResponse })
           <InfoCard icon={<ShieldCheck size={18} />} label="สถานะ" value={statusText[result.result.status]} />
         </div>
 
+        {result.statistics && (
+          <div className="mt-5">
+            <div className="mb-2 flex items-center gap-2 font-semibold">
+              <BarChart3 size={18} />
+              สถิติเปรียบเทียบ
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoCard label="เฉลี่ยห้อง / ทั้งชั้น" value={`${formatScore(result.statistics.total.roomAverage)} / ${formatScore(result.statistics.total.levelAverage)}`} />
+              <InfoCard label="อันดับห้อง / ทั้งชั้น" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount} · ${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
+            </div>
+          </div>
+        )}
+
         <div className="mt-5">
           <div className="mb-2 flex items-center gap-2 font-semibold">
             <ShieldCheck size={18} />
@@ -108,10 +143,10 @@ export function StudentResultCard({ result }: { result: StudentResultResponse })
   );
 }
 
-function InfoCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function InfoCard({ icon, label, value }: { icon?: ReactNode; label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-[var(--blue-wash)] p-4">
-      <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">{icon}{label}</div>
+      <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">{icon ? icon : null}{label}</div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>
     </div>
   );

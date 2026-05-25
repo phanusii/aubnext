@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
-import { Award, ChevronLeft, Medal, School, ShieldCheck } from "lucide-react";
+import { Award, BarChart3, ChevronLeft, Medal, School, ShieldCheck } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 import { checkPrivateResult } from "@/lib/repository";
@@ -131,6 +131,19 @@ function ResultContent({ result }: { result: StudentResult }) {
         </div>
 
         <section className="mt-7">
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 size={18} />
+            <h3 className="text-lg font-semibold">สถิติเปรียบเทียบคะแนนรวม</h3>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="ค่าเฉลี่ยห้อง" value={formatScore(result.statistics.total.roomAverage)} />
+            <Metric label="ค่าเฉลี่ยทั้งชั้น" value={formatScore(result.statistics.total.levelAverage)} />
+            <Metric label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} />
+            <Metric label="อันดับทั้งชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
+          </div>
+        </section>
+
+        <section className="mt-7">
           <h3 className="text-lg font-semibold">คะแนนรายวิชา</h3>
           <div className="mt-3 overflow-hidden rounded-2xl border border-[var(--border-soft)]">
             {Object.entries(result.result.scoreBreakdown).map(([subject, score]) => (
@@ -139,6 +152,39 @@ function ResultContent({ result }: { result: StudentResult }) {
                 <span className="font-semibold">{formatScore(score)}</span>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="mt-7">
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 size={18} />
+            <h3 className="text-lg font-semibold">สถิติรายวิชา</h3>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-[var(--border-soft)]">
+            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+              <thead className="bg-[#f8fbff] text-[var(--text-muted)]">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">วิชา</th>
+                  <th className="px-4 py-3 text-right font-semibold">คะแนน</th>
+                  <th className="px-4 py-3 text-right font-semibold">เฉลี่ยห้อง</th>
+                  <th className="px-4 py-3 text-right font-semibold">เฉลี่ยทั้งชั้น</th>
+                  <th className="px-4 py-3 text-right font-semibold">อันดับห้อง</th>
+                  <th className="px-4 py-3 text-right font-semibold">อันดับทั้งชั้น</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.statistics.subjects.map((subject) => (
+                  <tr key={subject.id} className="border-t border-[var(--border-soft)]">
+                    <td className="px-4 py-3 font-medium">{subject.name}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{formatScore(subject.score)}</td>
+                    <td className="px-4 py-3 text-right">{formatScore(subject.roomAverage)}</td>
+                    <td className="px-4 py-3 text-right">{formatScore(subject.levelAverage)}</td>
+                    <td className="px-4 py-3 text-right">{subject.roomRank}/{subject.roomCount}</td>
+                    <td className="px-4 py-3 text-right">{subject.levelRank}/{subject.levelCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -185,11 +231,11 @@ function MissingResult({
   );
 }
 
-function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function Metric({ icon, label, value }: { icon?: ReactNode; label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[var(--border-soft)] bg-[#fbfdff] p-4">
       <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-        {icon}
+        {icon ? icon : null}
         {label}
       </div>
       <div className="mt-2 text-3xl font-semibold leading-none">{value}</div>

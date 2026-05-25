@@ -5,6 +5,7 @@ import type { ImportedStudentRow } from "@/lib/excel";
 import type { CandidateInput, RankingRule, SubjectInput } from "@/lib/types";
 
 type ResultStudent = {
+  id: string;
   examNo: string;
   name: string;
   classLevel: string;
@@ -25,6 +26,16 @@ type ResultStudent = {
     reason: string;
     scoreBreakdown: unknown;
   }>;
+};
+
+type PeerResultSnapshot = {
+  studentId: string;
+  totalScore: number;
+  scoreBreakdown: unknown;
+  student: {
+    room: string;
+    examNo: string;
+  };
 };
 
 export async function upsertSchoolSettings(input: {
@@ -495,7 +506,81 @@ export async function publishExam(examSessionId: string) {
   return { publishedAt };
 }
 
-function buildPrivateResult(settings: Awaited<ReturnType<typeof getSchoolSettings>>, student: ResultStudent) {
+function average(values: number[]) {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function competitionRank(values: Array<{ studentId: string; value: number; examNo: string }>, studentId: string) {
+  const sorted = [...values].sort((a, b) => {
+    const diff = b.value - a.value;
+    if (diff !== 0) return diff;
+    return a.examNo.localeCompare(b.examNo, "th");
+  });
+  let currentRank = 1;
+  let previousValue: number | null = null;
+
+  for (const [index, entry] of sorted.entries()) {
+    if (previousValue != null && entry.value !== previousValue) {
+      currentRank = index + 1;
+    }
+    if (entry.studentId === studentId) return currentRank;
+    previousValue = entry.value;
+  }
+
+  return sorted.length;
+}
+
+function numericBreakdown(snapshot: Pick<PeerResultSnapshot, "scoreBreakdown">) {
+  return snapshot.scoreBreakdown as Record<string, number>;
+}
+
+function buildResultStatistics(
+  student: ResultStudent,
+  result: ResultStudent["resultSnapshots"][number],
+  peerSnapshots: PeerResultSnapshot[],
+) {
+  const subjects = student.examSession.subjects;
+  const roomSnapshots = peerSnapshots.filter((snapshot) => snapshot.student.room === student.room);
+  const asRankInput = (snapshots: PeerResultSnapshot[], subjectId?: string) =>
+    snapshots.map((snapshot) => ({
+      studentId: snapshot.studentId,
+      examNo: snapshot.student.examNo,
+      value: subjectId ? Number(numericBreakdown(snapshot)[subjectId] ?? 0) : snapshot.totalScore,
+    }));
+
+  return {
+    total: {
+      score: result.totalScore,
+      roomAverage: average(roomSnapshots.map((snapshot) => snapshot.totalScore)),
+      levelAverage: average(peerSnapshots.map((snapshot) => snapshot.totalScore)),
+      roomRank: competitionRank(asRankInput(roomSnapshots), student.id),
+      levelRank: competitionRank(asRankInput(peerSnapshots), student.id),
+      roomCount: roomSnapshots.length,
+      levelCount: peerSnapshots.length,
+    },
+    subjects: subjects.map((subject) => {
+      const score = Number((result.scoreBreakdown as Record<string, number>)[subject.id] ?? 0);
+      return {
+        id: subject.id,
+        name: subject.name,
+        score,
+        roomAverage: average(roomSnapshots.map((snapshot) => Number(numericBreakdown(snapshot)[subject.id] ?? 0))),
+        levelAverage: average(peerSnapshots.map((snapshot) => Number(numericBreakdown(snapshot)[subject.id] ?? 0))),
+        roomRank: competitionRank(asRankInput(roomSnapshots, subject.id), student.id),
+        levelRank: competitionRank(asRankInput(peerSnapshots, subject.id), student.id),
+        roomCount: roomSnapshots.length,
+        levelCount: peerSnapshots.length,
+      };
+    }),
+  };
+}
+
+function buildPrivateResult(
+  settings: Awaited<ReturnType<typeof getSchoolSettings>>,
+  student: ResultStudent,
+  peerSnapshots: PeerResultSnapshot[],
+) {
   const result = student.resultSnapshots.find(
     (snapshot) => snapshot.examSessionId === student.examSession.id,
   );
@@ -531,7 +616,26 @@ function buildPrivateResult(settings: Awaited<ReturnType<typeof getSchoolSetting
         ]),
       ),
     },
+    statistics: buildResultStatistics(student, result, peerSnapshots),
   };
+}
+
+async function getPublishedPeerSnapshots(examSessionId: string) {
+  const prisma = getPrisma();
+  return prisma.resultSnapshot.findMany({
+    where: { examSessionId },
+    select: {
+      studentId: true,
+      totalScore: true,
+      scoreBreakdown: true,
+      student: {
+        select: {
+          room: true,
+          examNo: true,
+        },
+      },
+    },
+  });
 }
 
 export async function checkPrivateResult(input: { examNo: string }) {
@@ -556,7 +660,9 @@ export async function checkPrivateResult(input: { examNo: string }) {
 
   if (!student) return null;
 
-  return buildPrivateResult(settings, student);
+  const peerSnapshots = await getPublishedPeerSnapshots(activeExam.id);
+
+  return buildPrivateResult(settings, student, peerSnapshots);
 }
 
 export async function bindLineStudent(input: { lineUserId: string; examNo: string; lineName?: string | null }) {
@@ -611,7 +717,10 @@ export async function bindLineStudent(input: { lineUserId: string; examNo: strin
     },
   });
 
-  const result = student.examSession.status === "PUBLISHED" ? buildPrivateResult(settings, student) : null;
+  const peerSnapshots = student.examSession.status === "PUBLISHED"
+    ? await getPublishedPeerSnapshots(student.examSession.id)
+    : [];
+  const result = student.examSession.status === "PUBLISHED" ? buildPrivateResult(settings, student, peerSnapshots) : null;
   return {
     ok: true as const,
     student: {
@@ -653,7 +762,8 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
     return { ok: false as const, error: "ผูกบัญชีแล้ว แต่รอบสอบยังไม่ได้ประกาศผล" };
   }
 
-  const result = buildPrivateResult(settings, binding.student);
+  const peerSnapshots = await getPublishedPeerSnapshots(binding.student.examSession.id);
+  const result = buildPrivateResult(settings, binding.student, peerSnapshots);
   if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
   return { ok: true as const, result };
 }
