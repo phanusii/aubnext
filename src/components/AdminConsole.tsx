@@ -131,10 +131,11 @@ export function AdminConsole() {
   useEffect(() => {
     if (!selectedExam) return;
     queueMicrotask(() => {
-      setRooms(selectedExam.roomQuotas.map((room) => ({ room: room.room, quota: room.quota })));
+      setRooms(selectedExam.roomQuotas.map((room) => ({ id: room.id, room: room.room, quota: room.quota })));
       setSubjects(
         selectedExam.subjects.length > 0
           ? selectedExam.subjects.map((subject, index) => ({
+              id: subject.id,
               name: subject.name,
               maxScore: Number(subject.maxScore ?? 100),
               sortOrder: subject.sortOrder ?? index,
@@ -529,7 +530,7 @@ export function AdminConsole() {
                 <Panel icon={<Users size={18} />} title="ห้องเรียนและโควตา">
                   <div className="space-y-2">
                     {rooms.map((room, index) => (
-                      <div key={`${room.room}-${index}`} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
+                      <div key={room.id ?? `room-${index}`} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
                         <input className="app-input" value={room.room} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === index ? { ...item, room: event.target.value } : item))} />
                         <input className="app-input" type="number" min={0} value={room.quota} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === index ? { ...item, quota: Number(event.target.value) } : item))} />
                         <button type="button" className="app-icon-button" onClick={() => setRooms(rooms.filter((_, itemIndex) => itemIndex !== index))}>
@@ -553,7 +554,7 @@ export function AdminConsole() {
                 <Panel icon={<BookOpen size={18} />} title="วิชาสอบและคะแนนเต็ม">
                   <div className="space-y-2">
                     {subjects.map((subject, index) => (
-                      <div key={`${subject.name}-${index}`} className="grid gap-2 lg:grid-cols-[1fr_120px_130px_auto]">
+                      <div key={subject.id ?? `subject-${index}`} className="grid gap-2 lg:grid-cols-[1fr_120px_130px_auto]">
                         <input className="app-input" placeholder="ชื่อวิชา" value={subject.name} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
                         <input className="app-input" type="number" min={1} value={subject.maxScore} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
                         <input className="app-input" type="number" min={1} placeholder="tie-break" value={subject.tieBreakOrder ?? ""} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
