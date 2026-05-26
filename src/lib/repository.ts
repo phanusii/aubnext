@@ -59,6 +59,27 @@ export type PublicStudentResult = {
   };
 };
 
+export type PublicStudentResultLookup = {
+  examNo: string;
+  studentId?: string;
+  examSessionId?: string;
+};
+
+export type PublishedStudentResultSession = {
+  lookup: Required<PublicStudentResultLookup>;
+  result: PublicStudentResult;
+};
+
+export type PublishedStudentResultCacheMiss = {
+  lookup: Required<PublicStudentResultLookup>;
+  result: null;
+  cacheMissing: true;
+};
+
+export type PublishedStudentResultLookupResult =
+  | PublishedStudentResultSession
+  | PublishedStudentResultCacheMiss;
+
 type ResultStudent = {
   id: string;
   examNo: string;
@@ -123,6 +144,57 @@ type PublicResultExamInput = {
 
 const peerSnapshotMemoryCache = new Map<string, { expiresAt: number; data: PeerResultSnapshot[] }>();
 const peerSnapshotCacheMs = 60_000;
+const activePublishedExamMemoryCache = new Map<
+  string,
+  { expiresAt: number; data: Awaited<ReturnType<typeof getActivePublishedExamIdUncached>> }
+>();
+const activePublishedExamCacheMs = 30_000;
+
+type ResultLookupTrace = {
+  mark: (label: string, extra?: Record<string, unknown>) => void;
+  done: (outcome: string, extra?: Record<string, unknown>) => void;
+};
+
+function clearActivePublishedExamCache() {
+  activePublishedExamMemoryCache.clear();
+}
+
+function startResultLookupTrace(scope: string, input: PublicStudentResultLookup): ResultLookupTrace | null {
+  if (process.env.RESULT_LOOKUP_DEBUG !== "1") return null;
+
+  const startedAt = Date.now();
+  let previousAt = startedAt;
+  const marks: Array<Record<string, unknown>> = [];
+  const safeInput = {
+    hasStudentId: Boolean(input.studentId),
+    hasExamSessionId: Boolean(input.examSessionId),
+    examNoLength: input.examNo.trim().length,
+  };
+
+  return {
+    mark(label, extra = {}) {
+      const now = Date.now();
+      marks.push({
+        label,
+        elapsedMs: now - startedAt,
+        deltaMs: now - previousAt,
+        ...extra,
+      });
+      previousAt = now;
+    },
+    done(outcome, extra = {}) {
+      const finishedAt = Date.now();
+      console.info("[result-lookup]", {
+        scope,
+        outcome,
+        totalMs: finishedAt - startedAt,
+        input: safeInput,
+        marks,
+        ...extra,
+      });
+    },
+  };
+}
 
 export async function upsertSchoolSettings(input: {
   schoolName: string;
@@ -132,11 +204,13 @@ export async function upsertSchoolSettings(input: {
   schoolContact?: string | null;
 }) {
   const prisma = getPrisma();
-  return prisma.schoolSettings.upsert({
+  const settings = await prisma.schoolSettings.upsert({
     where: { id: "main" },
     update: input,
     create: { id: "main", ...input },
   });
+  clearActivePublishedExamCache();
+  return settings;
 }
 
 export async function getSchoolSettings() {
@@ -604,6 +678,7 @@ export async function publishExam(
     }),
   ]);
   peerSnapshotMemoryCache.delete(examSessionId);
+  clearActivePublishedExamCache();
   await rebuildPublicResultCache(examSessionId);
 
   return { publishedAt };
@@ -628,6 +703,7 @@ export async function deleteExamPublishedResults(examSessionId: string) {
     }),
   ]);
   peerSnapshotMemoryCache.delete(examSessionId);
+  clearActivePublishedExamCache();
   return { deleted: deleted.count };
 }
 
@@ -949,27 +1025,48 @@ export async function rebuildPublicResultCache(examSessionId: string) {
 
   const builtAt = new Date();
   const payloads = buildPublicResultPayloads(settings, exam, exam.resultSnapshots);
-  await prisma.$transaction(
-    exam.resultSnapshots.map((snapshot) =>
-      prisma.resultSnapshot.update({
-        where: {
-          examSessionId_studentId: {
-            examSessionId,
-            studentId: snapshot.studentId,
-          },
-        },
-        data: {
-          publicResultData: payloads.get(snapshot.studentId) as Prisma.InputJsonValue,
-          publicResultBuiltAt: builtAt,
-        },
-      }),
-    ),
-  );
+  const batchSize = 100;
+  let updated = 0;
 
-  return { updated: exam.resultSnapshots.length };
+  for (let index = 0; index < exam.resultSnapshots.length; index += batchSize) {
+    const batch = exam.resultSnapshots.slice(index, index + batchSize);
+    await prisma.$transaction(
+      batch.map((snapshot) =>
+        prisma.resultSnapshot.update({
+          where: {
+            examSessionId_studentId: {
+              examSessionId,
+              studentId: snapshot.studentId,
+            },
+          },
+          data: {
+            publicResultData: payloads.get(snapshot.studentId) as Prisma.InputJsonValue,
+            publicResultBuiltAt: builtAt,
+          },
+        }),
+      ),
+    );
+    updated += batch.length;
+  }
+
+  return { updated };
 }
 
-async function getActivePublishedExamId(input?: { examSessionId?: string }) {
+export async function getPublicResultCacheHealth(examSessionId: string) {
+  const prisma = getPrisma();
+  const rows = await prisma.$queryRaw<Array<{ total: bigint; cached: bigint }>>`
+    SELECT
+      COUNT(*)::bigint AS total,
+      COUNT("publicResultData")::bigint AS cached
+    FROM "ResultSnapshot"
+    WHERE "examSessionId" = ${examSessionId}
+  `;
+  const total = Number(rows[0]?.total ?? 0);
+  const cached = Number(rows[0]?.cached ?? 0);
+  return { total, cached, missing: Math.max(0, total - cached) };
+}
+
+async function getActivePublishedExamIdUncached(input?: { examSessionId?: string }) {
   const prisma = getPrisma();
   const settings = await getSchoolSettings();
   const activeExamId = settings.activeExamSessionId ?? input?.examSessionId;
@@ -989,35 +1086,51 @@ async function getActivePublishedExamId(input?: { examSessionId?: string }) {
   return { settings, activeExamId: activeExam.id };
 }
 
-export async function findPublishedStudentResultLookup(input: { examNo: string }) {
-  const prisma = getPrisma();
-  const active = await getActivePublishedExamId();
-  if (!active) return null;
+async function getActivePublishedExamId(input?: { examSessionId?: string }) {
+  const key = input?.examSessionId ?? "__default";
+  const cached = activePublishedExamMemoryCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
 
-  const student = await prisma.student.findFirst({
-    where: {
-      examNo: input.examNo.trim(),
-      examSessionId: active.activeExamId,
-      resultSnapshots: { some: { examSessionId: active.activeExamId } },
-    },
-    select: { id: true, examNo: true, examSessionId: true },
+  const data = await getActivePublishedExamIdUncached(input);
+  activePublishedExamMemoryCache.set(key, {
+    expiresAt: Date.now() + activePublishedExamCacheMs,
+    data,
   });
-
-  if (!student) return null;
-  return { examNo: student.examNo, studentId: student.id, examSessionId: student.examSessionId };
+  return data;
 }
 
-export async function findPublishedStudentResultSession(input: { examNo: string }) {
+async function findCachedPublicResultSession(
+  settings: Awaited<ReturnType<typeof getSchoolSettings>>,
+  input: { examNo: string; studentId?: string; examSessionId: string },
+  trace?: ResultLookupTrace | null,
+): Promise<PublishedStudentResultSession | null> {
   const prisma = getPrisma();
-  const active = await getActivePublishedExamId();
-  if (!active) return null;
+  const trimmedExamNo = input.examNo.trim();
 
-  const snapshot = await prisma.resultSnapshot.findFirst({
+  const student = input.studentId
+    ? await prisma.student.findFirst({
+        where: { id: input.studentId, examSessionId: input.examSessionId },
+        select: { id: true, examNo: true, examSessionId: true },
+      })
+    : await prisma.student.findUnique({
+        where: {
+          examSessionId_examNo: {
+            examSessionId: input.examSessionId,
+            examNo: trimmedExamNo,
+          },
+        },
+        select: { id: true, examNo: true, examSessionId: true },
+      });
+  trace?.mark("student_lookup", { found: Boolean(student), byStudentId: Boolean(input.studentId) });
+
+  if (!student) return null;
+  if (trimmedExamNo && student.examNo !== trimmedExamNo) return null;
+
+  const snapshot = await prisma.resultSnapshot.findUnique({
     where: {
-      examSessionId: active.activeExamId,
-      student: {
-        examNo: input.examNo.trim(),
-        examSessionId: active.activeExamId,
+      examSessionId_studentId: {
+        examSessionId: input.examSessionId,
+        studentId: student.id,
       },
     },
     select: {
@@ -1031,60 +1144,116 @@ export async function findPublishedStudentResultSession(input: { examNo: string 
       },
     },
   });
+  trace?.mark("snapshot_lookup", { found: Boolean(snapshot) });
 
   if (!snapshot) return null;
 
-  const lookup = {
-    examNo: snapshot.student.examNo,
-    studentId: snapshot.student.id,
-    examSessionId: snapshot.student.examSessionId,
+  const result = normalizeCachedPublicResult(settings, snapshot.publicResultData);
+  trace?.mark("public_result_data", { hit: Boolean(result) });
+  if (!result || result.exam.id !== snapshot.student.examSessionId || result.student.examNo !== snapshot.student.examNo) {
+    return null;
+  }
+
+  return {
+    lookup: {
+      examNo: snapshot.student.examNo,
+      studentId: snapshot.student.id,
+      examSessionId: snapshot.student.examSessionId,
+    },
+    result,
   };
-  const cached = normalizeCachedPublicResult(active.settings, snapshot.publicResultData);
-  if (cached) return { lookup, result: cached };
-
-  const result = await checkPrivateResult(lookup);
-  return result ? { lookup, result } : null;
 }
 
-async function findCachedPublicResult(
-  settings: Awaited<ReturnType<typeof getSchoolSettings>>,
-  input: { examNo: string; studentId?: string; examSessionId: string },
-) {
-  const prisma = getPrisma();
-  const snapshot = await prisma.resultSnapshot.findFirst({
-    where: {
-      examSessionId: input.examSessionId,
-      ...(input.studentId ? { studentId: input.studentId } : { student: { examNo: input.examNo.trim() } }),
-    },
-    select: {
-      publicResultData: true,
-    },
-  });
-
-  return normalizeCachedPublicResult(settings, snapshot?.publicResultData);
-}
-
-export async function checkPrivateResult(input: { examNo: string; studentId?: string; examSessionId?: string }) {
+export async function findPublishedStudentResultLookup(input: PublicStudentResultLookup, trace?: ResultLookupTrace | null) {
   const prisma = getPrisma();
   const active = await getActivePublishedExamId({ examSessionId: input.examSessionId });
   if (!active) return null;
 
-  const cached = await findCachedPublicResult(active.settings, {
-    examNo: input.examNo,
-    studentId: input.studentId,
-    examSessionId: active.activeExamId,
-  });
-  if (cached) return cached;
+  const trimmedExamNo = input.examNo.trim();
+  const student = input.studentId
+    ? await prisma.student.findFirst({
+        where: { id: input.studentId, examSessionId: active.activeExamId },
+        select: { id: true, examNo: true, examSessionId: true },
+      })
+    : await prisma.student.findUnique({
+        where: {
+          examSessionId_examNo: {
+            examSessionId: active.activeExamId,
+            examNo: trimmedExamNo,
+          },
+        },
+        select: { id: true, examNo: true, examSessionId: true },
+      });
+  trace?.mark("lookup_student", { found: Boolean(student), byStudentId: Boolean(input.studentId) });
 
-  await rebuildPublicResultCache(active.activeExamId).catch((error) => {
-    console.error("Public result cache backfill failed", error);
+  if (!student) return null;
+  if (trimmedExamNo && student.examNo !== trimmedExamNo) return null;
+
+  const snapshot = await prisma.resultSnapshot.findUnique({
+    where: {
+      examSessionId_studentId: {
+        examSessionId: active.activeExamId,
+        studentId: student.id,
+      },
+    },
+    select: { id: true },
   });
-  const rebuilt = await findCachedPublicResult(active.settings, {
+  trace?.mark("lookup_snapshot", { found: Boolean(snapshot) });
+  if (!snapshot) return null;
+
+  return { examNo: student.examNo, studentId: student.id, examSessionId: student.examSessionId };
+}
+
+export async function findPublishedStudentResultSession(input: PublicStudentResultLookup): Promise<PublishedStudentResultLookupResult | null> {
+  const trace = startResultLookupTrace("public", input);
+  const active = await getActivePublishedExamId({ examSessionId: input.examSessionId });
+  trace?.mark("active_exam", { found: Boolean(active) });
+  if (!active) {
+    trace?.done("no_active_exam");
+    return null;
+  }
+
+  const cached = await findCachedPublicResultSession(active.settings, {
     examNo: input.examNo,
     studentId: input.studentId,
     examSessionId: active.activeExamId,
-  });
-  if (rebuilt) return rebuilt;
+  }, trace);
+  if (cached) {
+    trace?.done("cache_hit", { examSessionId: cached.lookup.examSessionId });
+    return cached;
+  }
+
+  const lookup = await findPublishedStudentResultLookup(input, trace);
+  if (!lookup) {
+    trace?.done("not_found");
+    return null;
+  }
+  if (input.studentId && lookup.studentId !== input.studentId) return null;
+  if (input.examSessionId && lookup.examSessionId !== input.examSessionId) return null;
+
+  trace?.done("cache_missing", { examSessionId: lookup.examSessionId });
+  return { lookup, result: null, cacheMissing: true };
+}
+
+export async function checkPrivateResult(input: { examNo: string; studentId?: string; examSessionId?: string }) {
+  const trace = startResultLookupTrace("private-fallback", input);
+  const prisma = getPrisma();
+  const active = await getActivePublishedExamId({ examSessionId: input.examSessionId });
+  trace?.mark("active_exam", { found: Boolean(active) });
+  if (!active) {
+    trace?.done("no_active_exam");
+    return null;
+  }
+
+  const cached = await findCachedPublicResultSession(active.settings, {
+    examNo: input.examNo,
+    studentId: input.studentId,
+    examSessionId: active.activeExamId,
+  }, trace);
+  if (cached) {
+    trace?.done("cache_hit");
+    return cached.result;
+  }
 
   const student = await prisma.student.findFirst({
     where: {
@@ -1096,12 +1265,19 @@ export async function checkPrivateResult(input: { examNo: string; studentId?: st
       resultSnapshots: { where: { examSessionId: active.activeExamId } },
     },
   });
+  trace?.mark("fallback_student_with_subjects", { found: Boolean(student) });
 
-  if (!student) return null;
+  if (!student) {
+    trace?.done("not_found");
+    return null;
+  }
 
   const peerSnapshots = await getPublishedPeerSnapshots(active.activeExamId);
+  trace?.mark("fallback_peer_snapshots", { count: peerSnapshots.length });
 
-  return buildPrivateResult(active.settings, student, peerSnapshots);
+  const result = buildPrivateResult(active.settings, student, peerSnapshots);
+  trace?.done(result ? "fallback_built" : "fallback_no_result");
+  return result;
 }
 
 export async function bindLineStudent(input: { lineUserId: string; examNo: string; lineName?: string | null }) {
@@ -1157,11 +1333,11 @@ export async function bindLineStudent(input: { lineUserId: string; examNo: strin
   });
 
   const result = student.examSession.status === "PUBLISHED"
-    ? await checkPrivateResult({
+    ? (await findPublishedStudentResultSession({
         examNo: student.examNo,
         studentId: student.id,
         examSessionId: student.examSessionId,
-      })
+      }))?.result ?? null
     : null;
   return {
     ok: true as const,
@@ -1200,11 +1376,12 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
     return { ok: false as const, error: "ผูกบัญชีแล้ว แต่รอบสอบยังไม่ได้ประกาศผล" };
   }
 
-  const result = await checkPrivateResult({
+  const published = await findPublishedStudentResultSession({
     examNo: binding.student.examNo,
     studentId: binding.studentId,
     examSessionId: binding.examSessionId,
   });
+  const result = published?.result;
   if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
   return {
     ok: true as const,

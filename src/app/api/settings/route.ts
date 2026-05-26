@@ -16,7 +16,11 @@ const schema = z.object({
 
 export async function GET() {
   const settings = await getCachedPublicResultSettings();
-  return NextResponse.json(settings);
+  return NextResponse.json(settings, {
+    headers: {
+      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=300",
+    },
+  });
 }
 
 export async function POST(request: Request) {

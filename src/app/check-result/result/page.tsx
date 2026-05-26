@@ -3,11 +3,13 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { Award, BarChart3, ChevronLeft, Medal, School, ShieldCheck, Trophy } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
+import { DevelopmentStatsPanel } from "@/components/DevelopmentStatsPanel";
 import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
-import { checkPrivateResult } from "@/lib/repository";
+import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
+import type { PublicStudentResult } from "@/lib/repository";
 import { readStudentResultCookie, studentResultCookieName } from "@/lib/security";
 
-type StudentResult = NonNullable<Awaited<ReturnType<typeof checkPrivateResult>>>;
+type StudentResult = PublicStudentResult;
 
 const statusText = {
   PASSED: "ผ่านการคัดเลือก",
@@ -47,7 +49,8 @@ function formatPublishedAt(value: string | Date | null) {
 export default async function ResultPage() {
   const cookieStore = await cookies();
   const lookup = readStudentResultCookie(cookieStore.get(studentResultCookieName())?.value);
-  const result = lookup ? await checkPrivateResult(lookup) : null;
+  const session = lookup ? await getCachedPublishedStudentResultSession(lookup) : null;
+  const result = session?.result ?? null;
 
   if (!result) {
     const settings = await getCachedPublicResultSettings();
@@ -179,6 +182,8 @@ function ResultContent({ result }: { result: StudentResult }) {
           <SectionTitle title="สถิติเปรียบเทียบคะแนนรายวิชา" icon={<BarChart3 size={18} />} />
           <SubjectComparisonCharts subjects={result.statistics.subjects} />
         </section>
+
+        <DevelopmentStatsPanel result={result} />
       </div>
     </article>
   );

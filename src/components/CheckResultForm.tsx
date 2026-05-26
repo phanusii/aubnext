@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { School, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
@@ -22,10 +22,6 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
   const [busy, setBusy] = useState(false);
   const [isPending, startTransition] = useTransition();
   const publicSettings = initialSettings;
-
-  useEffect(() => {
-    router.prefetch("/check-result/result");
-  }, [router]);
 
   async function checkResult() {
     if (busy) return;

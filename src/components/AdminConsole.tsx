@@ -60,6 +60,11 @@ type CalculatedResult = {
   room: string;
   scoreBreakdown: Record<string, number>;
 };
+type PublicResultCacheHealth = {
+  total: number;
+  cached: number;
+  missing: number;
+};
 type ImportValidation = {
   rowCount: number;
   subjectCount: number;
@@ -68,10 +73,25 @@ type ImportValidation = {
   isReady: boolean;
 };
 type AdminTab = "settings" | "exam" | "rooms" | "import" | "results" | "line";
+type ExamAction = "calculate" | "publish";
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
 type ResultExportStatus = "all" | "passed" | "failed";
 type ResultExportLayout = "rooms" | "single";
+
+const resultStatusOptions: Array<{ value: ResultStatusFilter; label: string }> = [
+  { value: "ALL", label: "ทั้งหมด" },
+  { value: "PASSED", label: "ผ่านเกณฑ์" },
+  { value: "REVIEW", label: "รอตรวจ" },
+  { value: "FAILED", label: "ไม่ผ่าน" },
+];
+
+const resultSortOptions: Array<{ value: ResultSort; label: string }> = [
+  { value: "rank", label: "อันดับ" },
+  { value: "score_desc", label: "คะแนนมากไปน้อย" },
+  { value: "score_asc", label: "คะแนนน้อยไปมาก" },
+  { value: "exam_no", label: "รหัสนักเรียน" },
+];
 
 const emptySubject = (sortOrder = 0): Subject => ({
   name: "",
@@ -104,6 +124,7 @@ export function AdminConsole() {
   const [busy, setBusy] = useState(false);
   const [logoChanged, setLogoChanged] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("settings");
+  const [pendingExamAction, setPendingExamAction] = useState<ExamAction | null>(null);
 
   const [newExamName, setNewExamName] = useState("สอบแข่งขันประจำปี");
   const [newClassLevel, setNewClassLevel] = useState("ป.6");
@@ -117,6 +138,9 @@ export function AdminConsole() {
   const [importRoom, setImportRoom] = useState("");
   const [pasteText, setPasteText] = useState("");
   const [calculatedResults, setCalculatedResults] = useState<CalculatedResult[]>([]);
+  const [resultsLoadedExamId, setResultsLoadedExamId] = useState("");
+  const [resultsLoading, setResultsLoading] = useState(false);
+  const [publicResultCacheHealth, setPublicResultCacheHealth] = useState<PublicResultCacheHealth | null>(null);
   const [roomFilter, setRoomFilter] = useState("");
   const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
@@ -148,10 +172,17 @@ export function AdminConsole() {
   }, []);
 
   const loadStoredResults = useCallback(async (examId: string) => {
-    const response = await fetch(`/api/exams/${examId}/results`);
-    if (!response.ok) return;
-    const data = await response.json();
-    setCalculatedResults(data.results ?? []);
+    setResultsLoading(true);
+    try {
+      const response = await fetch(`/api/exams/${examId}/results`);
+      if (!response.ok) return;
+      const data = await response.json();
+      setCalculatedResults(data.results ?? []);
+      setPublicResultCacheHealth(data.cacheHealth ?? null);
+      setResultsLoadedExamId(examId);
+    } finally {
+      setResultsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -197,10 +228,19 @@ export function AdminConsole() {
       setPassTitle(selectedExam.passTitle ?? "");
       setPassInstructions(selectedExam.passInstructions ?? "");
       setCalculatedResults([]);
+      setPublicResultCacheHealth(null);
+      setResultsLoadedExamId("");
+      setResultsLoading(false);
       setResultRoomFilter("ALL");
+    });
+  }, [selectedExam]);
+
+  useEffect(() => {
+    if (activeTab !== "results" || !selectedExam || resultsLoadedExamId === selectedExam.id) return;
+    queueMicrotask(() => {
       void loadStoredResults(selectedExam.id);
     });
-  }, [loadStoredResults, selectedExam]);
+  }, [activeTab, loadStoredResults, resultsLoadedExamId, selectedExam]);
 
   async function login() {
     setBusy(true);
@@ -412,7 +452,18 @@ export function AdminConsole() {
     await loadExams();
   }
 
-  async function runExamAction(action: "calculate" | "publish") {
+  function openExamActionDialog(action: ExamAction) {
+    if (!selectedExam || busy) return;
+    setPendingExamAction(action);
+  }
+
+  async function confirmExamAction() {
+    if (!pendingExamAction) return;
+    await runExamAction(pendingExamAction);
+    setPendingExamAction(null);
+  }
+
+  async function runExamAction(action: ExamAction) {
     if (!selectedExam) return;
     setBusy(true);
     const response = await fetch(`/api/exams/${selectedExam.id}/${action}`, {
@@ -435,6 +486,12 @@ export function AdminConsole() {
 
     if (action === "calculate") {
       setCalculatedResults(data.results ?? []);
+      setPublicResultCacheHealth({
+        total: data.results?.length ?? 0,
+        cached: data.results?.length ?? 0,
+        missing: 0,
+      });
+      setResultsLoadedExamId(selectedExam.id);
       setMessage(`คำนวณแล้ว ${data.results?.length ?? 0} รายการ`);
     } else {
       setMessage("ประกาศผลแล้ว");
@@ -478,8 +535,33 @@ export function AdminConsole() {
     }
 
     setCalculatedResults([]);
+    setPublicResultCacheHealth({ total: 0, cached: 0, missing: 0 });
+    setResultsLoadedExamId(selectedExam.id);
     setMessage(`ลบข้อมูลประกาศผลแล้ว ${data.deleted ?? 0} รายการ`);
     await loadExams(selectedExam.id);
+  }
+
+  async function repairPublicResultCache() {
+    if (!selectedExam) return;
+    setBusy(true);
+    setMessage("");
+    const response = await fetch(`/api/exams/${selectedExam.id}/results`, { method: "POST" });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+
+    if (response.status === 401) {
+      setIsLoggedIn(false);
+      setMessage("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+      return;
+    }
+
+    if (!response.ok) {
+      setMessage(data.error ?? "ซ่อมแคชผลประกาศไม่สำเร็จ");
+      return;
+    }
+
+    setPublicResultCacheHealth(data.cacheHealth ?? null);
+    setMessage(`ซ่อมแคชผลประกาศแล้ว ${data.updated ?? 0} รายการ`);
   }
 
   async function updateLineRichMenu() {
@@ -645,6 +727,8 @@ export function AdminConsole() {
           ))}
         </nav>
 
+        {selectedExam && <ExamContextBar exam={selectedExam} />}
+
         {activeTab === "settings" && (
           <Panel icon={<Save size={18} />} title="ตั้งค่าระบบ">
             <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
@@ -758,11 +842,11 @@ export function AdminConsole() {
                     <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
                   ))}
                 </select>
-                <button type="button" onClick={() => runExamAction("calculate")} disabled={busy || !selectedExam} className="app-button-secondary">
+                <button type="button" onClick={() => openExamActionDialog("calculate")} disabled={busy || !selectedExam} className="app-button-secondary">
                   <Calculator size={16} />
                   คำนวณ
                 </button>
-                <button type="button" onClick={() => runExamAction("publish")} disabled={busy || !selectedExam} className="app-button-pink">
+                <button type="button" onClick={() => openExamActionDialog("publish")} disabled={busy || !selectedExam} className="app-button-pink">
                   <BadgeCheck size={16} />
                   ประกาศผล
                 </button>
@@ -965,23 +1049,40 @@ export function AdminConsole() {
               <Metric label="ไม่ผ่าน" value={`${visibleResultSummary.failed} คน`} />
             </div>
 
-            <div className="mb-4 grid gap-3 md:grid-cols-2">
-              <Field label="สถานะ">
-                <select className="app-input" value={resultStatusFilter} onChange={(event) => setResultStatusFilter(event.target.value as ResultStatusFilter)}>
-                  <option value="ALL">ทั้งหมด</option>
-                  <option value="PASSED">ผ่านเกณฑ์</option>
-                  <option value="REVIEW">รอตรวจ</option>
-                  <option value="FAILED">ไม่ผ่าน</option>
-                </select>
-              </Field>
-              <Field label="เรียงลำดับ">
-                <select className="app-input" value={resultSort} onChange={(event) => setResultSort(event.target.value as ResultSort)}>
-                  <option value="rank">อันดับ</option>
-                  <option value="score_desc">คะแนนมากไปน้อย</option>
-                  <option value="score_asc">คะแนนน้อยไปมาก</option>
-                  <option value="exam_no">รหัสนักเรียน</option>
-                </select>
-              </Field>
+            <div className="mb-4 rounded-2xl border border-[var(--border-soft)] bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-[var(--text-main)]">สถานะแคชผลรายบุคคล</h3>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    พร้อมใช้งาน {publicResultCacheHealth?.cached ?? 0}/{publicResultCacheHealth?.total ?? selectedExam._count?.resultSnapshots ?? 0} รายการ
+                    {(publicResultCacheHealth?.missing ?? 0) > 0 ? ` · ขาด ${publicResultCacheHealth?.missing ?? 0} รายการ` : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={repairPublicResultCache}
+                  disabled={busy || resultsLoading || (publicResultCacheHealth?.total ?? selectedExam._count?.resultSnapshots ?? 0) === 0}
+                  className="app-button-secondary"
+                >
+                  <Save size={16} />
+                  ซ่อมแคชผลประกาศ
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4 grid gap-3 lg:grid-cols-2">
+              <FilterControlGroup
+                label="สถานะ"
+                value={resultStatusFilter}
+                options={resultStatusOptions}
+                onChange={(value) => setResultStatusFilter(value as ResultStatusFilter)}
+              />
+              <FilterControlGroup
+                label="เรียงลำดับ"
+                value={resultSort}
+                options={resultSortOptions}
+                onChange={(value) => setResultSort(value as ResultSort)}
+              />
             </div>
 
             <div className="mb-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
@@ -995,7 +1096,7 @@ export function AdminConsole() {
                 <button
                   type="button"
                   onClick={deletePublishedResults}
-                  disabled={busy || resultExportSummary.all === 0}
+                  disabled={busy || resultsLoading || resultExportSummary.all === 0}
                   className="app-button-pink"
                 >
                   <Trash2 size={16} />
@@ -1025,7 +1126,9 @@ export function AdminConsole() {
               </div>
             </div>
 
-            {visibleResults.length > 0 ? (
+            {resultsLoading ? (
+              <EmptyState text="กำลังโหลดผลคะแนน" />
+            ) : visibleResults.length > 0 ? (
               <ResultTable results={visibleResults} subjects={subjects} />
             ) : (
               <EmptyState text="นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล" />
@@ -1039,7 +1142,15 @@ export function AdminConsole() {
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
                 <div className="overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/line-rich-menu.jpg" alt="ตัวอย่าง Rich Menu LINE" className="h-auto w-full" />
+                  <img
+                    src="/line-rich-menu-preview.jpg"
+                    alt="ตัวอย่าง Rich Menu LINE"
+                    width={720}
+                    height={486}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-auto w-full"
+                  />
                 </div>
                 <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> นักเรียนเปิด LIFF จาก Rich Menu แล้วกรอกรหัสนักเรียน</p>
                 <p><span className="font-semibold text-[var(--text-main)]">2. ปิด LIFF อัตโนมัติ</span> หลังผูกสำเร็จ ระบบจะปิดหน้าต่างเพื่อกลับไปหน้าแชท LINE</p>
@@ -1073,9 +1184,144 @@ export function AdminConsole() {
             </div>
           </Panel>
         )}
+        {pendingExamAction && selectedExam && (
+          <ExamActionDialog
+            action={pendingExamAction}
+            exam={selectedExam}
+            busy={busy}
+            onCancel={() => !busy && setPendingExamAction(null)}
+            onConfirm={confirmExamAction}
+          />
+        )}
         <AppFooter />
       </div>
     </main>
+  );
+}
+
+function ExamActionDialog({
+  action,
+  exam,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  action: ExamAction;
+  exam: Exam;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isPublish = action === "publish";
+  const title = isPublish ? "ยืนยันการประกาศผล" : "ยืนยันการคำนวณผล";
+  const description = isPublish
+    ? "ระบบจะประกาศผลให้นักเรียนสามารถเช็คคะแนนรายบุคคลได้ และสร้างแคชผลประกาศสำหรับเปิดดูอย่างรวดเร็ว"
+    : "ระบบจะคำนวณคะแนนรวม อันดับ สถานะผู้ผ่าน และสร้างข้อมูลแสดงผลรายบุคคลใหม่";
+  const warning = isPublish
+    ? "หากรอบสอบนี้เคยประกาศแล้ว ข้อมูลประกาศและแคชผลรายบุคคลจะถูกอัปเดตใหม่"
+    : "หากมีผลคำนวณเดิม ระบบจะลบผลเดิมของรอบนี้แล้วสร้างใหม่จากคะแนนล่าสุด";
+  const confirmText = isPublish ? "ประกาศผล" : "คำนวณผล";
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 px-4 py-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="exam-action-dialog-title"
+        className="w-full max-w-lg rounded-2xl border border-[var(--border-soft)] bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.22)]"
+      >
+        <div className="flex items-start gap-3">
+          <div className={cx("grid size-11 shrink-0 place-items-center rounded-xl text-white", isPublish ? "bg-[var(--accent-pink)]" : "bg-[var(--primary-blue)]")}>
+            {isPublish ? <BadgeCheck size={22} /> : <Calculator size={22} />}
+          </div>
+          <div className="min-w-0">
+            <h2 id="exam-action-dialog-title" className="text-xl font-semibold leading-tight text-[var(--text-main)]">
+              {title}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{description}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-2xl bg-[var(--blue-wash)] p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Metric label="รอบสอบ" value={exam.name} />
+            <Metric label="ชั้นเรียน" value={exam.classLevel} />
+            <Metric label="นักเรียน" value={`${exam._count?.students ?? 0} คน`} />
+            <Metric label="สถานะปัจจุบัน" value={exam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"} />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">{warning}</p>
+        </div>
+
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onCancel} disabled={busy} className="app-button-secondary justify-center">
+            ยกเลิก
+          </button>
+          <button type="button" onClick={onConfirm} disabled={busy} className={cx("justify-center", isPublish ? "app-button-pink" : "app-button-primary")}>
+            {isPublish ? <BadgeCheck size={16} /> : <Calculator size={16} />}
+            {busy ? "กำลังทำรายการ" : confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExamContextBar({ exam }: { exam: Exam }) {
+  return (
+    <section className="mb-5 rounded-2xl border border-sky-100 bg-white/95 px-4 py-3 shadow-[0_12px_35px_rgba(14,165,233,0.07)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-[var(--primary-blue-strong)]">รอบสอบที่กำลังจัดการ</p>
+          <h2 className="mt-1 truncate text-lg font-semibold leading-tight text-slate-950">{exam.name}</h2>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+          <span className="rounded-full bg-sky-50 px-3 py-1.5 text-sky-700 ring-1 ring-sky-100">
+            ระดับชั้น {exam.classLevel}
+          </span>
+          <span className="rounded-full bg-pink-50 px-3 py-1.5 text-pink-700 ring-1 ring-pink-100">
+            {exam.selectionMode === "PER_ROOM" ? "คัดเลือกรายห้อง" : "คัดเลือกทั้งชั้น"}
+          </span>
+          <span className="rounded-full bg-slate-50 px-3 py-1.5 text-slate-700 ring-1 ring-slate-200">
+            {exam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"}
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FilterControlGroup({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--border-soft)] bg-white p-3 shadow-[0_8px_24px_rgba(14,165,233,0.04)]">
+      <div className="mb-2 text-xs font-semibold text-[var(--text-muted)]">{label}</div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={cx(
+              "min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+              value === option.value
+                ? "border-sky-200 bg-sky-50 text-[var(--primary-blue-strong)] shadow-sm"
+                : "border-[var(--border-soft)] bg-[#fbfdff] text-[var(--text-muted)] hover:border-sky-100 hover:bg-sky-50/60",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { findPublishedStudentResultSession, findUnpublishedStudentExam } from "@/lib/repository";
+import { findUnpublishedStudentExam } from "@/lib/repository";
 import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
 import {
   signStudentResultCookie,
@@ -19,7 +19,14 @@ export async function POST(request: Request) {
   }
 
   const examNo = parsed.data.examNo.trim();
-  const published = (await getCachedPublishedStudentResultSession(examNo)) ?? (await findPublishedStudentResultSession({ examNo }));
+  const published = await getCachedPublishedStudentResultSession(examNo);
+
+  if (published && "cacheMissing" in published) {
+    return NextResponse.json(
+      { error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลสำหรับแสดงผล กรุณาแจ้งผู้ดูแลให้ซ่อมแคชผลประกาศ" },
+      { status: 503 },
+    );
+  }
 
   if (!published) {
     const unpublished = await findUnpublishedStudentExam({ examNo });

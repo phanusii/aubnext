@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkPrivateResult, findUnpublishedStudentExam } from "@/lib/repository";
+import { findUnpublishedStudentExam } from "@/lib/repository";
+import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
 
 const schema = z.object({
   examNo: z.string().min(1),
@@ -12,9 +13,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "กรุณากรอกข้อมูลให้ครบ" }, { status: 400 });
   }
 
-  const result = await checkPrivateResult({
-    examNo: parsed.data.examNo,
-  });
+  const published = await getCachedPublishedStudentResultSession(parsed.data.examNo);
+
+  if (published && "cacheMissing" in published) {
+    return NextResponse.json(
+      { error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลสำหรับแสดงผล กรุณาแจ้งผู้ดูแลให้ซ่อมแคชผลประกาศ" },
+      { status: 503 },
+    );
+  }
+
+  const result = published?.result;
 
   if (!result) {
     const unpublished = await findUnpublishedStudentExam({

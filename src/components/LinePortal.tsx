@@ -22,6 +22,11 @@ type LineBindingInfo = {
     status: string;
   };
 };
+type ActiveExamInfo = {
+  name: string;
+  classLevel: string;
+  status: "DRAFT" | "PUBLISHED";
+};
 
 declare global {
   interface Window {
@@ -35,7 +40,7 @@ declare global {
   }
 }
 
-export function LinePortal() {
+export function LinePortal({ activeExam }: { activeExam?: ActiveExamInfo | null }) {
   const [profile, setProfile] = useState<LineProfile | null>(null);
   const [examNo, setExamNo] = useState("");
   const [message, setMessage] = useState("กำลังเชื่อมต่อ LINE...");
@@ -135,6 +140,16 @@ export function LinePortal() {
         <div className="mb-6 text-center">
           <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">ระบบประกาศผลสอบ</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-normal">เชื่อมต่อบัญชี LINE</h1>
+          {activeExam && (
+            <div className="mx-auto mt-3 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-sky-700 ring-1 ring-sky-100">
+              <span className="max-w-full truncate">{activeExam.name}</span>
+              <span className="text-slate-400">·</span>
+              <span>ระดับชั้น {activeExam.classLevel}</span>
+              <span className={activeExam.status === "PUBLISHED" ? "text-emerald-700" : "text-slate-500"}>
+                {activeExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"}
+              </span>
+            </div>
+          )}
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
             กรอกรหัสนักเรียนเพื่อผูกกับบัญชี LINE แล้วกลับไปกดดูผลคะแนนในแชท
           </p>
