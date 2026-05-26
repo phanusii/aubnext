@@ -494,7 +494,12 @@ export function AdminConsole() {
       setResultsLoadedExamId(selectedExam.id);
       setMessage(`คำนวณแล้ว ${data.results?.length ?? 0} รายการ`);
     } else {
-      setMessage("ประกาศผลแล้ว");
+      setPublicResultCacheHealth(data.cacheHealth ?? null);
+      setMessage(
+        (data.cacheHealth?.missing ?? 0) > 0
+          ? `ประกาศผลแล้ว แต่แคชผลรายบุคคลยังขาด ${data.cacheHealth.missing} รายการ กรุณากดซ่อมแคชผลประกาศ`
+          : "ประกาศผลแล้ว และแคชผลรายบุคคลพร้อมใช้งาน",
+      );
       await loadStoredResults(selectedExam.id);
       await loadExams();
     }
@@ -1049,7 +1054,12 @@ export function AdminConsole() {
               <Metric label="ไม่ผ่าน" value={`${visibleResultSummary.failed} คน`} />
             </div>
 
-            <div className="mb-4 rounded-2xl border border-[var(--border-soft)] bg-white p-4">
+            <div className={cx(
+              "mb-4 rounded-2xl border p-4",
+              (publicResultCacheHealth?.missing ?? 0) > 0
+                ? "border-pink-200 bg-pink-50/80"
+                : "border-[var(--border-soft)] bg-white",
+            )}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-[var(--text-main)]">สถานะแคชผลรายบุคคล</h3>
@@ -1057,12 +1067,17 @@ export function AdminConsole() {
                     พร้อมใช้งาน {publicResultCacheHealth?.cached ?? 0}/{publicResultCacheHealth?.total ?? selectedExam._count?.resultSnapshots ?? 0} รายการ
                     {(publicResultCacheHealth?.missing ?? 0) > 0 ? ` · ขาด ${publicResultCacheHealth?.missing ?? 0} รายการ` : ""}
                   </p>
+                  {(publicResultCacheHealth?.missing ?? 0) > 0 && (
+                    <p className="mt-2 text-sm font-semibold text-pink-700">
+                      นักเรียนบางคนอาจเปิดผลไม่ได้จนกว่าจะซ่อมแคชผลประกาศครบ
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
                   onClick={repairPublicResultCache}
                   disabled={busy || resultsLoading || (publicResultCacheHealth?.total ?? selectedExam._count?.resultSnapshots ?? 0) === 0}
-                  className="app-button-secondary"
+                  className={(publicResultCacheHealth?.missing ?? 0) > 0 ? "app-button-pink" : "app-button-secondary"}
                 >
                   <Save size={16} />
                   ซ่อมแคชผลประกาศ

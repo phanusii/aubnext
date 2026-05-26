@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
   if (published && "cacheMissing" in published) {
     return NextResponse.json(
-      { error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลสำหรับแสดงผล กรุณาแจ้งผู้ดูแลให้ซ่อมแคชผลประกาศ" },
+      { error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลผลคะแนน กรุณาลองใหม่อีกครั้ง หรือแจ้งผู้ดูแลให้ซ่อมแคชผลประกาศ" },
       { status: 503 },
     );
   }

@@ -236,7 +236,7 @@ export async function getPublicResultSettings() {
         select: { id: true, name: true, classLevel: true, status: true, publishedAt: true },
       });
 
-  return { ...settings, activeExam };
+  return { ...settings, logoUrl: publicLogoUrl(settings.logoUrl), activeExam };
 }
 
 export async function createExamSession(input: {
@@ -679,9 +679,10 @@ export async function publishExam(
   ]);
   peerSnapshotMemoryCache.delete(examSessionId);
   clearActivePublishedExamCache();
-  await rebuildPublicResultCache(examSessionId);
+  const rebuilt = await rebuildPublicResultCache(examSessionId);
+  const cacheHealth = await getPublicResultCacheHealth(examSessionId);
 
-  return { publishedAt };
+  return { publishedAt, ...rebuilt, cacheHealth };
 }
 
 export async function deleteExamPublishedResults(examSessionId: string) {
@@ -712,11 +713,17 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function publicLogoUrl(logoUrl?: string | null) {
+  if (!logoUrl) return null;
+  if (logoUrl.startsWith("data:image/") && logoUrl.length > 20_000) return null;
+  return logoUrl;
+}
+
 function publicSchoolFromSettings(settings: Awaited<ReturnType<typeof getSchoolSettings>>) {
   return {
     schoolName: settings.schoolName,
     examTitle: settings.examTitle,
-    logoUrl: settings.logoUrl,
+    logoUrl: publicLogoUrl(settings.logoUrl),
     schoolContact: settings.schoolContact,
   };
 }
