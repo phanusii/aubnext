@@ -70,6 +70,8 @@ type ImportValidation = {
 type AdminTab = "settings" | "exam" | "rooms" | "import" | "results" | "line";
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
+type ResultExportStatus = "all" | "passed" | "failed";
+type ResultExportLayout = "rooms" | "single";
 
 const emptySubject = (sortOrder = 0): Subject => ({
   name: "",
@@ -441,6 +443,45 @@ export function AdminConsole() {
     }
   }
 
+  function resultExportUrl(status: ResultExportStatus, layout: ResultExportLayout) {
+    if (!selectedExam) return "#";
+    const params = new URLSearchParams({ status, layout });
+    return `/api/exams/${selectedExam.id}/results/export?${params.toString()}`;
+  }
+
+  async function deletePublishedResults() {
+    if (!selectedExam) return;
+    const count = selectedExam._count?.resultSnapshots ?? calculatedResults.length;
+    const confirmed = window.confirm(
+      [
+        `ต้องการลบข้อมูลประกาศผลของรอบ "${selectedExam.name}" แบบถาวรหรือไม่`,
+        `ข้อมูลผลคะแนนที่จะลบ: ${count} รายการ`,
+        "รอบสอบจะถูกเปลี่ยนกลับเป็น DRAFT และนักเรียนจะเช็คผลรอบนี้ไม่ได้จนกว่าจะคำนวณ/ประกาศใหม่",
+      ].join("\n"),
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    const response = await fetch(`/api/exams/${selectedExam.id}/results`, { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+
+    if (response.status === 401) {
+      setIsLoggedIn(false);
+      setMessage("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+      return;
+    }
+
+    if (!response.ok) {
+      setMessage(data.error ?? "ลบข้อมูลประกาศผลไม่สำเร็จ");
+      return;
+    }
+
+    setCalculatedResults([]);
+    setMessage(`ลบข้อมูลประกาศผลแล้ว ${data.deleted ?? 0} รายการ`);
+    await loadExams(selectedExam.id);
+  }
+
   async function updateLineRichMenu() {
     setBusy(true);
     setMessage("");
@@ -499,6 +540,11 @@ export function AdminConsole() {
     const failed = visibleResults.filter((result) => result.status === "FAILED").length;
     return { passed, review, failed, total: visibleResults.length };
   }, [visibleResults]);
+  const resultExportSummary = useMemo(() => {
+    const passed = calculatedResults.filter((result) => result.status === "PASSED").length;
+    const failed = calculatedResults.filter((result) => result.status === "FAILED").length;
+    return { all: calculatedResults.length, passed, failed };
+  }, [calculatedResults]);
 
   if (!isLoggedIn) {
     return (
@@ -919,7 +965,7 @@ export function AdminConsole() {
               <Metric label="ไม่ผ่าน" value={`${visibleResultSummary.failed} คน`} />
             </div>
 
-            <div className="mb-4 grid gap-3 lg:grid-cols-[220px_240px_auto]">
+            <div className="mb-4 grid gap-3 md:grid-cols-2">
               <Field label="สถานะ">
                 <select className="app-input" value={resultStatusFilter} onChange={(event) => setResultStatusFilter(event.target.value as ResultStatusFilter)}>
                   <option value="ALL">ทั้งหมด</option>
@@ -936,20 +982,49 @@ export function AdminConsole() {
                   <option value="exam_no">รหัสนักเรียน</option>
                 </select>
               </Field>
-              <div className="flex items-end">
-                {calculatedResults.length > 0 ? (
-                  <a href={`/api/exams/${selectedExam.id}/results/export`} className="app-button-primary">
-                    <Download size={16} />
-                    ดาวน์โหลด Excel ทั้งหมด
-                  </a>
-                ) : (
-                  <button type="button" className="app-button-secondary" disabled>
-                    <Download size={16} />
-                    ดาวน์โหลด Excel ทั้งหมด
-                  </button>
-                )}
+            </div>
+
+            <div className="mb-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-[var(--text-main)]">ดาวน์โหลด Excel</h3>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    เลือกกลุ่มข้อมูล แล้วดาวน์โหลดได้ทั้งแบบแยกชีตตามห้อง หรือแบบชีตเดียวรวมทุกห้อง
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={deletePublishedResults}
+                  disabled={busy || resultExportSummary.all === 0}
+                  className="app-button-pink"
+                >
+                  <Trash2 size={16} />
+                  ลบข้อมูลประกาศผลรอบนี้
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                <ExcelExportGroup
+                  title="ทั้งหมด"
+                  count={resultExportSummary.all}
+                  roomsUrl={resultExportUrl("all", "rooms")}
+                  singleUrl={resultExportUrl("all", "single")}
+                />
+                <ExcelExportGroup
+                  title="เฉพาะผู้ผ่านเข้ารอบ"
+                  count={resultExportSummary.passed}
+                  roomsUrl={resultExportUrl("passed", "rooms")}
+                  singleUrl={resultExportUrl("passed", "single")}
+                />
+                <ExcelExportGroup
+                  title="เฉพาะผู้ไม่ผ่านเข้ารอบ"
+                  count={resultExportSummary.failed}
+                  roomsUrl={resultExportUrl("failed", "rooms")}
+                  singleUrl={resultExportUrl("failed", "single")}
+                />
               </div>
             </div>
+
             {visibleResults.length > 0 ? (
               <ResultTable results={visibleResults} subjects={subjects} />
             ) : (
@@ -1030,6 +1105,54 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl bg-[var(--blue-wash)] p-4">
       <div className="text-xs font-medium text-[var(--text-muted)]">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function ExcelExportGroup({
+  title,
+  count,
+  roomsUrl,
+  singleUrl,
+}: {
+  title: string;
+  count: number;
+  roomsUrl: string;
+  singleUrl: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--border-soft)] bg-white p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-semibold text-[var(--text-main)]">{title}</p>
+        <span className="rounded-full bg-[var(--pink-wash)] px-3 py-1 text-xs font-semibold text-[var(--accent-pink-strong)]">
+          {count} คน
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {count > 0 ? (
+          <>
+            <a href={roomsUrl} className="app-button-primary justify-center">
+              <Download size={16} />
+              1 ไฟล์ แยกชีตตามห้อง
+            </a>
+            <a href={singleUrl} className="app-button-secondary justify-center">
+              <Download size={16} />
+              1 ไฟล์ ชีตเดียวทุกห้อง
+            </a>
+          </>
+        ) : (
+          <>
+            <button type="button" className="app-button-secondary justify-center" disabled>
+              <Download size={16} />
+              1 ไฟล์ แยกชีตตามห้อง
+            </button>
+            <button type="button" className="app-button-secondary justify-center" disabled>
+              <Download size={16} />
+              1 ไฟล์ ชีตเดียวทุกห้อง
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
