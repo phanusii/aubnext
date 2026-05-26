@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkPrivateResult, findUnpublishedStudentExam } from "@/lib/repository";
+import { findUnpublishedStudentExam } from "@/lib/repository";
 import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
+import { createResultRequestTrace } from "@/lib/result-request-trace";
 import {
   signStudentResultCookie,
   studentResultCookieMaxAgeSeconds,
@@ -13,39 +14,54 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  const trace = createResultRequestTrace("check-result-session");
   const parsed = schema.safeParse(await request.json());
+  trace.mark("parse");
   if (!parsed.success) {
-    return NextResponse.json({ error: "กรุณากรอกรหัสนักเรียน" }, { status: 400 });
+    trace.done("invalid_input");
+    return NextResponse.json({ error: "กรุณากรอกรหัสนักเรียน" }, { status: 400, headers: trace.headers() });
   }
 
   const examNo = parsed.data.examNo.trim();
   const published = await getCachedPublishedStudentResultSession(examNo);
-  let result = published && !("cacheMissing" in published) ? published.result : null;
+  trace.mark("public_lookup", {
+    found: Boolean(published),
+    cacheMissing: Boolean(published && "cacheMissing" in published),
+  });
 
   if (published && "cacheMissing" in published) {
-    result = await checkPrivateResult(published.lookup);
+    trace.done("cache_missing", { requestId: trace.requestId });
+    return NextResponse.json(
+      {
+        error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลผลคะแนน กรุณาลองใหม่อีกครั้ง หรือแจ้งผู้ดูแลให้ซ่อมแคชผลประกาศ",
+      },
+      { status: 503, headers: trace.headers() },
+    );
   }
 
-  if (!published || !result) {
+  if (!published) {
     const unpublished = await findUnpublishedStudentExam({ examNo });
+    trace.mark("unpublished_lookup", { found: Boolean(unpublished) });
     if (unpublished) {
+      trace.done("unpublished_found", { hasCalculatedResult: unpublished.hasCalculatedResult });
       return NextResponse.json(
         {
           error: unpublished.hasCalculatedResult
             ? "พบรหัสนักเรียนนี้แล้ว แต่รอบสอบยังไม่ได้ประกาศผล"
             : "พบรหัสนักเรียนนี้แล้ว แต่ยังไม่ได้คำนวณและประกาศผล",
         },
-        { status: 409 },
+        { status: 409, headers: trace.headers() },
       );
     }
 
+    trace.done("not_found");
     return NextResponse.json(
       { error: "ไม่พบผลสอบที่ประกาศแล้ว หรือรหัสนักเรียนไม่ถูกต้อง" },
-      { status: 404 },
+      { status: 404, headers: trace.headers() },
     );
   }
 
-  const response = NextResponse.json({ ok: true, result });
+  const response = NextResponse.json({ ok: true, result: published.result }, { headers: trace.headers() });
   response.cookies.set(studentResultCookieName(), signStudentResultCookie(published.lookup), {
     httpOnly: true,
     maxAge: studentResultCookieMaxAgeSeconds(),
@@ -54,5 +70,6 @@ export async function POST(request: Request) {
     secure: process.env.NODE_ENV === "production",
   });
 
+  trace.done("cache_hit", { requestId: trace.requestId });
   return response;
 }

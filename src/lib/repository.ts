@@ -187,6 +187,7 @@ function startResultLookupTrace(scope: string, input: PublicStudentResultLookup)
       console.info("[result-lookup]", {
         scope,
         outcome,
+        region: process.env.VERCEL_REGION || process.env.VERCEL_DEPLOYMENT_REGION || "local",
         totalMs: finishedAt - startedAt,
         input: safeInput,
         marks,

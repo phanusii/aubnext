@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { School, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
+import { cacheStudentResultForPage, studentResultSessionStorageKey } from "@/components/ResultPageClient";
 
 type PublicSettings = {
   schoolName: string;
@@ -36,8 +37,17 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
     setBusy(false);
 
     if (!response.ok) {
+      try {
+        window.sessionStorage.removeItem(studentResultSessionStorageKey);
+      } catch {
+        // Ignore unavailable session storage.
+      }
       setError(data.error ?? "ไม่พบผลสอบ");
       return;
+    }
+
+    if (data.result) {
+      cacheStudentResultForPage(data.result);
     }
 
     setBusy(true);
