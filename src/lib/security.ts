@@ -10,6 +10,10 @@ type StudentResultLookup = {
   examSessionId?: string;
 };
 
+export type LineResultWebLookup = Required<StudentResultLookup> & {
+  lineUserId: string;
+};
+
 function authSecret() {
   return process.env.AUTH_SECRET || "dev-secret-change-me";
 }
@@ -83,6 +87,55 @@ export function readStudentResultCookie(value?: string) {
       examNo: decoded.examNo,
       studentId: typeof decoded.studentId === "string" ? decoded.studentId : undefined,
       examSessionId: typeof decoded.examSessionId === "string" ? decoded.examSessionId : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function signLineResultWebToken(lookup: LineResultWebLookup) {
+  const payload = Buffer.from(JSON.stringify({
+    lineUserId: lookup.lineUserId,
+    examNo: lookup.examNo.trim(),
+    studentId: lookup.studentId,
+    examSessionId: lookup.examSessionId,
+    issuedAt: Date.now(),
+  })).toString("base64url");
+  const signature = createHmac("sha256", authSecret()).update(`line-result.${payload}`).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+export function readLineResultWebToken(value?: string | null): LineResultWebLookup | null {
+  if (!value) return null;
+  const [payload, signature] = value.split(".");
+  if (!payload || !signature) return null;
+
+  const expected = createHmac("sha256", authSecret()).update(`line-result.${payload}`).digest("base64url");
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) return null;
+
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      lineUserId?: unknown;
+      examNo?: unknown;
+      studentId?: unknown;
+      examSessionId?: unknown;
+    };
+    if (
+      typeof decoded.lineUserId !== "string" ||
+      typeof decoded.examNo !== "string" ||
+      typeof decoded.studentId !== "string" ||
+      typeof decoded.examSessionId !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      lineUserId: decoded.lineUserId,
+      examNo: decoded.examNo,
+      studentId: decoded.studentId,
+      examSessionId: decoded.examSessionId,
     };
   } catch {
     return null;

@@ -1,6 +1,7 @@
 import { getPrisma } from "@/lib/prisma";
 import { calculateResults } from "@/lib/ranking";
 import { verifierHash } from "@/lib/security";
+import type { LineResultWebLookup } from "@/lib/security";
 import type { Prisma } from "@prisma/client";
 import type { ImportedStudentRow } from "@/lib/excel";
 import type { CandidateInput, RankingRule, SubjectInput } from "@/lib/types";
@@ -1183,7 +1184,44 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
     examSessionId: binding.examSessionId,
   });
   if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
-  return { ok: true as const, result };
+  return {
+    ok: true as const,
+    result,
+    lookup: {
+      lineUserId: binding.lineUserId,
+      examNo: binding.student.examNo,
+      studentId: binding.studentId,
+      examSessionId: binding.examSessionId,
+    },
+  };
+}
+
+export async function verifyLineResultWebLookup(input: LineResultWebLookup) {
+  const prisma = getPrisma();
+  const binding = await prisma.lineBinding.findFirst({
+    where: {
+      lineUserId: input.lineUserId,
+      studentId: input.studentId,
+      examSessionId: input.examSessionId,
+      student: { examNo: input.examNo },
+      examSession: { status: "PUBLISHED" },
+    },
+    include: {
+      student: {
+        select: {
+          examNo: true,
+        },
+      },
+    },
+  });
+
+  if (!binding) return null;
+
+  return {
+    examNo: binding.student.examNo,
+    studentId: binding.studentId,
+    examSessionId: binding.examSessionId,
+  };
 }
 
 export async function getLineBindingStatus(input: { lineUserId: string }) {

@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { signLineResultWebToken } from "@/lib/security";
+import type { LineResultWebLookup } from "@/lib/security";
 
 type LineMessage = Record<string, unknown>;
 type LineStudentResult = {
@@ -152,7 +154,10 @@ export function buildBindPromptMessage(error?: string) {
   };
 }
 
-export function buildResultFlexMessage(result: LineStudentResult) {
+export function buildResultFlexMessage(result: LineStudentResult, webLookup?: LineResultWebLookup) {
+  const webResultUrl = webLookup
+    ? `${baseUrl()}/line/result-web?token=${encodeURIComponent(signLineResultWebToken(webLookup))}`
+    : `${baseUrl()}/check-result`;
   const subjectRows = Object.entries(result.result.scoreBreakdown).slice(0, 8).flatMap(([subject, score]) => [
     {
       type: "box",
@@ -256,7 +261,7 @@ export function buildResultFlexMessage(result: LineStudentResult) {
             action: {
               type: "uri",
               label: "ดูผลผ่านเว็บเต็ม",
-              uri: `${baseUrl()}/check-result`,
+              uri: webResultUrl,
             },
           },
           {

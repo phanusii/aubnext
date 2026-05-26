@@ -69,7 +69,7 @@ export async function POST(request: Request) {
           return;
         }
 
-        await replyLineMessage(event.replyToken, [buildResultFlexMessage(result.result)]);
+        await replyLineMessage(event.replyToken, [buildResultFlexMessage(result.result, result.lookup)]);
       } catch (error) {
         console.error("LINE webhook reply failed", error);
       }
