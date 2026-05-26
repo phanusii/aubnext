@@ -6,7 +6,7 @@ import { AppFooter } from "@/components/AppFooter";
 import { DevelopmentStatsPanel } from "@/components/DevelopmentStatsPanel";
 import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
-import type { PublicStudentResult } from "@/lib/repository";
+import { checkPrivateResult, type PublicStudentResult } from "@/lib/repository";
 import { readStudentResultCookie, studentResultCookieName } from "@/lib/security";
 
 type StudentResult = PublicStudentResult;
@@ -50,7 +50,9 @@ export default async function ResultPage() {
   const cookieStore = await cookies();
   const lookup = readStudentResultCookie(cookieStore.get(studentResultCookieName())?.value);
   const session = lookup ? await getCachedPublishedStudentResultSession(lookup) : null;
-  const result = session?.result ?? null;
+  const result = session?.result ?? (
+    lookup && session && "cacheMissing" in session ? await checkPrivateResult(lookup) : null
+  );
 
   if (!result) {
     const settings = await getCachedPublicResultSettings();
