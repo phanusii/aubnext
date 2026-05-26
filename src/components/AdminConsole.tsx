@@ -926,8 +926,9 @@ export function AdminConsole() {
             <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
                 <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> นักเรียนเปิด LIFF จาก Rich Menu แล้วกรอกรหัสนักเรียน</p>
-                <p><span className="font-semibold text-[var(--text-main)]">2. ดูผลคะแนน</span> เมื่อตรวจพบรหัสที่ผูกไว้ ระบบจะแสดงการ์ดผลสอบทันที</p>
-                <p><span className="font-semibold text-[var(--text-main)]">3. ไม่ส่งแจ้งเตือนอัตโนมัติ</span> นักเรียนเข้ามาเช็คคะแนนเองใน LINE หรือหน้าเว็บ</p>
+                <p><span className="font-semibold text-[var(--text-main)]">2. ปิด LIFF อัตโนมัติ</span> หลังผูกสำเร็จ ระบบจะปิดหน้าต่างเพื่อกลับไปหน้าแชท LINE</p>
+                <p><span className="font-semibold text-[var(--text-main)]">3. ดูผลคะแนน</span> กดปุ่มเช็คผลใน Rich Menu แล้วบอทจะตอบการ์ดผลคะแนนในแชท</p>
+                <p><span className="font-semibold text-[var(--text-main)]">Webhook</span> ตั้งค่า LINE Developers เป็น /api/line/webhook และให้ปุ่มเช็คผลส่ง postback action=check_result</p>
               </div>
               <div className="space-y-2">
                 <a href={lineResultUrl} className="app-button-primary w-full" target="_blank" rel="noreferrer">

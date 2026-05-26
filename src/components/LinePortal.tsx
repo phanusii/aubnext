@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link2, Loader2, School, Search, XCircle } from "lucide-react";
-import { StudentResultCard, type StudentResultResponse } from "@/components/StudentResultCard";
 import { AppFooter } from "@/components/AppFooter";
 
 type LineProfile = {
@@ -22,6 +21,7 @@ declare global {
       isLoggedIn: () => boolean;
       login: () => void;
       getProfile: () => Promise<LineProfile>;
+      closeWindow: () => void;
     };
   }
 }
@@ -29,7 +29,6 @@ declare global {
 export function LinePortal() {
   const [profile, setProfile] = useState<LineProfile | null>(null);
   const [examNo, setExamNo] = useState("");
-  const [result, setResult] = useState<StudentResultResponse | null>(null);
   const [message, setMessage] = useState("กำลังเปิด LINE LIFF...");
   const [busy, setBusy] = useState(false);
   const [publicSettings, setPublicSettings] = useState<PublicSettings>({
@@ -38,20 +37,14 @@ export function LinePortal() {
     activeExam: null,
   });
 
-  const loadBoundResult = useCallback(async (lineUserId: string) => {
-    const response = await fetch("/api/line/result", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lineUserId }),
-    });
-    const data = await response.json();
-    if (response.ok) {
-      setResult(data);
-      setMessage("พบผลคะแนนที่ผูกไว้แล้ว");
-    } else {
-      setResult(null);
-      setMessage(data.error ?? "กรอกรหัสนักเรียนเพื่อผูกบัญชี");
-    }
+  const closeLiffWindow = useCallback(() => {
+    setTimeout(() => {
+      try {
+        window.liff?.closeWindow();
+      } catch {
+        setMessage("ผูกบัญชีสำเร็จ กรุณาปิดหน้าต่างนี้แล้วกดปุ่มเช็คผลใน LINE");
+      }
+    }, 700);
   }, []);
 
   useEffect(() => {
@@ -84,8 +77,7 @@ export function LinePortal() {
         }
         const loadedProfile = await window.liff.getProfile();
         setProfile(loadedProfile);
-        setMessage(`สวัสดี ${loadedProfile.displayName ?? "นักเรียน"}`);
-        await loadBoundResult(loadedProfile.userId);
+        setMessage(`สวัสดี ${loadedProfile.displayName ?? "นักเรียน"} กรุณากรอกรหัสนักเรียนเพื่อเชื่อมต่อบัญชี`);
       } catch {
         setMessage("เปิด LIFF ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
@@ -94,12 +86,11 @@ export function LinePortal() {
     return () => {
       script.remove();
     };
-  }, [loadBoundResult]);
+  }, []);
 
   async function bindAccount() {
     if (!profile) return;
     setBusy(true);
-    setResult(null);
     const response = await fetch("/api/line/bind", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -113,12 +104,8 @@ export function LinePortal() {
       return;
     }
 
-    if (data.result) {
-      setResult(data.result);
-      setMessage("ผูกบัญชีแล้ว และพบผลคะแนน");
-    } else {
-      setMessage("ผูกบัญชีแล้ว รอประกาศผลจากโรงเรียน");
-    }
+    setMessage("ผูกบัญชีสำเร็จ กำลังปิดหน้าต่าง กรุณากดปุ่มเช็คผลอีกครั้งใน LINE");
+    closeLiffWindow();
   }
 
   return (
@@ -146,8 +133,8 @@ export function LinePortal() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/result-mascot.png" alt="การ์ตูนนักเรียนถือถ้วยรางวัล" className="h-auto w-full" />
           </div>
-          <h2 className="text-3xl font-semibold">LINE ดูผลคะแนน</h2>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">ผูกบัญชีด้วยรหัสนักเรียน แล้วกลับมาดูผลได้ทันทีจากเมนู LINE</p>
+          <h2 className="text-3xl font-semibold">เชื่อมต่อบัญชี LINE</h2>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">ผูกบัญชีด้วยรหัสนักเรียน แล้วกดปุ่มเช็คผลใน LINE เพื่อรับการ์ดผลคะแนน</p>
         </div>
 
         <div className="rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-solid)] p-5 shadow-[var(--shadow-soft)]">
@@ -156,24 +143,22 @@ export function LinePortal() {
             {message}
           </div>
 
-          {!result && (
-            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-              <label className="text-sm font-medium">
-                รหัสนักเรียน
-                <input
-                  value={examNo}
-                  onChange={(event) => setExamNo(event.target.value)}
-                  onKeyDown={(event) => event.key === "Enter" && bindAccount()}
-                  className="app-input mt-1"
-                  inputMode="numeric"
-                />
-              </label>
-              <button type="button" onClick={bindAccount} disabled={busy || !profile || !examNo.trim()} className="app-button-primary mt-6 md:mt-auto">
-                <Search size={18} />
-                ผูกบัญชี
-              </button>
-            </div>
-          )}
+          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+            <label className="text-sm font-medium">
+              รหัสนักเรียน
+              <input
+                value={examNo}
+                onChange={(event) => setExamNo(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && bindAccount()}
+                className="app-input mt-1"
+                inputMode="numeric"
+              />
+            </label>
+            <button type="button" onClick={bindAccount} disabled={busy || !profile || !examNo.trim()} className="app-button-primary mt-6 md:mt-auto">
+              <Search size={18} />
+              ผูกบัญชี
+            </button>
+          </div>
 
           {!profile && (
             <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] p-3 text-sm text-[var(--accent-pink-strong)]">
@@ -183,11 +168,6 @@ export function LinePortal() {
           )}
         </div>
 
-        {result && (
-          <div className="mt-5">
-            <StudentResultCard result={result} />
-          </div>
-        )}
         <AppFooter />
       </section>
     </main>
