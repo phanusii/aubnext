@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { findPublishedStudentResultSession, findUnpublishedStudentExam } from "@/lib/repository";
+import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
 import {
   signStudentResultCookie,
   studentResultCookieMaxAgeSeconds,
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   }
 
   const examNo = parsed.data.examNo.trim();
-  const published = await findPublishedStudentResultSession({ examNo });
+  const published = (await getCachedPublishedStudentResultSession(examNo)) ?? (await findPublishedStudentResultSession({ examNo }));
 
   if (!published) {
     const unpublished = await findUnpublishedStudentExam({ examNo });

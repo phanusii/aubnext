@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { publicSettingsCacheTag } from "@/lib/public-settings-cache";
+import { publicStudentResultCacheTag } from "@/lib/public-student-result-cache";
 import { publishExam } from "@/lib/repository";
 
 const schema = z.object({
@@ -24,5 +25,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const result = await publishExam(id, parsed.data);
   revalidateTag(publicSettingsCacheTag, { expire: 0 });
+  revalidateTag(publicStudentResultCacheTag, { expire: 0 });
   return NextResponse.json({ ok: true, ...result });
 }

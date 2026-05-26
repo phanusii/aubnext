@@ -94,28 +94,22 @@ function ResultContent({ result }: { result: StudentResult }) {
   return (
     <article className="overflow-hidden rounded-[1.5rem] border border-[var(--border-soft)] bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
       <header className="border-b border-[var(--border-soft)] bg-white p-5 md:p-7">
-        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-          <div className="flex gap-4">
-            {result.school.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={result.school.logoUrl} alt="" className="size-16 shrink-0 rounded-2xl object-cover ring-1 ring-[var(--border-soft)]" />
-            ) : (
-              <div className="grid size-16 shrink-0 place-items-center rounded-2xl bg-[var(--blue-wash)] text-[var(--primary-blue-strong)]">
-                <School size={30} />
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{result.school.schoolName}</p>
-              <h1 className="mt-1 text-2xl font-semibold leading-tight md:text-4xl">{result.exam.name}</h1>
-              <p className="mt-2 text-sm text-[var(--text-muted)]">
-                ระดับชั้น {result.exam.classLevel}
-                {publishedAt ? ` · ประกาศวันที่ ${publishedAt}` : ""}
-              </p>
+        <div className="flex gap-4">
+          {result.school.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={result.school.logoUrl} alt="" className="size-16 shrink-0 rounded-2xl object-cover ring-1 ring-[var(--border-soft)] md:size-20" />
+          ) : (
+            <div className="grid size-16 shrink-0 place-items-center rounded-2xl bg-[var(--blue-wash)] text-[var(--primary-blue-strong)] md:size-20">
+              <School size={34} />
             </div>
-          </div>
-          <div className="mx-auto w-24 shrink-0 md:mx-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/result-mascot.png" alt="การ์ตูนนักเรียนถือถ้วยรางวัล" className="h-auto w-full opacity-90" />
+          )}
+          <div className="min-w-0">
+            <p className="text-xl font-semibold leading-tight text-[var(--primary-blue-strong)] md:text-2xl">{result.school.schoolName}</p>
+            <h1 className="mt-1 text-2xl font-semibold leading-tight md:text-4xl">{result.exam.name}</h1>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              ระดับชั้น {result.exam.classLevel}
+              {publishedAt ? ` · ประกาศวันที่ ${publishedAt}` : ""}
+            </p>
           </div>
         </div>
       </header>
@@ -133,28 +127,6 @@ function ResultContent({ result }: { result: StudentResult }) {
             {statusText[result.result.status]}
           </span>
         </div>
-
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <Metric icon={<Award size={18} />} label="คะแนนรวม" value={formatScore(result.result.totalScore)} />
-          <Metric icon={<Medal size={18} />} label={rankLabel} value={String(result.result.rank)} />
-          <Metric icon={<ShieldCheck size={18} />} label="สถานะ" value={statusText[result.result.status]} />
-        </div>
-
-        <section className="mt-7">
-          <div className="mb-3 flex items-center gap-2">
-            <BarChart3 size={18} />
-            <h3 className="text-lg font-semibold">สถิติเปรียบเทียบคะแนนรวม</h3>
-          </div>
-          <TotalComparisonChart
-            score={result.statistics.total.score}
-            roomAverage={result.statistics.total.roomAverage}
-            levelAverage={result.statistics.total.levelAverage}
-            roomRank={result.statistics.total.roomRank}
-            levelRank={result.statistics.total.levelRank}
-            roomCount={result.statistics.total.roomCount}
-            levelCount={result.statistics.total.levelCount}
-          />
-        </section>
 
         <section className="mt-7">
           <h3 className="text-lg font-semibold">คะแนนรายวิชา</h3>
@@ -176,21 +148,43 @@ function ResultContent({ result }: { result: StudentResult }) {
           <SubjectComparisonCharts subjects={result.statistics.subjects} />
         </section>
 
+        <div className="mt-7 grid gap-3 sm:grid-cols-3">
+          <Metric icon={<Award size={18} />} label="คะแนนรวม" value={formatScore(result.result.totalScore)} />
+          <Metric icon={<Medal size={18} />} label={rankLabel} value={String(result.result.rank)} />
+          <Metric icon={<ShieldCheck size={18} />} label="สถานะ" value={statusText[result.result.status]} />
+        </div>
+
+        <section className="mt-7">
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 size={18} />
+            <h3 className="text-lg font-semibold">สถิติเปรียบเทียบคะแนนรวม</h3>
+          </div>
+          <TotalComparisonChart
+            score={result.statistics.total.score}
+            roomAverage={result.statistics.total.roomAverage}
+            levelAverage={result.statistics.total.levelAverage}
+            roomRank={result.statistics.total.roomRank}
+            levelRank={result.statistics.total.levelRank}
+            roomCount={result.statistics.total.roomCount}
+            levelCount={result.statistics.total.levelCount}
+          />
+        </section>
+
         <section className="mt-5 rounded-2xl bg-[#f1f8ff] px-4 py-4">
           <p className="text-sm font-semibold text-[var(--text-main)]">เหตุผลการคัดเลือก</p>
           <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{result.result.reason}</p>
         </section>
 
-        {result.result.status === "PASSED" && (result.exam.passTitle || result.exam.passInstructions) && (
+        {result.result.status === "PASSED" && (
           <section className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-sky-800">
               <BadgeCheckIcon />
               แจ้งสำหรับผู้ผ่านการคัดเลือก
             </div>
-            {result.exam.passTitle && <p className="mt-2 text-lg font-semibold text-[var(--text-main)]">{result.exam.passTitle}</p>}
-            {result.exam.passInstructions && (
-              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">{result.exam.passInstructions}</p>
-            )}
+            <p className="mt-2 text-lg font-semibold text-[var(--text-main)]">{result.exam.passTitle || "ผ่านการคัดเลือก"}</p>
+            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">
+              {result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน"}
+            </p>
           </section>
         )}
       </div>

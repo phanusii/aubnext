@@ -10,6 +10,7 @@ export type PublicStudentResult = {
     schoolName: string;
     examTitle: string;
     logoUrl?: string | null;
+    schoolContact?: string | null;
   };
   exam: {
     id: string;
@@ -127,6 +128,7 @@ export async function upsertSchoolSettings(input: {
   examTitle?: string;
   logoUrl?: string | null;
   activeExamSessionId?: string | null;
+  schoolContact?: string | null;
 }) {
   const prisma = getPrisma();
   return prisma.schoolSettings.upsert({
@@ -616,6 +618,7 @@ function publicSchoolFromSettings(settings: Awaited<ReturnType<typeof getSchoolS
     schoolName: settings.schoolName,
     examTitle: settings.examTitle,
     logoUrl: settings.logoUrl,
+    schoolContact: settings.schoolContact,
   };
 }
 

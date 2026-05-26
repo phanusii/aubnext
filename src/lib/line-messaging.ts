@@ -166,13 +166,18 @@ export function buildResultFlexMessage(result: LineStudentResult) {
   ]);
 
   const passContents =
-    result.result.status === "PASSED" && (result.exam.passTitle || result.exam.passInstructions)
+    result.result.status === "PASSED"
       ? [
           { type: "separator", margin: "md" },
-          { type: "text", text: result.exam.passTitle ?? "แจ้งสำหรับผู้ผ่านการคัดเลือก", weight: "bold", size: "sm", color: "#0369a1", wrap: true, margin: "md" },
-          ...(result.exam.passInstructions
-            ? [{ type: "text", text: result.exam.passInstructions, size: "xs", color: "#64748b", wrap: true, margin: "sm" }]
-            : []),
+          { type: "text", text: result.exam.passTitle || "ผ่านการคัดเลือก", weight: "bold", size: "sm", color: "#0369a1", wrap: true, margin: "md" },
+          {
+            type: "text",
+            text: result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน",
+            size: "xs",
+            color: "#64748b",
+            wrap: true,
+            margin: "sm",
+          },
         ]
       : [];
 
@@ -192,6 +197,8 @@ export function buildResultFlexMessage(result: LineStudentResult) {
           { type: "separator", margin: "md" },
           { type: "text", text: result.student.name, size: "xl", color: "#0f172a", weight: "bold", wrap: true, margin: "md" },
           { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#64748b" },
+          { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#0f172a", weight: "bold", margin: "md" },
+          ...subjectRows,
           {
             type: "box",
             layout: "vertical",
@@ -235,9 +242,6 @@ export function buildResultFlexMessage(result: LineStudentResult) {
               },
             ],
           },
-          { type: "separator", margin: "md" },
-          { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#0f172a", weight: "bold", margin: "md" },
-          ...subjectRows,
           ...passContents,
         ],
       },
@@ -251,8 +255,17 @@ export function buildResultFlexMessage(result: LineStudentResult) {
             style: "secondary",
             action: {
               type: "uri",
-              label: "เข้าดูบนเว็บไซต์",
+              label: "ดูผลผ่านเว็บเต็ม",
               uri: `${baseUrl()}/check-result`,
+            },
+          },
+          {
+            type: "button",
+            style: "link",
+            action: {
+              type: "uri",
+              label: "ติดต่อโรงเรียน",
+              uri: `${baseUrl()}/contact`,
             },
           },
         ],

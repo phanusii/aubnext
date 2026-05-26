@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { getCachedPublicResultSettings, publicSettingsCacheTag } from "@/lib/public-settings-cache";
+import { publicStudentResultCacheTag } from "@/lib/public-student-result-cache";
 import { upsertSchoolSettings } from "@/lib/repository";
 
 const schema = z.object({
@@ -10,6 +11,7 @@ const schema = z.object({
   examTitle: z.string().min(1).optional(),
   logoUrl: z.string().max(1_400_000, "โลโก้ใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB").optional().nullable(),
   activeExamSessionId: z.string().optional().nullable(),
+  schoolContact: z.string().max(500).optional().nullable(),
 });
 
 export async function GET() {
@@ -32,6 +34,7 @@ export async function POST(request: Request) {
   try {
     const settings = await upsertSchoolSettings(parsed.data);
     revalidateTag(publicSettingsCacheTag, { expire: 0 });
+    revalidateTag(publicStudentResultCacheTag, { expire: 0 });
     return NextResponse.json(settings);
   } catch (error) {
     console.error("Save settings failed", error);

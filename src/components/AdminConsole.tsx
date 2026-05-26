@@ -94,6 +94,7 @@ export function AdminConsole() {
     schoolName: "โรงเรียนตัวอย่าง",
     logoUrl: "",
     activeExamSessionId: "",
+    schoolContact: "",
   });
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -119,6 +120,8 @@ export function AdminConsole() {
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
   const [resultSort, setResultSort] = useState<ResultSort>("rank");
   const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
+  const webResultUrl = "/check-result";
+  const schoolContactUrl = "/contact";
 
   const selectedExam = useMemo(
     () => exams.find((exam) => exam.id === selectedExamId),
@@ -157,6 +160,7 @@ export function AdminConsole() {
           schoolName: data.schoolName ?? "โรงเรียนตัวอย่าง",
           logoUrl: data.logoUrl ?? "",
           activeExamSessionId: data.activeExamSessionId ?? "",
+          schoolContact: data.schoolContact ?? "",
         }),
       )
       .catch(() => undefined);
@@ -223,6 +227,7 @@ export function AdminConsole() {
     const body = {
       schoolName: settings.schoolName,
       activeExamSessionId: settings.activeExamSessionId || null,
+      schoolContact: settings.schoolContact.trim() || null,
       ...(logoChanged ? { logoUrl: settings.logoUrl } : {}),
     };
     const response = await fetch("/api/settings", {
@@ -249,6 +254,7 @@ export function AdminConsole() {
       schoolName: data.schoolName ?? current.schoolName,
       logoUrl: data.logoUrl ?? current.logoUrl,
       activeExamSessionId: data.activeExamSessionId ?? "",
+      schoolContact: data.schoolContact ?? "",
     }));
     setMessage("บันทึกตั้งค่าระบบแล้ว");
   }
@@ -435,6 +441,22 @@ export function AdminConsole() {
     }
   }
 
+  async function updateLineRichMenu() {
+    setBusy(true);
+    setMessage("");
+    const response = await fetch("/api/line/rich-menu", { method: "POST" });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+
+    if (response.status === 401) {
+      setIsLoggedIn(false);
+      setMessage("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+      return;
+    }
+
+    setMessage(response.ok ? "อัปเดต Rich Menu ใน LINE แล้ว" : data.error ?? "อัปเดต Rich Menu ไม่สำเร็จ");
+  }
+
   const visibleRooms = useMemo(
     () =>
       rooms
@@ -599,6 +621,17 @@ export function AdminConsole() {
                     ))}
                   </select>
                 </Field>
+                <Field label="ติดต่อโรงเรียนใน Rich Menu LINE">
+                  <input
+                    className="app-input"
+                    value={settings.schoolContact}
+                    onChange={(event) => setSettings({ ...settings, schoolContact: event.target.value })}
+                    placeholder="ใส่ลิงก์ เช่น https://line.me/... หรือเบอร์โทร เช่น 045123456"
+                  />
+                </Field>
+                <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                  หากกรอกเป็นเบอร์โทร ระบบจะเปิดเป็นปุ่มโทรออก ถ้ากรอกเป็นลิงก์ ระบบจะเปิดลิงก์นั้นจากปุ่มติดต่อโรงเรียนใน LINE
+                </p>
                 <button type="button" onClick={saveSettings} disabled={busy} className="app-button-primary mt-4">
                   <Save size={16} />
                   บันทึกตั้งค่า
@@ -608,9 +641,13 @@ export function AdminConsole() {
                     <Link2 size={16} />
                     ลิงก์ LINE แชท bot
                   </a>
-                  <a href="/check-result" className="app-button-secondary" target="_blank" rel="noreferrer">
+                  <a href={webResultUrl} className="app-button-secondary" target="_blank" rel="noreferrer">
                     <Search size={16} />
                     ลิงก์ดูคะแนนหน้าเว็บ
+                  </a>
+                  <a href={schoolContactUrl} className="app-button-secondary" target="_blank" rel="noreferrer">
+                    <Link2 size={16} />
+                    ลิงก์ติดต่อโรงเรียน
                   </a>
                 </div>
               </div>
@@ -925,20 +962,38 @@ export function AdminConsole() {
           <Panel icon={<Link2 size={18} />} title="LINE เช็คผลด้วยตัวเอง">
             <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
+                <div className="overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/line-rich-menu.png" alt="ตัวอย่าง Rich Menu LINE" className="h-auto w-full" />
+                </div>
                 <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> นักเรียนเปิด LIFF จาก Rich Menu แล้วกรอกรหัสนักเรียน</p>
                 <p><span className="font-semibold text-[var(--text-main)]">2. ปิด LIFF อัตโนมัติ</span> หลังผูกสำเร็จ ระบบจะปิดหน้าต่างเพื่อกลับไปหน้าแชท LINE</p>
                 <p><span className="font-semibold text-[var(--text-main)]">3. ดูผลคะแนน</span> กดปุ่มเช็คผลใน Rich Menu แล้วบอทจะตอบการ์ดผลคะแนนในแชท</p>
-                <p><span className="font-semibold text-[var(--text-main)]">Webhook</span> ตั้งค่า LINE Developers เป็น /api/line/webhook และให้ปุ่มเช็คผลส่ง postback action=check_result</p>
+                <p><span className="font-semibold text-[var(--text-main)]">4. เช็คผลผ่านเว็บ</span> ปุ่มนี้เปิดหน้าเว็บเต็มที่ /check-result โดยตรง ไม่เปิดหน้า LIFF ย่อ</p>
+                <p><span className="font-semibold text-[var(--text-main)]">5. ติดต่อโรงเรียน</span> ปุ่มนี้เปิดค่าที่ตั้งไว้ในช่องติดต่อโรงเรียนของแท็บตั้งค่า</p>
+                <p><span className="font-semibold text-[var(--text-main)]">Webhook</span> ตั้งค่า LINE Developers เป็น /api/line/webhook และให้ปุ่มดูผลคะแนนส่ง postback action=check_result</p>
               </div>
               <div className="space-y-2">
                 <a href={lineResultUrl} className="app-button-primary w-full" target="_blank" rel="noreferrer">
                   <Link2 size={16} />
                   เปิดลิงก์ LINE แชท bot
                 </a>
-                <a href="/check-result" className="app-button-secondary w-full" target="_blank" rel="noreferrer">
+                <a href={webResultUrl} className="app-button-secondary w-full" target="_blank" rel="noreferrer">
                   <Search size={16} />
                   เปิดหน้าเว็บดูคะแนน
                 </a>
+                <a href={schoolContactUrl} className="app-button-secondary w-full" target="_blank" rel="noreferrer">
+                  <Link2 size={16} />
+                  ทดสอบลิงก์ติดต่อโรงเรียน
+                </a>
+                <a href="/api/line/rich-menu" className="app-button-secondary w-full" target="_blank" rel="noreferrer">
+                  <ListChecks size={16} />
+                  ดู JSON ตั้งค่า Rich Menu
+                </a>
+                <button type="button" onClick={updateLineRichMenu} disabled={busy} className="app-button-pink w-full">
+                  <Save size={16} />
+                  อัปเดต Rich Menu ใน LINE
+                </button>
               </div>
             </div>
           </Panel>

@@ -73,7 +73,7 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-sky-700">{publicSettings.schoolName}</p>
+              <p className="text-lg font-semibold leading-tight text-sky-700 md:text-xl">{publicSettings.schoolName}</p>
               <h1 className="mt-1 text-xl font-semibold leading-tight text-slate-950 md:text-3xl">
                 {publicSettings.activeExam?.name ?? "ประกาศผลสอบ"}
               </h1>
@@ -185,22 +185,6 @@ function InstantResultCard({ result }: { result: PublicStudentResult }) {
       <div className="space-y-5 p-5">
         <section>
           <div className="mb-3 flex items-center gap-2">
-            <BarChart3 size={18} className="text-sky-600" />
-            <h3 className="font-semibold text-slate-950">เทียบค่าเฉลี่ยคะแนนรวม</h3>
-          </div>
-          <div className="rounded-3xl bg-slate-50 p-4">
-            <ScoreBar label="นักเรียน" value={result.statistics.total.score} max={Math.max(result.statistics.total.score, result.statistics.total.roomAverage, result.statistics.total.levelAverage, 1)} color="bg-sky-500" />
-            <ScoreBar label="เฉลี่ยห้อง" value={result.statistics.total.roomAverage} max={Math.max(result.statistics.total.score, result.statistics.total.roomAverage, result.statistics.total.levelAverage, 1)} color="bg-pink-400" />
-            <ScoreBar label="เฉลี่ยทั้งชั้น" value={result.statistics.total.levelAverage} max={Math.max(result.statistics.total.score, result.statistics.total.roomAverage, result.statistics.total.levelAverage, 1)} color="bg-violet-400" />
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <RankPill label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} />
-              <RankPill label="อันดับทั้งชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-3 flex items-center gap-2">
             <Trophy size={18} className="text-pink-500" />
             <h3 className="font-semibold text-slate-950">กราฟรายวิชา</h3>
           </div>
@@ -222,12 +206,30 @@ function InstantResultCard({ result }: { result: PublicStudentResult }) {
           </div>
         </section>
 
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 size={18} className="text-sky-600" />
+            <h3 className="font-semibold text-slate-950">เทียบค่าเฉลี่ยคะแนนรวม</h3>
+          </div>
+          <div className="rounded-3xl bg-slate-50 p-4">
+            <ScoreBar label="นักเรียน" value={result.statistics.total.score} max={Math.max(result.statistics.total.score, result.statistics.total.roomAverage, result.statistics.total.levelAverage, 1)} color="bg-sky-500" />
+            <ScoreBar label="เฉลี่ยห้อง" value={result.statistics.total.roomAverage} max={Math.max(result.statistics.total.score, result.statistics.total.roomAverage, result.statistics.total.levelAverage, 1)} color="bg-pink-400" />
+            <ScoreBar label="เฉลี่ยทั้งชั้น" value={result.statistics.total.levelAverage} max={Math.max(result.statistics.total.score, result.statistics.total.roomAverage, result.statistics.total.levelAverage, 1)} color="bg-violet-400" />
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <RankPill label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} />
+              <RankPill label="อันดับทั้งชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
+            </div>
+          </div>
+        </section>
+
         <p className="rounded-3xl bg-sky-50 px-4 py-3 text-sm leading-6 text-slate-600">{result.result.reason}</p>
 
-        {result.result.status === "PASSED" && (result.exam.passTitle || result.exam.passInstructions) && (
+        {result.result.status === "PASSED" && (
           <section className="rounded-3xl border border-pink-100 bg-pink-50 px-4 py-3">
-            <p className="text-sm font-semibold text-pink-800">{result.exam.passTitle ?? "แจ้งสำหรับผู้ผ่านการคัดเลือก"}</p>
-            {result.exam.passInstructions && <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">{result.exam.passInstructions}</p>}
+            <p className="text-sm font-semibold text-pink-800">{result.exam.passTitle || "ผ่านการคัดเลือก"}</p>
+            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">
+              {result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน"}
+            </p>
           </section>
         )}
 

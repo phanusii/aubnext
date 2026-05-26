@@ -64,7 +64,7 @@ function formatScore(value: number) {
 export function StudentResultCard({ result }: { result: StudentResultResponse }) {
   return (
     <article className="overflow-hidden rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-solid)] shadow-[var(--shadow-soft)]">
-      <div className="grid gap-5 bg-[linear-gradient(135deg,#e0f2fe,#fff0f7)] p-5 md:grid-cols-[1fr_230px] md:items-center">
+      <div className="bg-[linear-gradient(135deg,#e0f2fe,#fff0f7)] p-5">
         <div>
           <div className="flex items-center gap-3">
             {result.school.logoUrl ? (
@@ -76,7 +76,7 @@ export function StudentResultCard({ result }: { result: StudentResultResponse })
               </div>
             )}
             <div>
-              <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{result.school.schoolName}</p>
+              <p className="text-xl font-semibold leading-tight text-[var(--primary-blue-strong)] md:text-2xl">{result.school.schoolName}</p>
               <h1 className="text-xl font-semibold leading-tight md:text-2xl">{result.exam.name}</h1>
             </div>
           </div>
@@ -84,10 +84,6 @@ export function StudentResultCard({ result }: { result: StudentResultResponse })
             <Sparkles size={16} />
             ผลสอบส่วนตัวของนักเรียน
           </div>
-        </div>
-        <div className="mx-auto max-w-56">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/result-mascot.png" alt="การ์ตูนนักเรียนถือถ้วยรางวัล" className="h-auto w-full drop-shadow-lg" />
         </div>
       </div>
 
@@ -105,25 +101,6 @@ export function StudentResultCard({ result }: { result: StudentResultResponse })
           </span>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <InfoCard icon={<Medal size={18} />} label={result.exam.selectionMode === "PER_ROOM" ? "อันดับในห้อง" : "อันดับทั้งชั้น"} value={String(result.result.rank)} />
-          <InfoCard icon={<Award size={18} />} label="คะแนนรวม" value={formatScore(result.result.totalScore)} />
-          <InfoCard icon={<ShieldCheck size={18} />} label="สถานะ" value={statusText[result.result.status]} />
-        </div>
-
-        {result.statistics && (
-          <div className="mt-5">
-            <div className="mb-2 flex items-center gap-2 font-semibold">
-              <BarChart3 size={18} />
-              สถิติเปรียบเทียบ
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <InfoCard label="เฉลี่ยห้อง / ทั้งชั้น" value={`${formatScore(result.statistics.total.roomAverage)} / ${formatScore(result.statistics.total.levelAverage)}`} />
-              <InfoCard label="อันดับห้อง / ทั้งชั้น" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount} · ${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
-            </div>
-          </div>
-        )}
-
         <div className="mt-5">
           <div className="mb-2 flex items-center gap-2 font-semibold">
             <ShieldCheck size={18} />
@@ -139,18 +116,37 @@ export function StudentResultCard({ result }: { result: StudentResultResponse })
           </div>
         </div>
 
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <InfoCard icon={<Medal size={18} />} label={result.exam.selectionMode === "PER_ROOM" ? "อันดับในห้อง" : "อันดับทั้งชั้น"} value={String(result.result.rank)} />
+          <InfoCard icon={<Award size={18} />} label="คะแนนรวม" value={formatScore(result.result.totalScore)} />
+          <InfoCard icon={<ShieldCheck size={18} />} label="สถานะ" value={statusText[result.result.status]} />
+        </div>
+
+        {result.statistics && (
+          <div className="mt-5">
+            <div className="mb-2 flex items-center gap-2 font-semibold">
+              <BarChart3 size={18} />
+              สถิติเปรียบเทียบคะแนนรวม
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoCard label="เฉลี่ยห้อง / ทั้งชั้น" value={`${formatScore(result.statistics.total.roomAverage)} / ${formatScore(result.statistics.total.levelAverage)}`} />
+              <InfoCard label="อันดับห้อง / ทั้งชั้น" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount} · ${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
+            </div>
+          </div>
+        )}
+
         <p className="mt-4 rounded-2xl bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">{result.result.reason}</p>
 
-        {result.result.status === "PASSED" && (result.exam.passTitle || result.exam.passInstructions) && (
+        {result.result.status === "PASSED" && (
           <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-sky-800">
               <ShieldCheck size={18} />
               แจ้งสำหรับผู้ผ่านการคัดเลือก
             </div>
-            {result.exam.passTitle && <p className="mt-2 font-semibold text-[var(--text-main)]">{result.exam.passTitle}</p>}
-            {result.exam.passInstructions && (
-              <p className="mt-1 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">{result.exam.passInstructions}</p>
-            )}
+            <p className="mt-2 font-semibold text-[var(--text-main)]">{result.exam.passTitle || "ผ่านการคัดเลือก"}</p>
+            <p className="mt-1 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">
+              {result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน"}
+            </p>
           </div>
         )}
       </div>

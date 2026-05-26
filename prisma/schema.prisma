@@ -28,6 +28,7 @@ model SchoolSettings {
   examTitle           String   @default("ประกาศผลสอบแข่งขัน")
   logoUrl             String?
   activeExamSessionId String?
+  schoolContact       String?
   updatedAt           DateTime @updatedAt
 }
 
