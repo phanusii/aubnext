@@ -1381,7 +1381,18 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
     studentId: binding.studentId,
     examSessionId: binding.examSessionId,
   });
-  const result = published?.result;
+  let result = published?.result ?? null;
+  if (!result && published && "cacheMissing" in published) {
+    console.warn("LINE result cache missing, falling back to private result builder", {
+      examSessionId: binding.examSessionId,
+      studentId: binding.studentId,
+    });
+    result = await checkPrivateResult({
+      examNo: binding.student.examNo,
+      studentId: binding.studentId,
+      examSessionId: binding.examSessionId,
+    });
+  }
   if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
   return {
     ok: true as const,
