@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { School, Search, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
@@ -20,7 +20,12 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
   const [examNo, setExamNo] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const publicSettings = initialSettings;
+
+  useEffect(() => {
+    router.prefetch("/check-result/result");
+  }, [router]);
 
   async function checkResult() {
     if (busy) return;
@@ -39,7 +44,10 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
       return;
     }
 
-    router.push("/check-result/result");
+    setBusy(true);
+    startTransition(() => {
+      router.push("/check-result/result");
+    });
   }
 
   return (
@@ -96,11 +104,17 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
                 autoComplete="off"
               />
             </label>
-            <button type="submit" disabled={busy} className="app-button-primary mt-6 sm:mt-auto">
+            <button type="submit" disabled={busy || isPending || !examNo.trim()} className="app-button-primary mt-6 sm:mt-auto">
               <Search size={18} />
-              {busy ? "กำลังตรวจ" : "ตรวจผล"}
+              {busy || isPending ? "กำลังเปิดผล" : "ตรวจผล"}
             </button>
           </div>
+
+          {(busy || isPending) && !error && (
+            <div className="mt-4 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+              กำลังเตรียมหน้าผลคะแนน โปรดรอสักครู่
+            </div>
+          )}
 
           {error && (
             <div className="mt-5 flex items-start gap-2 rounded-xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] p-3 text-sm text-[var(--accent-pink-strong)]">

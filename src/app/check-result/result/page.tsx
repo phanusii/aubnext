@@ -37,7 +37,7 @@ function formatPublishedAt(value: string | Date | null) {
 export default async function ResultPage() {
   const cookieStore = await cookies();
   const lookup = readStudentResultCookie(cookieStore.get(studentResultCookieName())?.value);
-  const result = lookup ? await checkPrivateResult({ examNo: lookup.examNo }) : null;
+  const result = lookup ? await checkPrivateResult(lookup) : null;
 
   if (!result) {
     const settings = await getCachedPublicResultSettings();

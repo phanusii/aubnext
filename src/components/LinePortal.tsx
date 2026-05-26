@@ -9,6 +9,20 @@ type LineProfile = {
   displayName?: string;
 };
 
+type LineBindingInfo = {
+  student: {
+    examNo: string;
+    name: string;
+    classLevel: string;
+    room: string;
+  };
+  exam: {
+    id: string;
+    name: string;
+    status: string;
+  };
+};
+
 declare global {
   interface Window {
     liff?: {
@@ -25,6 +39,8 @@ export function LinePortal() {
   const [profile, setProfile] = useState<LineProfile | null>(null);
   const [examNo, setExamNo] = useState("");
   const [message, setMessage] = useState("กำลังเชื่อมต่อ LINE...");
+  const [binding, setBinding] = useState<LineBindingInfo | null>(null);
+  const [showChangeForm, setShowChangeForm] = useState(false);
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -36,6 +52,26 @@ export function LinePortal() {
         setMessage("ผูกบัญชีสำเร็จ กรุณาปิดหน้าต่างนี้แล้วกดปุ่มเช็คผลใน LINE");
       }
     }, 700);
+  }, []);
+
+  const loadBindingStatus = useCallback(async (lineUserId: string, displayName?: string) => {
+    const response = await fetch("/api/line/binding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lineUserId }),
+    });
+    const data = await response.json();
+
+    if (response.ok) {
+      setBinding(data);
+      setShowChangeForm(false);
+      setMessage(`ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว`);
+      return;
+    }
+
+    setBinding(null);
+    setShowChangeForm(true);
+    setMessage(`พร้อมเชื่อมต่อบัญชี${displayName ? `: ${displayName}` : ""}`);
   }, []);
 
   useEffect(() => {
@@ -57,7 +93,7 @@ export function LinePortal() {
         }
         const loadedProfile = await window.liff.getProfile();
         setProfile(loadedProfile);
-        setMessage(`พร้อมเชื่อมต่อบัญชี${loadedProfile.displayName ? `: ${loadedProfile.displayName}` : ""}`);
+        await loadBindingStatus(loadedProfile.userId, loadedProfile.displayName);
       } catch {
         setMessage("เปิด LIFF ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
@@ -66,7 +102,7 @@ export function LinePortal() {
     return () => {
       script.remove();
     };
-  }, []);
+  }, [loadBindingStatus]);
 
   async function bindAccount() {
     if (!profile) return;
@@ -85,9 +121,13 @@ export function LinePortal() {
     }
 
     setSuccess(true);
-    setMessage("เชื่อมต่อสำเร็จ กำลังกลับไป LINE");
+    setBinding({ student: data.student, exam: data.exam });
+    setShowChangeForm(false);
+    setMessage(`ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว กำลังกลับไป LINE`);
     closeLiffWindow();
   }
+
+  const showForm = !binding || showChangeForm;
 
   return (
     <main className="min-h-screen bg-[#f8fbff] text-[var(--text-main)]">
@@ -104,7 +144,7 @@ export function LinePortal() {
           <div className="mb-5 flex items-start gap-3 rounded-2xl bg-[#f7fbff] px-4 py-3 text-sm text-[var(--text-muted)]">
             {busy ? (
               <Loader2 size={18} className="mt-0.5 shrink-0 animate-spin text-[var(--primary-blue-strong)]" />
-            ) : success ? (
+            ) : success || (binding && !showChangeForm) ? (
               <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-600" />
             ) : (
               <Link2 size={18} className="mt-0.5 shrink-0 text-[var(--primary-blue-strong)]" />
@@ -112,28 +152,54 @@ export function LinePortal() {
             <span className={success ? "font-semibold text-emerald-700" : ""}>{message}</span>
           </div>
 
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void bindAccount();
-            }}
-          >
-            <label className="text-sm font-medium">
-              รหัสนักเรียน
-              <input
-                value={examNo}
-                onChange={(event) => setExamNo(event.target.value)}
-                className="app-input mt-2 text-lg"
-                inputMode="numeric"
-                autoComplete="off"
-              />
-            </label>
-            <button type="submit" disabled={busy || !profile || !examNo.trim() || success} className="app-button-primary w-full">
-              <Search size={18} />
-              เชื่อมต่อบัญชี
-            </button>
-          </form>
+          {binding && !showChangeForm && (
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700">ผูกบัญชีแล้ว</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-900">{binding.student.name}</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                รหัส {binding.student.examNo} · {binding.student.classLevel}/{binding.student.room}
+              </p>
+              <p className="mt-3 text-xs leading-5 text-slate-500">{binding.exam.name}</p>
+              <button
+                type="button"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 py-3 font-semibold text-[var(--primary-blue-strong)] transition hover:border-sky-300 hover:bg-sky-50"
+                onClick={() => {
+                  setExamNo("");
+                  setSuccess(false);
+                  setShowChangeForm(true);
+                  setMessage("กรอกรหัสนักเรียนใหม่เพื่อเปลี่ยนบัญชีที่ผูกกับ LINE นี้");
+                }}
+              >
+                <Link2 size={18} />
+                เปลี่ยนบัญชี
+              </button>
+            </div>
+          )}
+
+          {showForm && (
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void bindAccount();
+              }}
+            >
+              <label className="text-sm font-medium">
+                รหัสนักเรียน
+                <input
+                  value={examNo}
+                  onChange={(event) => setExamNo(event.target.value)}
+                  className="app-input mt-2 text-lg"
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+              </label>
+              <button type="submit" disabled={busy || !profile || !examNo.trim() || success} className="app-button-primary w-full">
+                <Search size={18} />
+                {binding ? "ยืนยันเปลี่ยนบัญชี" : "เชื่อมต่อบัญชี"}
+              </button>
+            </form>
+          )}
 
           {!profile && (
             <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] p-3 text-sm text-[var(--accent-pink-strong)]">

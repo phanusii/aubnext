@@ -4,6 +4,12 @@ const cookieName = "exam_admin";
 const studentResultCookie = "student_result_lookup";
 const studentResultMaxAgeMs = 30 * 60 * 1000;
 
+type StudentResultLookup = {
+  examNo: string;
+  studentId?: string;
+  examSessionId?: string;
+};
+
 function authSecret() {
   return process.env.AUTH_SECRET || "dev-secret-change-me";
 }
@@ -42,9 +48,14 @@ export function studentResultCookieMaxAgeSeconds() {
   return Math.floor(studentResultMaxAgeMs / 1000);
 }
 
-export function signStudentResultCookie(examNo: string) {
+export function signStudentResultCookie(lookup: string | StudentResultLookup) {
   const issuedAt = Date.now();
-  const payload = Buffer.from(JSON.stringify({ examNo: examNo.trim(), issuedAt })).toString("base64url");
+  const normalized = typeof lookup === "string" ? { examNo: lookup.trim() } : {
+    examNo: lookup.examNo.trim(),
+    studentId: lookup.studentId,
+    examSessionId: lookup.examSessionId,
+  };
+  const payload = Buffer.from(JSON.stringify({ ...normalized, issuedAt })).toString("base64url");
   const signature = createHmac("sha256", authSecret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
 }
@@ -62,11 +73,17 @@ export function readStudentResultCookie(value?: string) {
   try {
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
       examNo?: unknown;
+      studentId?: unknown;
+      examSessionId?: unknown;
       issuedAt?: unknown;
     };
     if (typeof decoded.examNo !== "string" || typeof decoded.issuedAt !== "number") return null;
     if (Date.now() - decoded.issuedAt > studentResultMaxAgeMs) return null;
-    return { examNo: decoded.examNo };
+    return {
+      examNo: decoded.examNo,
+      studentId: typeof decoded.studentId === "string" ? decoded.studentId : undefined,
+      examSessionId: typeof decoded.examSessionId === "string" ? decoded.examSessionId : undefined,
+    };
   } catch {
     return null;
   }

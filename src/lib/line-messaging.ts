@@ -28,6 +28,7 @@ type LineStudentResult = {
 };
 
 const replyEndpoint = "https://api.line.me/v2/bot/message/reply";
+const loadingEndpoint = "https://api.line.me/v2/bot/chat/loading/start";
 
 const statusText = {
   PASSED: "ผ่านการคัดเลือก",
@@ -72,6 +73,25 @@ export async function replyLineMessage(replyToken: string, messages: LineMessage
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(`LINE reply failed: ${response.status} ${detail}`);
+  }
+}
+
+export async function startLineLoading(chatId: string, loadingSeconds = 10) {
+  const token = channelAccessToken();
+  if (!token) throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN");
+
+  const response = await fetch(loadingEndpoint, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ chatId, loadingSeconds }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`LINE loading animation failed: ${response.status} ${detail}`);
   }
 }
 

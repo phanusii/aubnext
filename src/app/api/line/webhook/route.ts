@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, verifyLineSignature } from "@/lib/line-messaging";
+import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, startLineLoading, verifyLineSignature } from "@/lib/line-messaging";
 import { getLineBoundResult } from "@/lib/repository";
 
 type LineWebhookEvent = {
@@ -58,6 +58,10 @@ export async function POST(request: Request) {
           return;
         }
 
+        await startLineLoading(lineUserId, 10).catch((error) => {
+          console.warn("LINE loading animation failed", error);
+        });
+
         const result = await getLineBoundResult({ lineUserId });
         if (!result.ok) {
           console.info("LINE result lookup needs binding", { lineUserId, error: result.error });
@@ -68,7 +72,6 @@ export async function POST(request: Request) {
         await replyLineMessage(event.replyToken, [buildResultFlexMessage(result.result)]);
       } catch (error) {
         console.error("LINE webhook reply failed", error);
-        throw error;
       }
     }),
   );

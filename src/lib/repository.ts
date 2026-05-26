@@ -40,6 +40,9 @@ type PeerResultSnapshot = {
   };
 };
 
+const peerSnapshotMemoryCache = new Map<string, { expiresAt: number; data: PeerResultSnapshot[] }>();
+const peerSnapshotCacheMs = 60_000;
+
 export async function upsertSchoolSettings(input: {
   schoolName: string;
   examTitle?: string;
@@ -482,6 +485,7 @@ export async function calculateExamResults(examSessionId: string) {
       })),
     }),
   ]);
+  peerSnapshotMemoryCache.delete(examSessionId);
 
   return calculated;
 }
@@ -516,6 +520,7 @@ export async function publishExam(
       data: { publishedAt },
     }),
   ]);
+  peerSnapshotMemoryCache.delete(examSessionId);
 
   return { publishedAt };
 }
@@ -637,8 +642,11 @@ function buildPrivateResult(
 }
 
 async function getPublishedPeerSnapshots(examSessionId: string) {
+  const cached = peerSnapshotMemoryCache.get(examSessionId);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
   const prisma = getPrisma();
-  return prisma.resultSnapshot.findMany({
+  const data = await prisma.resultSnapshot.findMany({
     where: { examSessionId },
     select: {
       studentId: true,
@@ -652,33 +660,69 @@ async function getPublishedPeerSnapshots(examSessionId: string) {
       },
     },
   });
+  peerSnapshotMemoryCache.set(examSessionId, { expiresAt: Date.now() + peerSnapshotCacheMs, data });
+  return data;
 }
 
-export async function checkPrivateResult(input: { examNo: string }) {
+async function getActivePublishedExamId(input?: { examSessionId?: string }) {
   const prisma = getPrisma();
   const settings = await getSchoolSettings();
-  const activeExam = settings.activeExamSessionId
-    ? await prisma.examSession.findUnique({ where: { id: settings.activeExamSessionId } })
-    : await prisma.examSession.findFirst({ where: { status: "PUBLISHED" }, orderBy: { publishedAt: "desc" } });
+  const activeExamId = settings.activeExamSessionId ?? input?.examSessionId;
+  const activeExam = activeExamId
+    ? await prisma.examSession.findUnique({
+        where: { id: activeExamId },
+        select: { id: true, status: true },
+      })
+    : await prisma.examSession.findFirst({
+        where: { status: "PUBLISHED" },
+        orderBy: { publishedAt: "desc" },
+        select: { id: true, status: true },
+      });
 
   if (!activeExam || activeExam.status !== "PUBLISHED") return null;
+  if (settings.activeExamSessionId && input?.examSessionId && settings.activeExamSessionId !== input.examSessionId) return null;
+  return { settings, activeExamId: activeExam.id };
+}
+
+export async function findPublishedStudentResultLookup(input: { examNo: string }) {
+  const prisma = getPrisma();
+  const active = await getActivePublishedExamId();
+  if (!active) return null;
 
   const student = await prisma.student.findFirst({
     where: {
       examNo: input.examNo.trim(),
-      examSessionId: activeExam.id,
+      examSessionId: active.activeExamId,
+      resultSnapshots: { some: { examSessionId: active.activeExamId } },
+    },
+    select: { id: true, examNo: true, examSessionId: true },
+  });
+
+  if (!student) return null;
+  return { examNo: student.examNo, studentId: student.id, examSessionId: student.examSessionId };
+}
+
+export async function checkPrivateResult(input: { examNo: string; studentId?: string; examSessionId?: string }) {
+  const prisma = getPrisma();
+  const active = await getActivePublishedExamId({ examSessionId: input.examSessionId });
+  if (!active) return null;
+
+  const student = await prisma.student.findFirst({
+    where: {
+      ...(input.studentId ? { id: input.studentId } : { examNo: input.examNo.trim() }),
+      examSessionId: active.activeExamId,
     },
     include: {
       examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
-      resultSnapshots: true,
+      resultSnapshots: { where: { examSessionId: active.activeExamId } },
     },
   });
 
   if (!student) return null;
 
-  const peerSnapshots = await getPublishedPeerSnapshots(activeExam.id);
+  const peerSnapshots = await getPublishedPeerSnapshots(active.activeExamId);
 
-  return buildPrivateResult(settings, student, peerSnapshots);
+  return buildPrivateResult(active.settings, student, peerSnapshots);
 }
 
 export async function bindLineStudent(input: { lineUserId: string; examNo: string; lineName?: string | null }) {
@@ -782,6 +826,39 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
   const result = buildPrivateResult(settings, binding.student, peerSnapshots);
   if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
   return { ok: true as const, result };
+}
+
+export async function getLineBindingStatus(input: { lineUserId: string }) {
+  const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const binding = await prisma.lineBinding.findFirst({
+    where: {
+      lineUserId: input.lineUserId,
+      ...(settings.activeExamSessionId ? { examSessionId: settings.activeExamSessionId } : {}),
+    },
+    include: {
+      student: true,
+      examSession: true,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (!binding) return { ok: false as const, error: "ยังไม่ได้ผูกบัญชี LINE กับรหัสนักเรียน" };
+
+  return {
+    ok: true as const,
+    student: {
+      examNo: binding.student.examNo,
+      name: binding.student.name,
+      classLevel: binding.student.classLevel,
+      room: binding.student.room,
+    },
+    exam: {
+      id: binding.examSession.id,
+      name: binding.examSession.name,
+      status: binding.examSession.status,
+    },
+  };
 }
 
 export async function findUnpublishedStudentExam(input: { examNo: string }) {
