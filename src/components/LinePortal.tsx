@@ -1,17 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Link2, Loader2, School, Search, XCircle } from "lucide-react";
+import { CheckCircle2, Link2, Loader2, Search, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 
 type LineProfile = {
   userId: string;
   displayName?: string;
-};
-type PublicSettings = {
-  schoolName: string;
-  logoUrl?: string | null;
-  activeExam?: { name: string; classLevel: string } | null;
 };
 
 declare global {
@@ -29,13 +24,9 @@ declare global {
 export function LinePortal() {
   const [profile, setProfile] = useState<LineProfile | null>(null);
   const [examNo, setExamNo] = useState("");
-  const [message, setMessage] = useState("กำลังเปิด LINE LIFF...");
+  const [message, setMessage] = useState("กำลังเชื่อมต่อ LINE...");
+  const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [publicSettings, setPublicSettings] = useState<PublicSettings>({
-    schoolName: "โรงเรียนตัวอย่าง",
-    logoUrl: "",
-    activeExam: null,
-  });
 
   const closeLiffWindow = useCallback(() => {
     setTimeout(() => {
@@ -48,17 +39,6 @@ export function LinePortal() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then((response) => response.json())
-      .then((data) =>
-        setPublicSettings({
-          schoolName: data.schoolName ?? "โรงเรียนตัวอย่าง",
-          logoUrl: data.logoUrl ?? "",
-          activeExam: data.activeExam ?? null,
-        }),
-      )
-      .catch(() => undefined);
-
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
     if (!liffId) {
       queueMicrotask(() => setMessage("ยังไม่ได้ตั้งค่า NEXT_PUBLIC_LIFF_ID"));
@@ -77,7 +57,7 @@ export function LinePortal() {
         }
         const loadedProfile = await window.liff.getProfile();
         setProfile(loadedProfile);
-        setMessage(`สวัสดี ${loadedProfile.displayName ?? "นักเรียน"} กรุณากรอกรหัสนักเรียนเพื่อเชื่อมต่อบัญชี`);
+        setMessage(`พร้อมเชื่อมต่อบัญชี${loadedProfile.displayName ? `: ${loadedProfile.displayName}` : ""}`);
       } catch {
         setMessage("เปิด LIFF ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
@@ -104,61 +84,56 @@ export function LinePortal() {
       return;
     }
 
-    setMessage("ผูกบัญชีสำเร็จ กำลังปิดหน้าต่าง กรุณากดปุ่มเช็คผลอีกครั้งใน LINE");
+    setSuccess(true);
+    setMessage("เชื่อมต่อสำเร็จ กำลังกลับไป LINE");
     closeLiffWindow();
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#e0f2fe,#fff0f7)] text-[var(--text-main)]">
-      <section className="mx-auto min-h-screen w-full max-w-3xl px-5 py-8">
-        <div className="mb-5 flex items-center gap-3 rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-solid)] p-4 shadow-[var(--shadow-soft)]">
-          {publicSettings.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={publicSettings.logoUrl} alt="" className="size-16 rounded-2xl object-cover ring-2 ring-[var(--pink-soft)]" />
-          ) : (
-            <div className="grid size-16 place-items-center rounded-2xl bg-[var(--primary-blue)] text-white">
-              <School size={28} />
-            </div>
-          )}
-          <div>
-            <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{publicSettings.schoolName}</p>
-            <h1 className="text-xl font-semibold leading-tight">{publicSettings.activeExam?.name ?? "LINE ดูผลคะแนน"}</h1>
-            {publicSettings.activeExam?.classLevel && (
-              <p className="text-xs text-[var(--text-muted)]">ระดับชั้น {publicSettings.activeExam.classLevel}</p>
+    <main className="min-h-screen bg-[#f8fbff] text-[var(--text-main)]">
+      <section className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-8">
+        <div className="mb-6 text-center">
+          <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">ระบบประกาศผลสอบ</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-normal">เชื่อมต่อบัญชี LINE</h1>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
+            กรอกรหัสนักเรียนเพื่อผูกกับบัญชี LINE แล้วกลับไปกดดูผลคะแนนในแชท
+          </p>
+        </div>
+
+        <div className="rounded-[1.5rem] border border-[var(--border-soft)] bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+          <div className="mb-5 flex items-start gap-3 rounded-2xl bg-[#f7fbff] px-4 py-3 text-sm text-[var(--text-muted)]">
+            {busy ? (
+              <Loader2 size={18} className="mt-0.5 shrink-0 animate-spin text-[var(--primary-blue-strong)]" />
+            ) : success ? (
+              <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-600" />
+            ) : (
+              <Link2 size={18} className="mt-0.5 shrink-0 text-[var(--primary-blue-strong)]" />
             )}
-          </div>
-        </div>
-        <div className="mb-5 text-center">
-          <div className="mx-auto mb-3 max-w-36">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/result-mascot.png" alt="การ์ตูนนักเรียนถือถ้วยรางวัล" className="h-auto w-full" />
-          </div>
-          <h2 className="text-3xl font-semibold">เชื่อมต่อบัญชี LINE</h2>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">ผูกบัญชีด้วยรหัสนักเรียน แล้วกดปุ่มเช็คผลใน LINE เพื่อรับการ์ดผลคะแนน</p>
-        </div>
-
-        <div className="rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-solid)] p-5 shadow-[var(--shadow-soft)]">
-          <div className="mb-4 flex items-center gap-2 text-sm text-[var(--text-muted)]">
-            {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={18} />}
-            {message}
+            <span className={success ? "font-semibold text-emerald-700" : ""}>{message}</span>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void bindAccount();
+            }}
+          >
             <label className="text-sm font-medium">
               รหัสนักเรียน
               <input
                 value={examNo}
                 onChange={(event) => setExamNo(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && bindAccount()}
-                className="app-input mt-1"
+                className="app-input mt-2 text-lg"
                 inputMode="numeric"
+                autoComplete="off"
               />
             </label>
-            <button type="button" onClick={bindAccount} disabled={busy || !profile || !examNo.trim()} className="app-button-primary mt-6 md:mt-auto">
+            <button type="submit" disabled={busy || !profile || !examNo.trim() || success} className="app-button-primary w-full">
               <Search size={18} />
-              ผูกบัญชี
+              เชื่อมต่อบัญชี
             </button>
-          </div>
+          </form>
 
           {!profile && (
             <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] p-3 text-sm text-[var(--accent-pink-strong)]">

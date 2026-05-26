@@ -52,18 +52,24 @@ export async function POST(request: Request) {
       if (!isCheckResultEvent(event) || !event.replyToken) return;
 
       const lineUserId = event.source?.userId;
-      if (!lineUserId) {
-        await replyLineMessage(event.replyToken, [buildBindPromptMessage("ไม่พบ LINE userId กรุณาเปิดจากบัญชี LINE ส่วนตัว")]);
-        return;
-      }
+      try {
+        if (!lineUserId) {
+          await replyLineMessage(event.replyToken, [buildBindPromptMessage("ไม่พบ LINE userId กรุณาเปิดจากบัญชี LINE ส่วนตัว")]);
+          return;
+        }
 
-      const result = await getLineBoundResult({ lineUserId });
-      if (!result.ok) {
-        await replyLineMessage(event.replyToken, [buildBindPromptMessage(result.error)]);
-        return;
-      }
+        const result = await getLineBoundResult({ lineUserId });
+        if (!result.ok) {
+          console.info("LINE result lookup needs binding", { lineUserId, error: result.error });
+          await replyLineMessage(event.replyToken, [buildBindPromptMessage(result.error)]);
+          return;
+        }
 
-      await replyLineMessage(event.replyToken, [buildResultFlexMessage(result.result)]);
+        await replyLineMessage(event.replyToken, [buildResultFlexMessage(result.result)]);
+      } catch (error) {
+        console.error("LINE webhook reply failed", error);
+        throw error;
+      }
     }),
   );
 

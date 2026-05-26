@@ -98,9 +98,10 @@ export function buildBindPromptMessage(error?: string) {
       body: {
         type: "box",
         layout: "vertical",
-        spacing: "md",
+        spacing: "sm",
+        paddingAll: "20px",
         contents: [
-          { type: "text", text: "เชื่อมต่อบัญชีก่อน", weight: "bold", size: "lg", color: "#172033" },
+          { type: "text", text: "เชื่อมต่อบัญชี LINE", weight: "bold", size: "lg", color: "#172033" },
           {
             type: "text",
             text: error ?? "กรุณาผูกบัญชี LINE กับรหัสนักเรียนก่อน แล้วกดเช็คผลอีกครั้ง",
@@ -132,29 +133,14 @@ export function buildBindPromptMessage(error?: string) {
 }
 
 export function buildResultFlexMessage(result: LineStudentResult) {
-  const subjectRows = Object.entries(result.result.scoreBreakdown).slice(0, 6).flatMap(([subject, score]) => [
+  const subjectRows = Object.entries(result.result.scoreBreakdown).slice(0, 8).flatMap(([subject, score]) => [
     {
       type: "box",
       layout: "horizontal",
+      margin: "sm",
       contents: [
-        { type: "text", text: subject, size: "sm", color: "#667085", flex: 4, wrap: true },
-        { type: "text", text: formatScore(score), size: "sm", color: "#172033", weight: "bold", align: "end", flex: 1 },
-      ],
-    },
-  ]);
-
-  const summaryRows = [
-    { label: "คะแนนรวม", value: formatScore(result.result.totalScore) },
-    { label: "อันดับห้อง", value: result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank) },
-    { label: "อันดับทั้งชั้น", value: result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-" },
-    { label: "สถานะ", value: statusText[result.result.status] },
-  ].flatMap((row) => [
-    {
-      type: "box",
-      layout: "horizontal",
-      contents: [
-        { type: "text", text: row.label, size: "sm", color: "#667085", flex: 3 },
-        { type: "text", text: row.value, size: "sm", color: "#172033", weight: "bold", align: "end", flex: 4, wrap: true },
+        { type: "text", text: subject, size: "sm", color: "#64748b", flex: 4, wrap: true },
+        { type: "text", text: formatScore(score), size: "sm", color: "#0f172a", weight: "bold", align: "end", flex: 1 },
       ],
     },
   ]);
@@ -165,7 +151,7 @@ export function buildResultFlexMessage(result: LineStudentResult) {
           { type: "separator", margin: "md" },
           { type: "text", text: result.exam.passTitle ?? "แจ้งสำหรับผู้ผ่านการคัดเลือก", weight: "bold", size: "sm", color: "#0369a1", wrap: true, margin: "md" },
           ...(result.exam.passInstructions
-            ? [{ type: "text", text: result.exam.passInstructions, size: "xs", color: "#667085", wrap: true, margin: "sm" }]
+            ? [{ type: "text", text: result.exam.passInstructions, size: "xs", color: "#64748b", wrap: true, margin: "sm" }]
             : []),
         ]
       : [];
@@ -179,15 +165,58 @@ export function buildResultFlexMessage(result: LineStudentResult) {
         type: "box",
         layout: "vertical",
         spacing: "md",
+        paddingAll: "20px",
         contents: [
           { type: "text", text: result.school.schoolName, size: "sm", color: "#0369a1", weight: "bold", wrap: true },
-          { type: "text", text: result.exam.name, size: "md", color: "#172033", weight: "bold", wrap: true },
+          { type: "text", text: result.exam.name, size: "sm", color: "#64748b", wrap: true },
           { type: "separator", margin: "md" },
-          { type: "text", text: result.student.name, size: "lg", color: "#172033", weight: "bold", wrap: true, margin: "md" },
-          { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#667085" },
-          ...summaryRows,
+          { type: "text", text: result.student.name, size: "xl", color: "#0f172a", weight: "bold", wrap: true, margin: "md" },
+          { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#64748b" },
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: "#f0f9ff",
+            cornerRadius: "16px",
+            paddingAll: "16px",
+            spacing: "sm",
+            margin: "md",
+            contents: [
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", flex: 3 },
+                  { type: "text", text: formatScore(result.result.totalScore), size: "xxl", color: "#0f172a", weight: "bold", align: "end", flex: 3 },
+                ],
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "อันดับห้อง", size: "xs", color: "#64748b", flex: 3 },
+                  { type: "text", text: result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank), size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
+                ],
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "อันดับทั้งชั้น", size: "xs", color: "#64748b", flex: 3 },
+                  { type: "text", text: result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-", size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
+                ],
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  { type: "text", text: "สถานะ", size: "xs", color: "#64748b", flex: 3 },
+                  { type: "text", text: statusText[result.result.status], size: "xs", color: result.result.status === "PASSED" ? "#0369a1" : "#64748b", weight: "bold", align: "end", flex: 4, wrap: true },
+                ],
+              },
+            ],
+          },
           { type: "separator", margin: "md" },
-          { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#172033", weight: "bold", margin: "md" },
+          { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#0f172a", weight: "bold", margin: "md" },
           ...subjectRows,
           ...passContents,
         ],
