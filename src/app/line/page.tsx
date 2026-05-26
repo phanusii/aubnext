@@ -8,6 +8,7 @@ export default async function LinePage() {
 
   return (
     <LinePortal
+      schoolName={settings.schoolName}
       activeExam={settings.activeExam
         ? {
             name: settings.activeExam.name,
