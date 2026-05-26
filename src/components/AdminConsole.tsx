@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import {
   BadgeCheck,
@@ -141,6 +141,8 @@ export function AdminConsole() {
   const [resultsLoadedExamId, setResultsLoadedExamId] = useState("");
   const [resultsLoading, setResultsLoading] = useState(false);
   const [publicResultCacheHealth, setPublicResultCacheHealth] = useState<PublicResultCacheHealth | null>(null);
+  const [cacheRepairingExamId, setCacheRepairingExamId] = useState("");
+  const autoRepairStartedExamIds = useRef<Set<string>>(new Set());
   const [roomFilter, setRoomFilter] = useState("");
   const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
@@ -208,6 +210,51 @@ export function AdminConsole() {
       })
       .catch(() => undefined);
   }, [loadExams]);
+
+  useEffect(() => {
+    if (!selectedExamId || !publicResultCacheHealth || publicResultCacheHealth.missing <= 0) return;
+    if (resultsLoadedExamId !== selectedExamId) return;
+    if (autoRepairStartedExamIds.current.has(selectedExamId)) return;
+
+    const missingCount = publicResultCacheHealth.missing;
+    autoRepairStartedExamIds.current.add(selectedExamId);
+    let cancelled = false;
+
+    async function autoRepairPublicResultCache() {
+      setCacheRepairingExamId(selectedExamId);
+      setMessage(`ระบบกำลังเตรียมแคชผลรายบุคคลอัตโนมัติ ${missingCount} รายการ`);
+
+      const response = await fetch(`/api/exams/${selectedExamId}/results`, { method: "POST" });
+      const data = await response.json().catch(() => ({}));
+      if (cancelled) return;
+
+      setCacheRepairingExamId("");
+
+      if (response.status === 401) {
+        setIsLoggedIn(false);
+        setMessage("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+        return;
+      }
+
+      if (!response.ok) {
+        autoRepairStartedExamIds.current.delete(selectedExamId);
+        setMessage(data.error ?? "เตรียมแคชผลรายบุคคลอัตโนมัติไม่สำเร็จ ระบบจะลองใหม่เมื่อเปิดหน้านี้อีกครั้ง");
+        return;
+      }
+
+      const nextCacheHealth = data.cacheHealth ?? null;
+      if ((nextCacheHealth?.missing ?? 0) > 0) {
+        autoRepairStartedExamIds.current.delete(selectedExamId);
+      }
+      setPublicResultCacheHealth(nextCacheHealth);
+      setMessage(`เตรียมแคชผลรายบุคคลอัตโนมัติแล้ว ${data.updated ?? 0} รายการ`);
+    }
+
+    void autoRepairPublicResultCache();
+    return () => {
+      cancelled = true;
+    };
+  }, [publicResultCacheHealth, resultsLoadedExamId, selectedExamId]);
 
   useEffect(() => {
     if (!selectedExam) return;
@@ -497,7 +544,7 @@ export function AdminConsole() {
       setPublicResultCacheHealth(data.cacheHealth ?? null);
       setMessage(
         (data.cacheHealth?.missing ?? 0) > 0
-          ? `ประกาศผลแล้ว แต่แคชผลรายบุคคลยังขาด ${data.cacheHealth.missing} รายการ กรุณากดซ่อมแคชผลประกาศ`
+          ? `ประกาศผลแล้ว ระบบกำลังเตรียมแคชผลรายบุคคลที่ยังขาด ${data.cacheHealth.missing} รายการอัตโนมัติ`
           : "ประกาศผลแล้ว และแคชผลรายบุคคลพร้อมใช้งาน",
       );
       await loadStoredResults(selectedExam.id);
@@ -544,29 +591,6 @@ export function AdminConsole() {
     setResultsLoadedExamId(selectedExam.id);
     setMessage(`ลบข้อมูลประกาศผลแล้ว ${data.deleted ?? 0} รายการ`);
     await loadExams(selectedExam.id);
-  }
-
-  async function repairPublicResultCache() {
-    if (!selectedExam) return;
-    setBusy(true);
-    setMessage("");
-    const response = await fetch(`/api/exams/${selectedExam.id}/results`, { method: "POST" });
-    const data = await response.json().catch(() => ({}));
-    setBusy(false);
-
-    if (response.status === 401) {
-      setIsLoggedIn(false);
-      setMessage("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
-      return;
-    }
-
-    if (!response.ok) {
-      setMessage(data.error ?? "ซ่อมแคชผลประกาศไม่สำเร็จ");
-      return;
-    }
-
-    setPublicResultCacheHealth(data.cacheHealth ?? null);
-    setMessage(`ซ่อมแคชผลประกาศแล้ว ${data.updated ?? 0} รายการ`);
   }
 
   async function updateLineRichMenu() {
@@ -1062,26 +1086,25 @@ export function AdminConsole() {
             )}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-semibold text-[var(--text-main)]">สถานะแคชผลรายบุคคล</h3>
+                  <h3 className="font-semibold text-[var(--text-main)]">สถานะเตรียมผลรายบุคคล</h3>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">
                     พร้อมใช้งาน {publicResultCacheHealth?.cached ?? 0}/{publicResultCacheHealth?.total ?? selectedExam._count?.resultSnapshots ?? 0} รายการ
                     {(publicResultCacheHealth?.missing ?? 0) > 0 ? ` · ขาด ${publicResultCacheHealth?.missing ?? 0} รายการ` : ""}
                   </p>
-                  {(publicResultCacheHealth?.missing ?? 0) > 0 && (
+                  {cacheRepairingExamId === selectedExam.id ? (
+                    <p className="mt-2 text-sm font-semibold text-sky-700">
+                      ระบบกำลังเตรียมข้อมูลให้อัตโนมัติ ไม่ต้องกดซ่อมเอง
+                    </p>
+                  ) : (publicResultCacheHealth?.missing ?? 0) > 0 ? (
                     <p className="mt-2 text-sm font-semibold text-pink-700">
-                      นักเรียนบางคนอาจเปิดผลไม่ได้จนกว่าจะซ่อมแคชผลประกาศครบ
+                      ระบบจะเตรียมข้อมูลส่วนที่ขาดให้อัตโนมัติเมื่อเปิดหน้านี้
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm font-semibold text-emerald-700">
+                      พร้อมให้นักเรียนเปิดดูผลคะแนน
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={repairPublicResultCache}
-                  disabled={busy || resultsLoading || (publicResultCacheHealth?.total ?? selectedExam._count?.resultSnapshots ?? 0) === 0}
-                  className={(publicResultCacheHealth?.missing ?? 0) > 0 ? "app-button-pink" : "app-button-secondary"}
-                >
-                  <Save size={16} />
-                  ซ่อมแคชผลประกาศ
-                </button>
               </div>
             </div>
 

@@ -1033,14 +1033,17 @@ export async function rebuildPublicResultCache(examSessionId: string) {
 
   const builtAt = new Date();
   const payloads = buildPublicResultPayloads(settings, exam, exam.resultSnapshots);
-  const batchSize = 100;
+  const batchSize = 10;
   let updated = 0;
 
   for (let index = 0; index < exam.resultSnapshots.length; index += batchSize) {
     const batch = exam.resultSnapshots.slice(index, index + batchSize);
-    await prisma.$transaction(
-      batch.map((snapshot) =>
-        prisma.resultSnapshot.update({
+    await Promise.all(
+      batch.map((snapshot) => {
+        const publicResultData = payloads.get(snapshot.studentId);
+        if (!publicResultData) return Promise.resolve(null);
+
+        return prisma.resultSnapshot.update({
           where: {
             examSessionId_studentId: {
               examSessionId,
@@ -1048,11 +1051,11 @@ export async function rebuildPublicResultCache(examSessionId: string) {
             },
           },
           data: {
-            publicResultData: payloads.get(snapshot.studentId) as Prisma.InputJsonValue,
+            publicResultData: publicResultData as Prisma.InputJsonValue,
             publicResultBuiltAt: builtAt,
           },
-        }),
-      ),
+        });
+      }),
     );
     updated += batch.length;
   }
