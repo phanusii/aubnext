@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { findUnpublishedStudentExam } from "@/lib/repository";
-import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
+import {
+  findPublishedStudentResultSession,
+  findUnpublishedStudentExam,
+  rebuildPublicResultCache,
+  type PublishedStudentResultSession,
+} from "@/lib/repository";
+import {
+  getCachedPublishedStudentResultSession,
+  publicStudentResultCacheTag,
+} from "@/lib/public-student-result-cache";
 import { createResultRequestTrace } from "@/lib/result-request-trace";
 import {
   signStudentResultCookie,
@@ -13,6 +22,23 @@ const schema = z.object({
   examNo: z.string().min(1),
 });
 
+async function repairMissingCache(
+  lookup: PublishedStudentResultSession["lookup"],
+  trace: ReturnType<typeof createResultRequestTrace>,
+) {
+  trace.mark("cache_repair_start");
+  const rebuilt = await rebuildPublicResultCache(lookup.examSessionId);
+  trace.mark("cache_repair_rebuild", { updated: rebuilt.updated });
+  revalidateTag(publicStudentResultCacheTag, { expire: 0 });
+
+  const repaired = await findPublishedStudentResultSession(lookup);
+  trace.mark("cache_repair_lookup", {
+    found: Boolean(repaired),
+    cacheMissing: Boolean(repaired && "cacheMissing" in repaired),
+  });
+  return repaired && !("cacheMissing" in repaired) ? repaired : null;
+}
+
 export async function POST(request: Request) {
   const trace = createResultRequestTrace("check-result-session");
   const parsed = schema.safeParse(await request.json());
@@ -23,20 +49,23 @@ export async function POST(request: Request) {
   }
 
   const examNo = parsed.data.examNo.trim();
-  const published = await getCachedPublishedStudentResultSession(examNo);
+  let published = await getCachedPublishedStudentResultSession(examNo);
   trace.mark("public_lookup", {
     found: Boolean(published),
     cacheMissing: Boolean(published && "cacheMissing" in published),
   });
 
   if (published && "cacheMissing" in published) {
-    trace.done("cache_missing", { requestId: trace.requestId });
-    return NextResponse.json(
-      {
-        error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลผลคะแนน กรุณาลองใหม่อีกครั้ง หรือแจ้งผู้ดูแลให้ซ่อมแคชผลประกาศ",
-      },
-      { status: 503, headers: trace.headers() },
-    );
+    published = await repairMissingCache(published.lookup, trace);
+    if (!published) {
+      trace.done("cache_missing", { requestId: trace.requestId });
+      return NextResponse.json(
+        {
+          error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลผลคะแนน กรุณาลองใหม่อีกครั้ง",
+        },
+        { status: 503, headers: trace.headers() },
+      );
+    }
   }
 
   if (!published) {
