@@ -32,15 +32,17 @@ model SchoolSettings {
 }
 
 model ExamSession {
-  id              String        @id @default(cuid())
-  name            String
-  classLevel      String
-  selectionMode   SelectionMode @default(PER_ROOM)
-  wholeLevelQuota Int?
-  status          ExamStatus    @default(DRAFT)
-  publishedAt     DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id               String        @id @default(cuid())
+  name             String
+  classLevel       String
+  selectionMode    SelectionMode @default(PER_ROOM)
+  wholeLevelQuota  Int?
+  status           ExamStatus    @default(DRAFT)
+  publishedAt      DateTime?
+  passTitle        String?
+  passInstructions String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   subjects        Subject[]
   students        Student[]

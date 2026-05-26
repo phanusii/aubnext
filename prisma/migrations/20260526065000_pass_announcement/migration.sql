@@ -1,0 +1,3 @@
+ALTER TABLE "ExamSession"
+  ADD COLUMN IF NOT EXISTS "passTitle" TEXT,
+  ADD COLUMN IF NOT EXISTS "passInstructions" TEXT;

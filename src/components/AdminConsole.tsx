@@ -43,6 +43,8 @@ type Exam = {
   status: "DRAFT" | "PUBLISHED";
   wholeLevelQuota: number | null;
   publishedAt: string | null;
+  passTitle: string | null;
+  passInstructions: string | null;
   roomQuotas: RoomQuota[];
   subjects: Subject[];
   _count?: { students: number; resultSnapshots: number };
@@ -105,6 +107,8 @@ export function AdminConsole() {
   const [newSelectionMode, setNewSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
   const [newWholeQuota, setNewWholeQuota] = useState(10);
   const [roomCount, setRoomCount] = useState(3);
+  const [passTitle, setPassTitle] = useState("");
+  const [passInstructions, setPassInstructions] = useState("");
   const [rooms, setRooms] = useState<RoomQuota[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([emptySubject(0)]);
   const [importRoom, setImportRoom] = useState("");
@@ -184,6 +188,8 @@ export function AdminConsole() {
           : [emptySubject(0)],
       );
       setImportRoom(selectedExam.roomQuotas[0]?.room ?? "");
+      setPassTitle(selectedExam.passTitle ?? "");
+      setPassInstructions(selectedExam.passInstructions ?? "");
       setCalculatedResults([]);
       setResultRoomFilter("ALL");
       void loadStoredResults(selectedExam.id);
@@ -401,7 +407,16 @@ export function AdminConsole() {
   async function runExamAction(action: "calculate" | "publish") {
     if (!selectedExam) return;
     setBusy(true);
-    const response = await fetch(`/api/exams/${selectedExam.id}/${action}`, { method: "POST" });
+    const response = await fetch(`/api/exams/${selectedExam.id}/${action}`, {
+      method: "POST",
+      headers: action === "publish" ? { "Content-Type": "application/json" } : undefined,
+      body: action === "publish"
+        ? JSON.stringify({
+            passTitle,
+            passInstructions,
+          })
+        : undefined,
+    });
     const data = await response.json();
     setBusy(false);
 
@@ -670,12 +685,41 @@ export function AdminConsole() {
                 </button>
               </div>
               {selectedExam ? (
-                <div className="mt-4 grid gap-3 md:grid-cols-4">
-                  <Metric label="ชั้นเรียน" value={selectedExam.classLevel} />
-                  <Metric label="รูปแบบ" value={selectedExam.selectionMode === "PER_ROOM" ? "รายห้อง" : "ทั้งชั้น"} />
-                  <Metric label="นักเรียน" value={`${selectedExam._count?.students ?? 0} คน`} />
-                  <Metric label="สถานะ" value={selectedExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"} />
-                </div>
+                <>
+                  <div className="mt-4 grid gap-3 md:grid-cols-4">
+                    <Metric label="ชั้นเรียน" value={selectedExam.classLevel} />
+                    <Metric label="รูปแบบ" value={selectedExam.selectionMode === "PER_ROOM" ? "รายห้อง" : "ทั้งชั้น"} />
+                    <Metric label="นักเรียน" value={`${selectedExam._count?.students ?? 0} คน`} />
+                    <Metric label="สถานะ" value={selectedExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"} />
+                  </div>
+                  <div className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[#fbfdff] p-4">
+                    <div className="mb-3 flex items-center gap-2 font-semibold">
+                      <BadgeCheck size={18} />
+                      ข้อความแจ้งผู้ผ่านการคัดเลือก
+                    </div>
+                    <div className="grid gap-3">
+                      <Field label="ผ่านเข้ารอบอะไร">
+                        <input
+                          className="app-input"
+                          value={passTitle}
+                          onChange={(event) => setPassTitle(event.target.value)}
+                          placeholder="เช่น ผ่านเข้ารอบค่ายวิทยาศาสตร์และคณิตศาสตร์"
+                        />
+                      </Field>
+                      <Field label="ต้องดำเนินการอย่างไร">
+                        <textarea
+                          className="app-input min-h-28"
+                          value={passInstructions}
+                          onChange={(event) => setPassInstructions(event.target.value)}
+                          placeholder="เช่น ให้รายงานตัววันที่ 10 มิถุนายน เวลา 08.30 น. พร้อมสำเนาบัตรนักเรียน"
+                        />
+                      </Field>
+                      <p className="text-xs leading-5 text-[var(--text-muted)]">
+                        ข้อความนี้จะแสดงเฉพาะนักเรียนที่มีสถานะผ่านการคัดเลือก หลังจากกดประกาศผล
+                      </p>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <EmptyState text="ยังไม่มีรอบสอบ เลือกสร้างรอบสอบใหม่ก่อนตั้งห้อง วิชา และนำเข้าคะแนน" />
               )}

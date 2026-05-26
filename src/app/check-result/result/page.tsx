@@ -192,6 +192,19 @@ function ResultContent({ result }: { result: StudentResult }) {
           <p className="text-sm font-semibold text-[var(--text-main)]">เหตุผลการคัดเลือก</p>
           <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{result.result.reason}</p>
         </section>
+
+        {result.result.status === "PASSED" && (result.exam.passTitle || result.exam.passInstructions) && (
+          <section className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-sky-800">
+              <BadgeCheckIcon />
+              แจ้งสำหรับผู้ผ่านการคัดเลือก
+            </div>
+            {result.exam.passTitle && <p className="mt-2 text-lg font-semibold text-[var(--text-main)]">{result.exam.passTitle}</p>}
+            {result.exam.passInstructions && (
+              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">{result.exam.passInstructions}</p>
+            )}
+          </section>
+        )}
       </div>
     </article>
   );
@@ -241,4 +254,8 @@ function Metric({ icon, label, value }: { icon?: ReactNode; label: string; value
       <div className="mt-2 text-3xl font-semibold leading-none">{value}</div>
     </div>
   );
+}
+
+function BadgeCheckIcon() {
+  return <ShieldCheck size={18} />;
 }

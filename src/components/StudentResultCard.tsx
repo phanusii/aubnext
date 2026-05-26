@@ -10,6 +10,8 @@ export type StudentResultResponse = {
     classLevel: string;
     selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
     publishedAt: string | null;
+    passTitle?: string | null;
+    passInstructions?: string | null;
   };
   student: { examNo: string; name: string; classLevel: string; room: string };
   result: {
@@ -138,6 +140,19 @@ export function StudentResultCard({ result }: { result: StudentResultResponse })
         </div>
 
         <p className="mt-4 rounded-2xl bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">{result.result.reason}</p>
+
+        {result.result.status === "PASSED" && (result.exam.passTitle || result.exam.passInstructions) && (
+          <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-sky-800">
+              <ShieldCheck size={18} />
+              แจ้งสำหรับผู้ผ่านการคัดเลือก
+            </div>
+            {result.exam.passTitle && <p className="mt-2 font-semibold text-[var(--text-main)]">{result.exam.passTitle}</p>}
+            {result.exam.passInstructions && (
+              <p className="mt-1 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">{result.exam.passInstructions}</p>
+            )}
+          </div>
+        )}
       </div>
     </article>
   );

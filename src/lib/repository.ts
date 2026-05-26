@@ -16,6 +16,8 @@ type ResultStudent = {
     classLevel: string;
     selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
     publishedAt: Date | null;
+    passTitle: string | null;
+    passInstructions: string | null;
     subjects: Array<{ id: string; name: string }>;
   };
   resultSnapshots: Array<{
@@ -484,7 +486,10 @@ export async function calculateExamResults(examSessionId: string) {
   return calculated;
 }
 
-export async function publishExam(examSessionId: string) {
+export async function publishExam(
+  examSessionId: string,
+  announcement?: { passTitle?: string | null; passInstructions?: string | null },
+) {
   const prisma = getPrisma();
   const snapshotCount = await prisma.resultSnapshot.count({ where: { examSessionId } });
   if (snapshotCount === 0) {
@@ -495,7 +500,16 @@ export async function publishExam(examSessionId: string) {
   await prisma.$transaction([
     prisma.examSession.update({
       where: { id: examSessionId },
-      data: { status: "PUBLISHED", publishedAt },
+      data: {
+        status: "PUBLISHED",
+        publishedAt,
+        ...(announcement
+          ? {
+              passTitle: announcement.passTitle?.trim() || null,
+              passInstructions: announcement.passInstructions?.trim() || null,
+            }
+          : {}),
+      },
     }),
     prisma.resultSnapshot.updateMany({
       where: { examSessionId },
@@ -597,6 +611,8 @@ function buildPrivateResult(
       classLevel: student.examSession.classLevel,
       selectionMode: student.examSession.selectionMode,
       publishedAt: student.examSession.publishedAt,
+      passTitle: student.examSession.passTitle,
+      passInstructions: student.examSession.passInstructions,
     },
     student: {
       examNo: student.examNo,
