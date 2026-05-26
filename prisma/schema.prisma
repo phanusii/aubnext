@@ -150,6 +150,8 @@ model ResultSnapshot {
   reason         String
   scoreBreakdown Json
   tieBreakValues Json
+  publicResultData Json?
+  publicResultBuiltAt DateTime?
   publishedAt    DateTime?
   createdAt      DateTime     @default(now())
 

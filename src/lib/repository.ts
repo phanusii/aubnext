@@ -1,8 +1,61 @@
 import { getPrisma } from "@/lib/prisma";
 import { calculateResults } from "@/lib/ranking";
 import { verifierHash } from "@/lib/security";
+import type { Prisma } from "@prisma/client";
 import type { ImportedStudentRow } from "@/lib/excel";
 import type { CandidateInput, RankingRule, SubjectInput } from "@/lib/types";
+
+export type PublicStudentResult = {
+  school: {
+    schoolName: string;
+    examTitle: string;
+    logoUrl?: string | null;
+  };
+  exam: {
+    id: string;
+    name: string;
+    classLevel: string;
+    selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
+    publishedAt: string | null;
+    passTitle: string | null;
+    passInstructions: string | null;
+  };
+  student: {
+    examNo: string;
+    name: string;
+    classLevel: string;
+    room: string;
+  };
+  result: {
+    rank: number;
+    totalScore: number;
+    status: "PASSED" | "FAILED" | "REVIEW";
+    reason: string;
+    scoreBreakdown: Record<string, number>;
+  };
+  statistics: {
+    total: {
+      score: number;
+      roomAverage: number;
+      levelAverage: number;
+      roomRank: number;
+      levelRank: number;
+      roomCount: number;
+      levelCount: number;
+    };
+    subjects: Array<{
+      id: string;
+      name: string;
+      score: number;
+      roomAverage: number;
+      levelAverage: number;
+      roomRank: number;
+      levelRank: number;
+      roomCount: number;
+      levelCount: number;
+    }>;
+  };
+};
 
 type ResultStudent = {
   id: string;
@@ -38,6 +91,32 @@ type PeerResultSnapshot = {
     room: string;
     examNo: string;
   };
+};
+
+type PublicResultSnapshotInput = {
+  studentId: string;
+  rank: number;
+  totalScore: number;
+  status: "PASSED" | "FAILED" | "REVIEW";
+  reason: string;
+  scoreBreakdown: unknown;
+  student: {
+    examNo: string;
+    name: string;
+    classLevel: string;
+    room: string;
+  };
+};
+
+type PublicResultExamInput = {
+  id: string;
+  name: string;
+  classLevel: string;
+  selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
+  publishedAt: Date | null;
+  passTitle: string | null;
+  passInstructions: string | null;
+  subjects: Array<{ id: string; name: string }>;
 };
 
 const peerSnapshotMemoryCache = new Map<string, { expiresAt: number; data: PeerResultSnapshot[] }>();
@@ -486,6 +565,7 @@ export async function calculateExamResults(examSessionId: string) {
     }),
   ]);
   peerSnapshotMemoryCache.delete(examSessionId);
+  await rebuildPublicResultCache(examSessionId);
 
   return calculated;
 }
@@ -521,6 +601,7 @@ export async function publishExam(
     }),
   ]);
   peerSnapshotMemoryCache.delete(examSessionId);
+  await rebuildPublicResultCache(examSessionId);
 
   return { publishedAt };
 }
@@ -528,6 +609,27 @@ export async function publishExam(
 function average(values: number[]) {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function publicSchoolFromSettings(settings: Awaited<ReturnType<typeof getSchoolSettings>>) {
+  return {
+    schoolName: settings.schoolName,
+    examTitle: settings.examTitle,
+    logoUrl: settings.logoUrl,
+  };
+}
+
+function normalizeCachedPublicResult(
+  settings: Awaited<ReturnType<typeof getSchoolSettings>>,
+  value: unknown,
+): PublicStudentResult | null {
+  if (!value || typeof value !== "object") return null;
+  const payload = value as Partial<PublicStudentResult>;
+  if (!payload.exam || !payload.student || !payload.result || !payload.statistics) return null;
+  return {
+    ...(payload as PublicStudentResult),
+    school: publicSchoolFromSettings(settings),
+  };
 }
 
 function competitionRank(values: Array<{ studentId: string; value: number; examNo: string }>, studentId: string) {
@@ -548,6 +650,137 @@ function competitionRank(values: Array<{ studentId: string; value: number; examN
   }
 
   return sorted.length;
+}
+
+function buildRankMap(entries: Array<{ studentId: string; examNo: string; value: number }>) {
+  const sorted = [...entries].sort((a, b) => {
+    const diff = b.value - a.value;
+    if (diff !== 0) return diff;
+    return a.examNo.localeCompare(b.examNo, "th");
+  });
+  const ranks = new Map<string, number>();
+  let currentRank = 1;
+  let previousValue: number | null = null;
+
+  for (const [index, entry] of sorted.entries()) {
+    if (previousValue != null && entry.value !== previousValue) {
+      currentRank = index + 1;
+    }
+    ranks.set(entry.studentId, currentRank);
+    previousValue = entry.value;
+  }
+
+  return ranks;
+}
+
+function buildGroupStats(snapshots: PublicResultSnapshotInput[], subjects: PublicResultExamInput["subjects"]) {
+  const count = snapshots.length;
+  const totalAverage = average(snapshots.map((snapshot) => snapshot.totalScore));
+  const totalRanks = buildRankMap(
+    snapshots.map((snapshot) => ({
+      studentId: snapshot.studentId,
+      examNo: snapshot.student.examNo,
+      value: snapshot.totalScore,
+    })),
+  );
+  const subjectStats = new Map<string, { average: number; ranks: Map<string, number> }>();
+
+  for (const subject of subjects) {
+    const values = snapshots.map((snapshot) => ({
+      studentId: snapshot.studentId,
+      examNo: snapshot.student.examNo,
+      value: Number((snapshot.scoreBreakdown as Record<string, number>)[subject.id] ?? 0),
+    }));
+    subjectStats.set(subject.id, {
+      average: average(values.map((entry) => entry.value)),
+      ranks: buildRankMap(values),
+    });
+  }
+
+  return { count, totalAverage, totalRanks, subjectStats };
+}
+
+function buildPublicResultPayloads(
+  settings: Awaited<ReturnType<typeof getSchoolSettings>>,
+  exam: PublicResultExamInput,
+  snapshots: PublicResultSnapshotInput[],
+) {
+  const subjectNameById = new Map(exam.subjects.map((subject) => [subject.id, subject.name]));
+  const levelStats = buildGroupStats(snapshots, exam.subjects);
+  const snapshotsByRoom = new Map<string, PublicResultSnapshotInput[]>();
+  for (const snapshot of snapshots) {
+    snapshotsByRoom.set(snapshot.student.room, [...(snapshotsByRoom.get(snapshot.student.room) ?? []), snapshot]);
+  }
+  const roomStats = new Map(
+    Array.from(snapshotsByRoom.entries()).map(([room, roomSnapshots]) => [
+      room,
+      buildGroupStats(roomSnapshots, exam.subjects),
+    ]),
+  );
+
+  return new Map(
+    snapshots.map((snapshot) => {
+      const room = roomStats.get(snapshot.student.room) ?? levelStats;
+      const rawBreakdown = snapshot.scoreBreakdown as Record<string, number>;
+      const payload: PublicStudentResult = {
+        school: publicSchoolFromSettings(settings),
+        exam: {
+          id: exam.id,
+          name: exam.name,
+          classLevel: exam.classLevel,
+          selectionMode: exam.selectionMode,
+          publishedAt: exam.publishedAt ? exam.publishedAt.toISOString() : null,
+          passTitle: exam.passTitle,
+          passInstructions: exam.passInstructions,
+        },
+        student: {
+          examNo: snapshot.student.examNo,
+          name: snapshot.student.name,
+          classLevel: snapshot.student.classLevel,
+          room: snapshot.student.room,
+        },
+        result: {
+          rank: snapshot.rank,
+          totalScore: snapshot.totalScore,
+          status: snapshot.status,
+          reason: snapshot.reason,
+          scoreBreakdown: Object.fromEntries(
+            Object.entries(rawBreakdown).map(([subjectId, value]) => [
+              subjectNameById.get(subjectId) ?? subjectId,
+              value,
+            ]),
+          ),
+        },
+        statistics: {
+          total: {
+            score: snapshot.totalScore,
+            roomAverage: room.totalAverage,
+            levelAverage: levelStats.totalAverage,
+            roomRank: room.totalRanks.get(snapshot.studentId) ?? room.count,
+            levelRank: levelStats.totalRanks.get(snapshot.studentId) ?? levelStats.count,
+            roomCount: room.count,
+            levelCount: levelStats.count,
+          },
+          subjects: exam.subjects.map((subject) => {
+            const roomSubject = room.subjectStats.get(subject.id);
+            const levelSubject = levelStats.subjectStats.get(subject.id);
+            return {
+              id: subject.id,
+              name: subject.name,
+              score: Number(rawBreakdown[subject.id] ?? 0),
+              roomAverage: roomSubject?.average ?? 0,
+              levelAverage: levelSubject?.average ?? 0,
+              roomRank: roomSubject?.ranks.get(snapshot.studentId) ?? room.count,
+              levelRank: levelSubject?.ranks.get(snapshot.studentId) ?? levelStats.count,
+              roomCount: room.count,
+              levelCount: levelStats.count,
+            };
+          }),
+        },
+      };
+      return [snapshot.studentId, payload];
+    }),
+  );
 }
 
 function numericBreakdown(snapshot: Pick<PeerResultSnapshot, "scoreBreakdown">) {
@@ -609,13 +842,13 @@ function buildPrivateResult(
   const rawBreakdown = result.scoreBreakdown as Record<string, number>;
 
   return {
-    school: settings,
+    school: publicSchoolFromSettings(settings),
     exam: {
       id: student.examSession.id,
       name: student.examSession.name,
       classLevel: student.examSession.classLevel,
       selectionMode: student.examSession.selectionMode,
-      publishedAt: student.examSession.publishedAt,
+      publishedAt: student.examSession.publishedAt ? student.examSession.publishedAt.toISOString() : null,
       passTitle: student.examSession.passTitle,
       passInstructions: student.examSession.passInstructions,
     },
@@ -664,6 +897,52 @@ async function getPublishedPeerSnapshots(examSessionId: string) {
   return data;
 }
 
+export async function rebuildPublicResultCache(examSessionId: string) {
+  const prisma = getPrisma();
+  const settings = await getSchoolSettings();
+  const exam = await prisma.examSession.findUnique({
+    where: { id: examSessionId },
+    include: {
+      subjects: { orderBy: { sortOrder: "asc" } },
+      resultSnapshots: {
+        include: {
+          student: {
+            select: {
+              examNo: true,
+              name: true,
+              classLevel: true,
+              room: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!exam || exam.resultSnapshots.length === 0) return { updated: 0 };
+
+  const builtAt = new Date();
+  const payloads = buildPublicResultPayloads(settings, exam, exam.resultSnapshots);
+  await prisma.$transaction(
+    exam.resultSnapshots.map((snapshot) =>
+      prisma.resultSnapshot.update({
+        where: {
+          examSessionId_studentId: {
+            examSessionId,
+            studentId: snapshot.studentId,
+          },
+        },
+        data: {
+          publicResultData: payloads.get(snapshot.studentId) as Prisma.InputJsonValue,
+          publicResultBuiltAt: builtAt,
+        },
+      }),
+    ),
+  );
+
+  return { updated: exam.resultSnapshots.length };
+}
+
 async function getActivePublishedExamId(input?: { examSessionId?: string }) {
   const prisma = getPrisma();
   const settings = await getSchoolSettings();
@@ -702,10 +981,45 @@ export async function findPublishedStudentResultLookup(input: { examNo: string }
   return { examNo: student.examNo, studentId: student.id, examSessionId: student.examSessionId };
 }
 
+async function findCachedPublicResult(
+  settings: Awaited<ReturnType<typeof getSchoolSettings>>,
+  input: { examNo: string; studentId?: string; examSessionId: string },
+) {
+  const prisma = getPrisma();
+  const snapshot = await prisma.resultSnapshot.findFirst({
+    where: {
+      examSessionId: input.examSessionId,
+      ...(input.studentId ? { studentId: input.studentId } : { student: { examNo: input.examNo.trim() } }),
+    },
+    select: {
+      publicResultData: true,
+    },
+  });
+
+  return normalizeCachedPublicResult(settings, snapshot?.publicResultData);
+}
+
 export async function checkPrivateResult(input: { examNo: string; studentId?: string; examSessionId?: string }) {
   const prisma = getPrisma();
   const active = await getActivePublishedExamId({ examSessionId: input.examSessionId });
   if (!active) return null;
+
+  const cached = await findCachedPublicResult(active.settings, {
+    examNo: input.examNo,
+    studentId: input.studentId,
+    examSessionId: active.activeExamId,
+  });
+  if (cached) return cached;
+
+  await rebuildPublicResultCache(active.activeExamId).catch((error) => {
+    console.error("Public result cache backfill failed", error);
+  });
+  const rebuilt = await findCachedPublicResult(active.settings, {
+    examNo: input.examNo,
+    studentId: input.studentId,
+    examSessionId: active.activeExamId,
+  });
+  if (rebuilt) return rebuilt;
 
   const student = await prisma.student.findFirst({
     where: {
@@ -777,10 +1091,13 @@ export async function bindLineStudent(input: { lineUserId: string; examNo: strin
     },
   });
 
-  const peerSnapshots = student.examSession.status === "PUBLISHED"
-    ? await getPublishedPeerSnapshots(student.examSession.id)
-    : [];
-  const result = student.examSession.status === "PUBLISHED" ? buildPrivateResult(settings, student, peerSnapshots) : null;
+  const result = student.examSession.status === "PUBLISHED"
+    ? await checkPrivateResult({
+        examNo: student.examNo,
+        studentId: student.id,
+        examSessionId: student.examSessionId,
+      })
+    : null;
   return {
     ok: true as const,
     student: {
@@ -807,23 +1124,22 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
       ...(settings.activeExamSessionId ? { examSessionId: settings.activeExamSessionId } : {}),
     },
     include: {
-      student: {
-        include: {
-          examSession: { include: { subjects: { orderBy: { sortOrder: "asc" } } } },
-          resultSnapshots: true,
-        },
-      },
+      student: true,
+      examSession: true,
     },
     orderBy: { updatedAt: "desc" },
   });
 
   if (!binding) return { ok: false as const, error: "ยังไม่ได้ผูกบัญชี LINE กับรหัสนักเรียน" };
-  if (binding.student.examSession.status !== "PUBLISHED") {
+  if (binding.examSession.status !== "PUBLISHED") {
     return { ok: false as const, error: "ผูกบัญชีแล้ว แต่รอบสอบยังไม่ได้ประกาศผล" };
   }
 
-  const peerSnapshots = await getPublishedPeerSnapshots(binding.student.examSession.id);
-  const result = buildPrivateResult(settings, binding.student, peerSnapshots);
+  const result = await checkPrivateResult({
+    examNo: binding.student.examNo,
+    studentId: binding.studentId,
+    examSessionId: binding.examSessionId,
+  });
   if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
   return { ok: true as const, result };
 }
