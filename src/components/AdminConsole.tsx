@@ -964,7 +964,7 @@ export function AdminConsole() {
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
                 <div className="overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/line-rich-menu.png" alt="ตัวอย่าง Rich Menu LINE" className="h-auto w-full" />
+                  <img src="/line-rich-menu.jpg" alt="ตัวอย่าง Rich Menu LINE" className="h-auto w-full" />
                 </div>
                 <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> นักเรียนเปิด LIFF จาก Rich Menu แล้วกรอกรหัสนักเรียน</p>
                 <p><span className="font-semibold text-[var(--text-main)]">2. ปิด LIFF อัตโนมัติ</span> หลังผูกสำเร็จ ระบบจะปิดหน้าต่างเพื่อกลับไปหน้าแชท LINE</p>

@@ -31,7 +31,7 @@ async function lineFetch(path: string, init: RequestInit & { dataHost?: boolean 
 
 export async function GET() {
   return NextResponse.json({
-    image: "/line-rich-menu.png",
+    image: "/line-rich-menu.jpg",
     payload: getLineRichMenuPayload(),
   });
 }
@@ -56,11 +56,11 @@ export async function POST() {
       body: JSON.stringify(payload),
     }) as { richMenuId: string };
 
-    const image = await readFile(join(process.cwd(), "public", "line-rich-menu.png"));
+    const image = await readFile(join(process.cwd(), "public", "line-rich-menu.jpg"));
     await lineFetch(`/v2/bot/richmenu/${created.richMenuId}/content`, {
       method: "POST",
       dataHost: true,
-      headers: { "Content-Type": "image/png" },
+      headers: { "Content-Type": "image/jpeg" },
       body: new Uint8Array(image),
     });
     await lineFetch(`/v2/bot/user/all/richmenu/${created.richMenuId}`, { method: "POST" });
