@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { School, Search, Sparkles, XCircle } from "lucide-react";
+import { School, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 
 type PublicSettings = {
@@ -51,62 +51,59 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#e0f2fe_0,#fdf2f8_38%,#f8fbff_72%)] text-[var(--text-main)]">
-      <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-5 sm:px-5 sm:py-8">
-        <div className="rounded-[2rem] border border-white/80 bg-white/85 p-4 shadow-[0_24px_70px_rgba(14,165,233,0.14)] backdrop-blur md:p-5">
-          <div className="flex items-start gap-3">
+    <main className="min-h-screen bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] text-[var(--text-main)]">
+      <section className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-5 sm:px-5 sm:py-8">
+        <div className="rounded-[1.75rem] border border-sky-100 bg-white/90 p-4 shadow-[0_18px_55px_rgba(14,165,233,0.10)] backdrop-blur md:p-5">
+          <div className="flex items-start gap-3 sm:items-center">
             {publicSettings.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={publicSettings.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-2 ring-pink-100" />
+              <img src={publicSettings.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-1 ring-sky-100" />
             ) : (
-              <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-sky-100 text-[var(--primary-blue-strong)]">
+              <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-sky-50 text-[var(--primary-blue-strong)] ring-1 ring-sky-100">
                 <School size={26} />
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-lg font-semibold leading-tight text-sky-700 md:text-xl">{publicSettings.schoolName}</p>
-              <h1 className="mt-1 text-xl font-semibold leading-tight text-slate-950 md:text-3xl">
+              <p className="text-xl font-semibold leading-tight text-sky-700 md:text-2xl">{publicSettings.schoolName}</p>
+              <h1 className="mt-1 text-lg font-semibold leading-snug text-slate-950 md:text-2xl">
                 {publicSettings.activeExam?.name ?? "ประกาศผลสอบ"}
               </h1>
               {publicSettings.activeExam?.classLevel && (
-                <p className="mt-2 text-xs font-medium text-slate-500">ระดับชั้น {publicSettings.activeExam.classLevel}</p>
+                <p className="mt-2 inline-flex rounded-full bg-pink-50 px-3 py-1 text-xs font-semibold text-pink-700 ring-1 ring-pink-100">
+                  ระดับชั้น {publicSettings.activeExam.classLevel}
+                </p>
               )}
             </div>
           </div>
         </div>
 
-        <div className="mt-7 text-center">
-          <div className="mx-auto mb-4 grid size-20 place-items-center rounded-[1.75rem] bg-white/90 text-sky-500 shadow-[0_18px_45px_rgba(14,165,233,0.16)] ring-1 ring-sky-100">
-            <Sparkles size={34} />
-          </div>
-          <h2 className="text-4xl font-semibold tracking-normal text-slate-950">เช็คผลสอบ</h2>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">
-            กรอกรหัสนักเรียน ระบบจะเปิดหน้าแสดงผลแบบเต็มทันที
-          </p>
+        <div className="mt-8 text-center">
+          <p className="text-sm font-semibold text-sky-700">ระบบประกาศผลสอบ</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">เช็คผลสอบ</h2>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">กรอกรหัสนักเรียนเพื่อดูผลคะแนน</p>
         </div>
 
         <form
-          className="mt-6 rounded-[2rem] border border-white/80 bg-white/90 p-5 shadow-[0_18px_55px_rgba(14,165,233,0.12)] backdrop-blur"
+          className="mt-6 rounded-[1.75rem] border border-sky-100 bg-white/95 p-4 shadow-[0_18px_55px_rgba(14,165,233,0.10)] backdrop-blur sm:p-5"
           onSubmit={(event) => {
             event.preventDefault();
             void checkResult();
           }}
         >
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <div className="grid gap-3">
             <label className="text-sm font-medium">
               รหัสนักเรียน
               <input
                 value={examNo}
                 onChange={(event) => setExamNo(event.target.value)}
-                className="app-input mt-2 h-14 rounded-2xl border-sky-100 bg-white text-center text-2xl font-semibold tracking-wide shadow-inner"
+                className="app-input mt-2 h-14 rounded-2xl border-sky-100 bg-white text-center text-2xl font-semibold tracking-wide shadow-inner focus:border-sky-300"
                 inputMode="numeric"
                 autoComplete="off"
                 placeholder="เช่น 21410"
               />
             </label>
-            <button type="submit" disabled={busy || isPending || !examNo.trim()} className="app-button-primary mt-6 h-14 rounded-2xl px-6 sm:mt-auto">
-              <Search size={18} />
-              {busy || isPending ? "กำลังตรวจ" : "ดูผลคะแนน"}
+            <button type="submit" disabled={busy || isPending || !examNo.trim()} className="app-button-primary h-14 w-full rounded-2xl px-6 text-base">
+              <span className="whitespace-nowrap">{busy || isPending ? "กำลังตรวจ" : "ตรวจผลคะแนน"}</span>
             </button>
           </div>
 
@@ -117,7 +114,7 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
           )}
 
           {error && (
-            <div className="mt-5 flex items-start gap-2 rounded-xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] p-3 text-sm text-[var(--accent-pink-strong)]">
+            <div className="mt-5 flex items-start gap-2 rounded-2xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] p-3 text-sm text-[var(--accent-pink-strong)]">
               <XCircle size={18} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
