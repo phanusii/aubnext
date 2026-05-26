@@ -981,6 +981,45 @@ export async function findPublishedStudentResultLookup(input: { examNo: string }
   return { examNo: student.examNo, studentId: student.id, examSessionId: student.examSessionId };
 }
 
+export async function findPublishedStudentResultSession(input: { examNo: string }) {
+  const prisma = getPrisma();
+  const active = await getActivePublishedExamId();
+  if (!active) return null;
+
+  const snapshot = await prisma.resultSnapshot.findFirst({
+    where: {
+      examSessionId: active.activeExamId,
+      student: {
+        examNo: input.examNo.trim(),
+        examSessionId: active.activeExamId,
+      },
+    },
+    select: {
+      publicResultData: true,
+      student: {
+        select: {
+          id: true,
+          examNo: true,
+          examSessionId: true,
+        },
+      },
+    },
+  });
+
+  if (!snapshot) return null;
+
+  const lookup = {
+    examNo: snapshot.student.examNo,
+    studentId: snapshot.student.id,
+    examSessionId: snapshot.student.examSessionId,
+  };
+  const cached = normalizeCachedPublicResult(active.settings, snapshot.publicResultData);
+  if (cached) return { lookup, result: cached };
+
+  const result = await checkPrivateResult(lookup);
+  return result ? { lookup, result } : null;
+}
+
 async function findCachedPublicResult(
   settings: Awaited<ReturnType<typeof getSchoolSettings>>,
   input: { examNo: string; studentId?: string; examSessionId: string },

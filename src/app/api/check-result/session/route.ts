@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { findPublishedStudentResultLookup, findUnpublishedStudentExam } from "@/lib/repository";
+import { findPublishedStudentResultSession, findUnpublishedStudentExam } from "@/lib/repository";
 import {
   signStudentResultCookie,
   studentResultCookieMaxAgeSeconds,
@@ -18,9 +18,9 @@ export async function POST(request: Request) {
   }
 
   const examNo = parsed.data.examNo.trim();
-  const lookup = await findPublishedStudentResultLookup({ examNo });
+  const published = await findPublishedStudentResultSession({ examNo });
 
-  if (!lookup) {
+  if (!published) {
     const unpublished = await findUnpublishedStudentExam({ examNo });
     if (unpublished) {
       return NextResponse.json(
@@ -39,8 +39,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(studentResultCookieName(), signStudentResultCookie(lookup), {
+  const response = NextResponse.json({ ok: true, result: published.result });
+  response.cookies.set(studentResultCookieName(), signStudentResultCookie(published.lookup), {
     httpOnly: true,
     maxAge: studentResultCookieMaxAgeSeconds(),
     path: "/check-result",
