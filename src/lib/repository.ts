@@ -715,7 +715,7 @@ function average(values: number[]) {
 
 function publicLogoUrl(logoUrl?: string | null) {
   if (!logoUrl) return null;
-  if (logoUrl.startsWith("data:image/") && logoUrl.length > 20_000) return null;
+  if (logoUrl.startsWith("data:image/") && logoUrl.length > 20_000) return "/api/settings/logo";
   return logoUrl;
 }
 

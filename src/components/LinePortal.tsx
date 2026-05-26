@@ -40,7 +40,15 @@ declare global {
   }
 }
 
-export function LinePortal({ schoolName, activeExam }: { schoolName: string; activeExam?: ActiveExamInfo | null }) {
+export function LinePortal({
+  schoolName,
+  logoUrl,
+  activeExam,
+}: {
+  schoolName: string;
+  logoUrl?: string | null;
+  activeExam?: ActiveExamInfo | null;
+}) {
   const [profile, setProfile] = useState<LineProfile | null>(null);
   const [examNo, setExamNo] = useState("");
   const [message, setMessage] = useState("กำลังเชื่อมต่อ LINE...");
@@ -138,12 +146,14 @@ export function LinePortal({ schoolName, activeExam }: { schoolName: string; act
     <main className="min-h-screen bg-[#f8fbff] text-[var(--text-main)]">
       <section className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-8">
         <div className="mb-6 text-center">
+          {logoUrl && (
+            <div className="mx-auto mb-4 grid size-20 place-items-center overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-sky-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt={schoolName} className="size-full object-cover" />
+            </div>
+          )}
           <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">ระบบประกาศผลสอบ</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-normal">เชื่อมต่อบัญชี LINE</h1>
-          <div className="mx-auto mt-3 max-w-md rounded-2xl bg-white px-4 py-3 text-center shadow-sm ring-1 ring-sky-100">
-            <p className="text-xs font-semibold text-[var(--text-muted)]">โรงเรียน</p>
-            <p className="mt-1 text-base font-semibold leading-snug text-slate-950">{schoolName}</p>
-          </div>
           {activeExam && (
             <div className="mx-auto mt-3 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-sky-700 ring-1 ring-sky-100">
               <span className="max-w-full truncate">{activeExam.name}</span>
