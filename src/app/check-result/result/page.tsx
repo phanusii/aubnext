@@ -88,7 +88,6 @@ export default async function ResultPage() {
 }
 
 function ResultContent({ result }: { result: StudentResult }) {
-  const rankLabel = result.exam.selectionMode === "PER_ROOM" ? "อันดับในห้อง" : "อันดับทั้งชั้น";
   const publishedAt = formatPublishedAt(result.exam.publishedAt);
 
   return (
@@ -140,19 +139,24 @@ function ResultContent({ result }: { result: StudentResult }) {
           </div>
         </section>
 
-        <section className="mt-7">
-          <div className="mb-3 flex items-center gap-2">
-            <BarChart3 size={18} />
-            <h3 className="text-lg font-semibold">กราฟสถิติรายวิชา</h3>
-          </div>
-          <SubjectComparisonCharts subjects={result.statistics.subjects} />
-        </section>
-
-        <div className="mt-7 grid gap-3 sm:grid-cols-3">
+        <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric icon={<Award size={18} />} label="คะแนนรวม" value={formatScore(result.result.totalScore)} />
-          <Metric icon={<Medal size={18} />} label={rankLabel} value={String(result.result.rank)} />
+          <Metric icon={<Medal size={18} />} label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} />
+          <Metric icon={<Trophy size={18} />} label="อันดับในชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
           <Metric icon={<ShieldCheck size={18} />} label="สถานะ" value={statusText[result.result.status]} />
         </div>
+
+        {result.result.status === "PASSED" && (
+          <section className="mt-3 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-sky-800">
+              <BadgeCheckIcon />
+              {result.exam.passTitle || "ผ่านการคัดเลือก"}
+            </div>
+            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">
+              {result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน"}
+            </p>
+          </section>
+        )}
 
         <section className="mt-7">
           <div className="mb-3 flex items-center gap-2">
@@ -170,23 +174,13 @@ function ResultContent({ result }: { result: StudentResult }) {
           />
         </section>
 
-        <section className="mt-5 rounded-2xl bg-[#f1f8ff] px-4 py-4">
-          <p className="text-sm font-semibold text-[var(--text-main)]">เหตุผลการคัดเลือก</p>
-          <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{result.result.reason}</p>
+        <section className="mt-7">
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 size={18} />
+            <h3 className="text-lg font-semibold">สถิติเปรียบเทียบคะแนนรายวิชา</h3>
+          </div>
+          <SubjectComparisonCharts subjects={result.statistics.subjects} />
         </section>
-
-        {result.result.status === "PASSED" && (
-          <section className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-sky-800">
-              <BadgeCheckIcon />
-              แจ้งสำหรับผู้ผ่านการคัดเลือก
-            </div>
-            <p className="mt-2 text-lg font-semibold text-[var(--text-main)]">{result.exam.passTitle || "ผ่านการคัดเลือก"}</p>
-            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">
-              {result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน"}
-            </p>
-          </section>
-        )}
       </div>
     </article>
   );
