@@ -23,7 +23,7 @@ export function getLineRichMenuPayload() {
       },
       {
         bounds: { x: 1260, y: 500, width: 1185, height: 455 },
-        action: { type: "postback", label: "ดูผลคะแนน", data: "action=check_result", displayText: "ดูผลคะแนน" },
+        action: { type: "postback", label: "ดูผลคะแนน", data: "action=check_result" },
       },
       {
         bounds: { x: 55, y: 975, width: 1160, height: 455 },
