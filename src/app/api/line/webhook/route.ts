@@ -60,6 +60,10 @@ function createLineWebhookTrace() {
   };
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function POST(request: Request) {
   const trace = createLineWebhookTrace();
   const body = await request.text();
@@ -94,11 +98,13 @@ export async function POST(request: Request) {
         }
 
         eventTrace.mark("start_loading");
-        void startLineLoading(lineUserId, 5).catch((error) => {
+        const loadingPromise = startLineLoading(lineUserId, 5).catch((error) => {
           console.warn("LINE loading animation failed", error);
         });
+        const resultPromise = getLineBoundResult({ lineUserId });
 
-        const result = await getLineBoundResult({ lineUserId });
+        await Promise.race([loadingPromise, wait(250)]);
+        const result = await resultPromise;
         eventTrace.mark("result_lookup", { ok: result.ok });
         if (!result.ok) {
           console.info("LINE result lookup needs binding", { lineUserId, error: result.error });
