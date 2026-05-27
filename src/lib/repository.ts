@@ -1368,22 +1368,63 @@ export async function bindLineStudent(input: { lineUserId: string; examNo: strin
 }
 
 export async function getLineBoundResult(input: { lineUserId: string }) {
+  const traceStartedAt = Date.now();
+  const marks: Array<Record<string, unknown>> = [];
+  let previousAt = traceStartedAt;
+  const mark = (label: string, extra: Record<string, unknown> = {}) => {
+    const now = Date.now();
+    marks.push({
+      label,
+      elapsedMs: now - traceStartedAt,
+      deltaMs: now - previousAt,
+      ...extra,
+    });
+    previousAt = now;
+  };
+  const done = (outcome: string, extra: Record<string, unknown> = {}) => {
+    if (process.env.RESULT_LOOKUP_DEBUG !== "1") return;
+    console.info("[line-result-lookup]", {
+      outcome,
+      totalMs: Date.now() - traceStartedAt,
+      region: process.env.VERCEL_REGION || process.env.VERCEL_DEPLOYMENT_REGION || "local",
+      marks,
+      ...extra,
+    });
+  };
+
   const prisma = getPrisma();
   const settings = await getSchoolSettings();
-  const binding = await prisma.lineBinding.findFirst({
-    where: {
-      lineUserId: input.lineUserId,
-      ...(settings.activeExamSessionId ? { examSessionId: settings.activeExamSessionId } : {}),
-    },
-    include: {
-      student: true,
-      examSession: true,
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  mark("settings_lookup", { hasActiveExam: Boolean(settings.activeExamSessionId) });
+  const bindingSelect = {
+    lineUserId: true,
+    studentId: true,
+    examSessionId: true,
+    student: { select: { examNo: true } },
+    examSession: { select: { status: true } },
+  } satisfies Prisma.LineBindingSelect;
+  const binding = settings.activeExamSessionId
+    ? await prisma.lineBinding.findUnique({
+        where: {
+          lineUserId_examSessionId: {
+            lineUserId: input.lineUserId,
+            examSessionId: settings.activeExamSessionId,
+          },
+        },
+        select: bindingSelect,
+      })
+    : await prisma.lineBinding.findFirst({
+        where: { lineUserId: input.lineUserId },
+        select: bindingSelect,
+        orderBy: { updatedAt: "desc" },
+      });
+  mark("binding_lookup", { found: Boolean(binding) });
 
-  if (!binding) return { ok: false as const, error: "ยังไม่ได้ผูกบัญชี LINE กับรหัสนักเรียน" };
+  if (!binding) {
+    done("not_bound");
+    return { ok: false as const, error: "ยังไม่ได้ผูกบัญชี LINE กับรหัสนักเรียน" };
+  }
   if (binding.examSession.status !== "PUBLISHED") {
+    done("not_published");
     return { ok: false as const, error: "ผูกบัญชีแล้ว แต่รอบสอบยังไม่ได้ประกาศผล" };
   }
 
@@ -1392,19 +1433,29 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
     studentId: binding.studentId,
     examSessionId: binding.examSessionId,
   });
-  let result = published?.result ?? null;
-  if (!result && published && "cacheMissing" in published) {
-    console.warn("LINE result cache missing, falling back to private result builder", {
+  mark("public_result_lookup", {
+    found: Boolean(published),
+    cacheMissing: Boolean(published && "cacheMissing" in published),
+  });
+
+  if (published && "cacheMissing" in published) {
+    console.warn("LINE result cache missing; skipping slow private fallback", {
       examSessionId: binding.examSessionId,
       studentId: binding.studentId,
     });
-    result = await checkPrivateResult({
-      examNo: binding.student.examNo,
-      studentId: binding.studentId,
-      examSessionId: binding.examSessionId,
-    });
+    done("cache_missing");
+    return {
+      ok: false as const,
+      error: "พบผลสอบแล้ว แต่ระบบกำลังเตรียมข้อมูลผลคะแนน กรุณาลองใหม่อีกครั้ง หรือแจ้งผู้ดูแลให้ตรวจแคชผลประกาศ",
+    };
   }
-  if (!result) return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
+
+  const result = published?.result ?? null;
+  if (!result) {
+    done("not_found");
+    return { ok: false as const, error: "ยังไม่พบผลคะแนนของรหัสที่ผูกไว้" };
+  }
+  done("cache_hit");
   return {
     ok: true as const,
     result,

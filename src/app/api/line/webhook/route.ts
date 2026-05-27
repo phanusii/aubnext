@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, startLineLoading, verifyLineSignature } from "@/lib/line-messaging";
+import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, verifyLineSignature } from "@/lib/line-messaging";
 import { getLineBoundResult } from "@/lib/repository";
 
 type LineWebhookEvent = {
@@ -31,13 +31,46 @@ function isCheckResultEvent(event: LineWebhookEvent) {
   return false;
 }
 
+function createLineWebhookTrace() {
+  const startedAt = Date.now();
+  const marks: Array<Record<string, unknown>> = [];
+  let previousAt = startedAt;
+
+  return {
+    mark(label: string, extra: Record<string, unknown> = {}) {
+      const now = Date.now();
+      marks.push({
+        label,
+        elapsedMs: now - startedAt,
+        deltaMs: now - previousAt,
+        ...extra,
+      });
+      previousAt = now;
+    },
+    done(outcome: string, extra: Record<string, unknown> = {}) {
+      if (process.env.RESULT_LOOKUP_DEBUG !== "1") return;
+      console.info("[line-webhook]", {
+        outcome,
+        totalMs: Date.now() - startedAt,
+        region: process.env.VERCEL_REGION || process.env.VERCEL_DEPLOYMENT_REGION || "local",
+        marks,
+        ...extra,
+      });
+    },
+  };
+}
+
 export async function POST(request: Request) {
+  const trace = createLineWebhookTrace();
   const body = await request.text();
   const signature = request.headers.get("x-line-signature");
+  trace.mark("read_body");
 
   if (!verifyLineSignature(body, signature)) {
+    trace.done("invalid_signature");
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
+  trace.mark("verify_signature");
 
   const payload = JSON.parse(body) as { events?: LineWebhookEvent[] };
   const events = payload.events ?? [];
@@ -52,29 +85,32 @@ export async function POST(request: Request) {
       if (!isCheckResultEvent(event) || !event.replyToken) return;
 
       const lineUserId = event.source?.userId;
+      const eventTrace = createLineWebhookTrace();
       try {
         if (!lineUserId) {
           await replyLineMessage(event.replyToken, [buildBindPromptMessage("ไม่พบ LINE userId กรุณาเปิดจากบัญชี LINE ส่วนตัว")]);
+          eventTrace.done("missing_user_id");
           return;
         }
 
-        await startLineLoading(lineUserId, 10).catch((error) => {
-          console.warn("LINE loading animation failed", error);
-        });
-
         const result = await getLineBoundResult({ lineUserId });
+        eventTrace.mark("result_lookup", { ok: result.ok });
         if (!result.ok) {
           console.info("LINE result lookup needs binding", { lineUserId, error: result.error });
           await replyLineMessage(event.replyToken, [buildBindPromptMessage(result.error)]);
+          eventTrace.done("reply_bind_prompt");
           return;
         }
 
         await replyLineMessage(event.replyToken, [buildResultFlexMessage(result.result, result.lookup)]);
+        eventTrace.done("reply_result");
       } catch (error) {
         console.error("LINE webhook reply failed", error);
+        eventTrace.done("reply_failed");
       }
     }),
   );
 
+  trace.done("ok", { events: events.length });
   return NextResponse.json({ ok: true });
 }
