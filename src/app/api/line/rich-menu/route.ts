@@ -63,12 +63,8 @@ async function updateLineRichMenu() {
   return created.richMenuId;
 }
 
-export async function POST(request: Request) {
-  const temporarySyncAllowed =
-    request.headers.get("x-aubnext-rich-menu-sync") === "remove-display-text-20260527" &&
-    Date.now() < Date.UTC(2026, 4, 28);
-
-  if (!temporarySyncAllowed && !(await requireAdmin())) {
+export async function POST() {
+  if (!(await requireAdmin())) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
