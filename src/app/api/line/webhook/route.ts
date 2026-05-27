@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, verifyLineSignature } from "@/lib/line-messaging";
+import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, startLineLoading, verifyLineSignature } from "@/lib/line-messaging";
 import { getLineBoundResult } from "@/lib/repository";
 
 type LineWebhookEvent = {
@@ -92,6 +92,11 @@ export async function POST(request: Request) {
           eventTrace.done("missing_user_id");
           return;
         }
+
+        eventTrace.mark("start_loading");
+        void startLineLoading(lineUserId, 5).catch((error) => {
+          console.warn("LINE loading animation failed", error);
+        });
 
         const result = await getLineBoundResult({ lineUserId });
         eventTrace.mark("result_lookup", { ok: result.ok });
