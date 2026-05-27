@@ -64,7 +64,8 @@ export function ResultPageClient() {
 
   useEffect(() => {
     let active = true;
-    const stored = readStoredResult();
+    const lineResultToken = new URLSearchParams(window.location.search).get("lineResultToken");
+    const stored = lineResultToken ? null : readStoredResult();
     if (stored) {
       queueMicrotask(() => {
         if (active) setResult(stored);
@@ -73,7 +74,10 @@ export function ResultPageClient() {
 
     async function loadCurrentResult() {
       try {
-        const response = await fetch("/api/check-result/current", {
+        const endpoint = lineResultToken
+          ? `/api/check-result/current?lineResultToken=${encodeURIComponent(lineResultToken)}`
+          : "/api/check-result/current";
+        const response = await fetch(endpoint, {
           headers: { Accept: "application/json" },
         });
         const data = (await response.json()) as CurrentResultResponse;
@@ -82,6 +86,9 @@ export function ResultPageClient() {
         if ("ok" in data && data.ok) {
           setResult(data.result);
           cacheStudentResultForPage(data.result);
+          if (lineResultToken) {
+            window.history.replaceState(null, "", "/check-result/result");
+          }
           setError("");
           return;
         }

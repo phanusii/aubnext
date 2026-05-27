@@ -16,7 +16,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/check-result", request.url));
   }
 
-  const response = NextResponse.redirect(new URL("/check-result/result", request.url));
+  const resultUrl = new URL("/check-result/result", request.url);
+  resultUrl.searchParams.set("lineResultToken", token ?? "");
+  const response = NextResponse.redirect(resultUrl);
   response.cookies.set(studentResultCookieName(), signStudentResultCookie(lookup), {
     httpOnly: true,
     maxAge: studentResultCookieMaxAgeSeconds(),
