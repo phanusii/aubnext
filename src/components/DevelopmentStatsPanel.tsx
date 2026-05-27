@@ -7,6 +7,7 @@ import type { PublicStudentResult } from "@/lib/repository";
 
 type SubjectStats = PublicStudentResult["statistics"]["subjects"][number];
 type InsightLevel = "strength" | "above" | "near" | "improve";
+type DevelopmentTier = "single" | "top" | "lead" | "strong" | "good" | "steady" | "focus" | "foundation";
 
 type SubjectInsight = SubjectStats & {
   deltaRoom: number;
@@ -69,6 +70,34 @@ function nextGoalText(deltaLevel: number) {
   return `เพิ่มอีก ${formatScore(Math.abs(deltaLevel))} คะแนนเพื่อถึงค่าเฉลี่ยทั้งชั้น`;
 }
 
+function rankRatio(rank: number, count: number) {
+  if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 1 || rank <= 0) return null;
+  return rank / count;
+}
+
+function developmentTier(deltaLevel: number, rank: number, count: number): DevelopmentTier {
+  const ratio = rankRatio(rank, count);
+  if (ratio === null) return "single";
+  if (rank === 1) return "top";
+  if (ratio <= 0.15) return "lead";
+  if (ratio <= 0.25) return "strong";
+  if (ratio <= 0.5 || deltaLevel >= 3) return "good";
+  if (ratio <= 0.75 || deltaLevel >= -3) return "steady";
+  if (ratio <= 0.9 || deltaLevel >= -8) return "focus";
+  return "foundation";
+}
+
+function textSeed(...values: Array<number | string>) {
+  return values.reduce<number>((total, value) => {
+    if (typeof value === "number") return total + Math.round(value * 10);
+    return total + [...value].reduce((innerTotal, char) => innerTotal + char.charCodeAt(0), 0);
+  }, 0);
+}
+
+function pickText(options: string[], seed: number) {
+  return options[Math.abs(seed) % options.length] ?? options[0] ?? "";
+}
+
 function rankBand(rank: number, count: number): InsightLevel {
   if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 1 || rank <= 0) return "near";
   if (rank <= Math.max(1, Math.ceil(count / 4))) return "strength";
@@ -113,19 +142,105 @@ function classifySubject(deltaLevel: number, levelRank: number, levelCount: numb
   return "improve";
 }
 
-function subjectAdvice(level: InsightLevel, subjectName: string, deltaLevel: number) {
-  if (level === "strength") return `รักษาจุดแข็งใน${subjectName} และลองฝึกโจทย์ระดับยากขึ้น`;
-  if (level === "above") return `ต่อยอด${subjectName}ด้วยการทบทวนข้อผิดพลาดเดิมและฝึกทำโจทย์จับเวลา`;
-  if (level === "near") return `เพิ่มอีกประมาณ ${formatScore(Math.abs(deltaLevel))} คะแนนจะเข้าใกล้ค่าเฉลี่ยทั้งชั้นมากขึ้น`;
-  return `เริ่มเสริม${subjectName}จากพื้นฐานที่ผิดซ้ำ ขอครูช่วยดูจุดผิด แล้วฝึกโจทย์ทีละชุด`;
+const totalMessageByTier: Record<DevelopmentTier, string[]> = {
+  single: [
+    "มีข้อมูลเปรียบเทียบกลุ่มน้อย ให้ใช้คะแนนรายวิชาและข้อผิดพลาดเป็นเข็มทิศพัฒนาต่อ",
+    "ยังเปรียบเทียบอันดับกับกลุ่มไม่ได้ชัดเจน โฟกัสที่การรักษาวิชาที่ถนัดและเสริมวิชาที่คะแนนต่ำกว่าเฉลี่ย",
+  ],
+  top: [
+    "ภาพรวมอยู่หัวแถวของกลุ่ม รักษาวินัยเดิมและเพิ่มโจทย์ท้าทายเพื่อยกระดับความแม่นยำ",
+    "ทำได้โดดเด่นมาก ควรต่อยอดด้วยโจทย์ยากและทบทวนข้อผิดพลาดเล็ก ๆ เพื่อรักษาอันดับ",
+    "ผลรวมแข็งแรงมาก เป้าหมายถัดไปคือรักษาความสม่ำเสมอและลดคะแนนที่เสียจากความรีบหรือความประมาท",
+  ],
+  lead: [
+    "ภาพรวมอยู่กลุ่มนำ ใช้วิชาที่เด่นเป็นฐาน แล้วเลือกเสริมวิชาที่ต่างจากเฉลี่ยน้อยที่สุดก่อน",
+    "อยู่ในระดับที่ดีมาก การขยับขึ้นต่อจะมาจากการเก็บรายละเอียดและฝึกโจทย์แบบจับเวลา",
+    "คะแนนรวมมีทิศทางดี ให้รักษาจังหวะอ่านหนังสือและเพิ่มรอบทบทวนบทที่ยังพลาดซ้ำ",
+  ],
+  strong: [
+    "ภาพรวมแข็งแรงกว่ากลุ่มส่วนใหญ่ ต่อยอดด้วยการสรุปจุดผิดและฝึกโจทย์ระดับกลางถึงยาก",
+    "อยู่ในกลุ่มดีมาก ถ้าต้องการขยับอันดับ ให้เริ่มจากวิชาที่คะแนนห่างจากค่าเฉลี่ยน้อยที่สุด",
+    "พื้นฐานโดยรวมดีแล้ว ควรเพิ่มความเร็วในการทำข้อสอบและตรวจคำตอบให้เป็นระบบ",
+  ],
+  good: [
+    "ภาพรวมทำได้ดี มีโอกาสขยับขึ้นอีกจากการแก้จุดพลาดรายวิชาอย่างสม่ำเสมอ",
+    "อยู่ในระดับดี ให้เลือกวิชาที่ควรเสริมก่อนเป็นงานหลัก แล้วรักษาวิชาที่ทำได้ดีไว้",
+    "คะแนนรวมอยู่ในทิศทางบวก เป้าหมายคือเพิ่มความแน่นของพื้นฐานและลดข้อผิดพลาดซ้ำ",
+  ],
+  steady: [
+    "ภาพรวมอยู่ช่วงกลางของกลุ่ม การฝึกต่อเนื่องทีละวิชาจะช่วยให้ขยับอันดับได้ชัดขึ้น",
+    "คะแนนใกล้กลุ่มหลักแล้ว ให้เริ่มจากบทพื้นฐานที่ผิดบ่อยและทำแบบฝึกหัดสั้น ๆ ทุกวัน",
+    "มีฐานให้ต่อยอดได้ เลือกหนึ่งวิชาที่ควรเสริมก่อน แล้ววัดผลจากคะแนนแบบฝึกหัดรายสัปดาห์",
+  ],
+  focus: [
+    "ภาพรวมยังมีพื้นที่ให้ขยับขึ้น เริ่มจากวิชาที่แนะนำก่อนและตั้งเป้าเพิ่มคะแนนทีละช่วงสั้น ๆ",
+    "ควรโฟกัสพื้นฐานและโจทย์ที่ออกบ่อยก่อน เมื่อความแม่นขึ้นแล้วค่อยเพิ่มโจทย์จับเวลา",
+    "ยังพัฒนาได้อีกมาก ให้ขอครูช่วยชี้จุดผิดซ้ำ แล้วฝึกแก้ทีละเรื่องจนมั่นใจก่อนข้ามบท",
+  ],
+  foundation: [
+    "ภาพรวมควรเริ่มจากการปูพื้นฐานใหม่ เลือกหัวข้อที่เสียคะแนนมากที่สุดและฝึกทีละชุดเล็ก ๆ",
+    "ช่วงนี้ควรเน้นความเข้าใจพื้นฐานมากกว่าความเร็ว ทำโจทย์ง่ายถึงกลางให้แม่นก่อน",
+    "ให้เริ่มจากบทหลักที่ยังไม่มั่นใจ ขอคำแนะนำจากครู และทบทวนซ้ำเป็นรอบสั้น ๆ อย่างต่อเนื่อง",
+  ],
+};
+
+const subjectAdviceByTier: Record<DevelopmentTier, string[]> = {
+  single: [
+    "ใช้คะแนนวิชานี้เป็นข้อมูลตั้งต้น แล้วดูข้อที่ผิดซ้ำเพื่อวางแผนฝึกต่อ",
+    "ยังเทียบกลุ่มไม่ได้ชัดเจน ให้เน้นทบทวนบทที่ไม่มั่นใจและทำโจทย์พื้นฐานให้ครบ",
+  ],
+  top: [
+    `รักษาจุดแข็งใน{subject} และลองฝึกโจทย์ระดับยากขึ้น`,
+    `{subject}เป็นจุดเด่นมาก ควรฝึกโจทย์ประยุกต์และจับเวลาเพื่อรักษาความเฉียบ`,
+    `ต่อยอด{subject}ด้วยการอธิบายวิธีทำให้เพื่อนหรือสรุปสูตร/หลักคิดเป็นของตัวเอง`,
+  ],
+  lead: [
+    `{subject}อยู่ในกลุ่มนำ ให้รักษาความสม่ำเสมอและเก็บรายละเอียดข้อที่ยังพลาด`,
+    `เพิ่มความมั่นใจใน{subject}ด้วยโจทย์ชุดยากขึ้นและทบทวนคำตอบที่ผิดทุกครั้ง`,
+    `ใช้{subject}เป็นวิชาทำคะแนนหลัก แล้วฝึกโจทย์จับเวลาเพื่อเพิ่มความนิ่งในห้องสอบ`,
+  ],
+  strong: [
+    `{subject}ทำได้แข็งแรง ควรทบทวนข้อผิดพลาดเดิมและเพิ่มโจทย์ระดับกลางถึงยาก`,
+    `ต่อยอด{subject}ด้วยการจับเวลาทำโจทย์และสรุปจุดที่เสียคะแนนบ่อย`,
+    `รักษาระดับ{subject}ไว้ แล้วเพิ่มความแม่นในบทที่ยังไม่เต็มคะแนน`,
+  ],
+  good: [
+    `{subject}อยู่ในทิศทางดี ให้ฝึกโจทย์สม่ำเสมอและทบทวนบทที่พลาดซ้ำ`,
+    `ขยับ{subject}ได้อีกด้วยการทำแบบฝึกหัดเป็นชุดสั้น ๆ แล้วตรวจเหตุผลทุกข้อ`,
+    `ต่อยอด{subject}ด้วยการแยกบทที่ถนัดและไม่ถนัด แล้วฝึกบทที่ยังไม่แน่นก่อน`,
+  ],
+  steady: [
+    `{subject}ใกล้เป้าหมายแล้ว เพิ่มอีกประมาณ {gap} คะแนนจะเข้าใกล้ค่าเฉลี่ยทั้งชั้นมากขึ้น`,
+    `เสริม{subject}ด้วยโจทย์พื้นฐานถึงกลาง และจดข้อผิดซ้ำไว้ทบทวนก่อนสอบ`,
+    `เริ่มพัฒนา{subject}จากบทที่ออกบ่อย ทำโจทย์วันละชุดเล็ก ๆ เพื่อเพิ่มความคุ้นมือ`,
+  ],
+  focus: [
+    `เริ่มเสริม{subject}จากพื้นฐานที่ผิดซ้ำ ขอครูช่วยดูจุดผิด แล้วฝึกโจทย์ทีละชุด`,
+    `{subject}ควรฝึกก่อน โดยเริ่มจากบทพื้นฐานและโจทย์ที่มีเฉลยละเอียด`,
+    `วางแผน{subject}เป็นรอบสั้น ๆ: ทบทวน 1 บท ทำโจทย์ 1 ชุด แล้วจดข้อที่ยังไม่เข้าใจ`,
+  ],
+  foundation: [
+    `{subject}ควรปูพื้นฐานใหม่ทีละบท เริ่มจากเรื่องที่ครูเน้นและโจทย์ง่ายก่อน`,
+    `ให้ขอครูช่วยดูพื้นฐานของ{subject} แล้วฝึกโจทย์สั้น ๆ ซ้ำจนทำได้ด้วยตนเอง`,
+    `อย่าเพิ่งรีบทำโจทย์ยากใน{subject} ให้กลับไปทบทวนหลักสำคัญและตัวอย่างพื้นฐานก่อน`,
+  ],
+};
+
+function fillSubjectAdvice(template: string, subjectName: string, deltaLevel: number) {
+  return template
+    .replaceAll("{subject}", subjectName)
+    .replaceAll("{gap}", formatScore(Math.abs(deltaLevel)));
+}
+
+function subjectAdvice(subjectName: string, deltaLevel: number, levelRank: number, levelCount: number, score: number) {
+  const tier = developmentTier(deltaLevel, levelRank, levelCount);
+  const template = pickText(subjectAdviceByTier[tier], textSeed(subjectName, deltaLevel, levelRank, levelCount, score));
+  return fillSubjectAdvice(template, subjectName, deltaLevel);
 }
 
 function totalMessage(deltaLevel: number, levelRank: number, levelCount: number) {
-  const level = rankBand(levelRank, levelCount);
-  if (level === "strength" && deltaLevel >= 0) return "ภาพรวมอยู่ในกลุ่มนำ รักษาความสม่ำเสมอและต่อยอดวิชาที่เป็นจุดแข็ง";
-  if (deltaLevel >= 0) return "ภาพรวมทำได้ดี ใช้วิชาที่ควรเสริมก่อนเป็นจุดเริ่มต้นเพื่อขยับขึ้นอีก";
-  if (deltaLevel >= -5) return "ภาพรวมใกล้ค่าเฉลี่ย เลือกฝึกวิชาที่แนะนำก่อนจะช่วยให้เห็นผลเร็ว";
-  return "ภาพรวมยังมีพื้นที่ให้พัฒนา เริ่มจากวิชาที่ควรเสริมก่อนและฝึกพื้นฐานอย่างสม่ำเสมอ";
+  const tier = developmentTier(deltaLevel, levelRank, levelCount);
+  return pickText(totalMessageByTier[tier], textSeed(deltaLevel, levelRank, levelCount));
 }
 
 function barWidth(rank: number, count: number) {
@@ -150,7 +265,7 @@ function buildSubjectInsights(subjects: SubjectStats[]) {
       level,
       label: subjectLabel(level),
       groupLabel: groupLabel(level),
-      advice: subjectAdvice(level, subject.name, deltaLevel),
+      advice: subjectAdvice(subject.name, deltaLevel, subject.levelRank, subject.levelCount, subject.score),
     };
   });
 }
