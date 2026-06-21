@@ -6,7 +6,9 @@ import {
   BadgeCheck,
   BookOpen,
   Calculator,
+  Check,
   ClipboardList,
+  Copy,
   Download,
   ImageUp,
   Link2,
@@ -127,6 +129,7 @@ export function AdminConsole() {
   const [busy, setBusy] = useState(false);
   const [logoChanged, setLogoChanged] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("settings");
+  const [lineLinkCopied, setLineLinkCopied] = useState(false);
   const [pendingExamAction, setPendingExamAction] = useState<ExamAction | null>(null);
 
   const [newExamName, setNewExamName] = useState("สอบแข่งขันประจำปี");
@@ -655,6 +658,21 @@ export function AdminConsole() {
     }
 
     setMessage(response.ok ? "อัปเดต Rich Menu ใน LINE แล้ว" : data.error ?? "อัปเดต Rich Menu ไม่สำเร็จ");
+  }
+
+  async function copyLineLink() {
+    // ทำเป็น URL เต็มเสมอ (เผื่อ fallback "/line" ที่เป็น path สัมพัทธ์) เพื่อให้ส่งต่อให้นักเรียนได้
+    const link = lineResultUrl.startsWith("http")
+      ? lineResultUrl
+      : `${window.location.origin}${lineResultUrl}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setLineLinkCopied(true);
+      setMessage("คัดลอกลิงก์ LINE แล้ว ส่งต่อให้นักเรียนเช็คผลได้เลย");
+      setTimeout(() => setLineLinkCopied(false), 2000);
+    } catch {
+      setMessage(`คัดลอกอัตโนมัติไม่สำเร็จ คัดลอกลิงก์นี้เอง: ${link}`);
+    }
   }
 
   const visibleRooms = useMemo(
@@ -1283,7 +1301,11 @@ export function AdminConsole() {
                 <p><span className="font-semibold text-[var(--text-main)]">Webhook</span> ตั้งค่า LINE Developers เป็น /api/line/webhook และให้ปุ่มดูผลคะแนนส่ง postback action=check_result</p>
               </div>
               <div className="space-y-2">
-                <a href={lineResultUrl} className="app-button-primary w-full" target="_blank" rel="noreferrer">
+                <button type="button" onClick={copyLineLink} className="app-button-primary w-full">
+                  {lineLinkCopied ? <Check size={16} /> : <Copy size={16} />}
+                  {lineLinkCopied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์ LINE ให้นักเรียน"}
+                </button>
+                <a href={lineResultUrl} className="app-button-secondary w-full" target="_blank" rel="noreferrer">
                   <Link2 size={16} />
                   เปิดลิงก์ LINE แชท bot
                 </a>
