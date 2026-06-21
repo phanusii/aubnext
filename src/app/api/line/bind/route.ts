@@ -1,3 +1,6 @@
+// รัน function ใน region เดียวกับ Postgres (สิงคโปร์) — ลด round-trip ต่อ query
+export const preferredRegion = "sin1";
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bindLineStudent } from "@/lib/repository";
