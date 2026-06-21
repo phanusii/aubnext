@@ -29,6 +29,19 @@ function hardenSslMode(connectionString: string) {
   return connectionString.replace(/([?&]sslmode=)verify-ca\b/i, "$1verify-full");
 }
 
+// diagnostic (ชั่วคราว): หาว่า verify-ca ที่ทำให้ SECURITY warning มาจากไหน — โชว์เฉพาะ sslmode ไม่โชว์ credential
+function sslmodeOf(s: string) {
+  const m = s.match(/[?&]sslmode=([^&]+)/i);
+  return m ? m[1] : "(none-in-url)";
+}
+function usedDbEnvName() {
+  if (process.env.POSTGRES_PRISMA_URL) return "POSTGRES_PRISMA_URL";
+  if (process.env.DATABASE_URL) return "DATABASE_URL";
+  if (process.env.POSTGRES_URL) return "POSTGRES_URL";
+  if (process.env.POSTGRES_URL_NON_POOLING) return "POSTGRES_URL_NON_POOLING";
+  return "(none)";
+}
+
 export function getPrisma() {
   if (!prisma) {
     const rawConnectionString = databaseUrl();
@@ -37,6 +50,14 @@ export function getPrisma() {
     }
 
     const connectionString = hardenSslMode(rawConnectionString);
+    console.info("[db-ssl-diagnostic]", {
+      envUsed: usedDbEnvName(),
+      rawSslmode: sslmodeOf(rawConnectionString),
+      hardenedSslmode: sslmodeOf(connectionString),
+      pgsslmodeEnv: process.env.PGSSLMODE ?? "(unset)",
+      pgSslmodeOverride: process.env.PG_SSLMODE ?? "(unset)",
+      hasChannelBinding: /channel_binding/i.test(rawConnectionString),
+    });
     const adapter = new PrismaPg({ connectionString });
     prisma = new PrismaClient({ adapter });
   }
