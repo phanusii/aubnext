@@ -1470,7 +1470,11 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
     return { ok: false as const, error: "ผูกบัญชีแล้ว แต่รอบสอบยังไม่ได้ประกาศผล" };
   }
 
-  const published = await findPublishedStudentResultSession({
+  // ใช้ผลลัพธ์ที่ผ่าน Next.js cache ตัวเดียวกับฝั่งเว็บ (revalidate 300 + tag)
+  // เดิม LINE เรียก findPublishedStudentResultSession ตรง ๆ = ข้าม cache ทำ DB query ทุกครั้ง
+  // dynamic import กันวงจร import (cache -> repository อยู่แล้ว)
+  const { getCachedPublishedStudentResultSession } = await import("@/lib/public-student-result-cache");
+  const published = await getCachedPublishedStudentResultSession({
     examNo: binding.student.examNo,
     studentId: binding.studentId,
     examSessionId: binding.examSessionId,
