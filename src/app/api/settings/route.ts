@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { connection } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
@@ -18,6 +19,8 @@ const schema = z.object({
 });
 
 export async function GET() {
+  // ดึงตอน request จริง (อ่านจาก use cache) ไม่ให้ build พยายาม prerender จนต้องแตะ DB
+  await connection();
   const settings = await getCachedPublicResultSettings();
   return NextResponse.json(settings, {
     headers: {

@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // เปิด Cache Components (PPR) — แยก static shell (serve จาก CDN ทันที) ออกจากส่วน dynamic/cached
+  // ส่วนที่อ่าน DB/cookie ต้องอยู่ใน "use cache" หรือ <Suspense> มิฉะนั้น build จะ error (โดยตั้งใจ)
+  cacheComponents: true,
   async headers() {
     return [
       {

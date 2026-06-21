@@ -1,28 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { School, XCircle } from "lucide-react";
+import { XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 import { cacheStudentResultForPage, studentResultSessionStorageKey } from "@/components/ResultPageClient";
 
-type PublicSettings = {
-  schoolName: string;
-  logoUrl?: string | null;
-  activeExam?: {
-    name: string;
-    classLevel: string;
-    status: "DRAFT" | "PUBLISHED";
-  } | null;
-};
-
-export function CheckResultForm({ initialSettings }: { initialSettings: PublicSettings }) {
+// header = การ์ดหัวเรื่อง (settings) ที่ส่งมาจาก server เป็น slot — ห่อ <Suspense> ไว้ฝั่ง page
+// ตัวฟอร์มเองเป็น static shell ล้วน ๆ จึง prerender แล้ว serve จาก CDN ได้ทันที
+export function CheckResultForm({ header }: { header: ReactNode }) {
   const router = useRouter();
   const [examNo, setExamNo] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const publicSettings = initialSettings;
 
   async function checkResult() {
     if (busy) return;
@@ -60,27 +51,7 @@ export function CheckResultForm({ initialSettings }: { initialSettings: PublicSe
     <main className="min-h-screen bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] text-[var(--text-main)]">
       <section className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-5 sm:px-5 sm:py-8">
         <div className="rounded-[1.75rem] border border-sky-100 bg-white/90 p-4 shadow-[0_18px_55px_rgba(14,165,233,0.10)] backdrop-blur md:p-5">
-          <div className="flex items-start gap-3 sm:items-center">
-            {publicSettings.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={publicSettings.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-1 ring-sky-100" />
-            ) : (
-              <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-sky-50 text-[var(--primary-blue-strong)] ring-1 ring-sky-100">
-                <School size={26} />
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-xl font-semibold leading-tight text-sky-700 md:text-2xl">{publicSettings.schoolName}</p>
-              <h1 className="mt-1 text-lg font-semibold leading-snug text-slate-950 md:text-2xl">
-                {publicSettings.activeExam?.name ?? "ประกาศผลสอบ"}
-              </h1>
-              {publicSettings.activeExam?.classLevel && (
-                <p className="mt-2 inline-flex rounded-full bg-pink-50 px-3 py-1 text-xs font-semibold text-pink-700 ring-1 ring-pink-100">
-                  ระดับชั้น {publicSettings.activeExam.classLevel}
-                </p>
-              )}
-            </div>
-          </div>
+          {header}
         </div>
 
         <div className="mt-8 text-center">
