@@ -1,6 +1,8 @@
 import { CheckResultForm } from "@/components/CheckResultForm";
 import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 
+// รัน SSR ใน region เดียวกับ Postgres (สิงคโปร์) — กัน cross-region query ตอน settings cache miss
+export const preferredRegion = "sin1";
 export const dynamic = "force-dynamic";
 
 export default async function CheckResultPage() {
