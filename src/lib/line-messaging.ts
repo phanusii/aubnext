@@ -158,17 +158,24 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   const webResultUrl = webLookup
     ? `${baseUrl()}/line/result-web?token=${encodeURIComponent(signLineResultWebToken(webLookup))}`
     : `${baseUrl()}/check-result`;
-  const subjectRows = Object.entries(result.result.scoreBreakdown).slice(0, 8).flatMap(([subject, score]) => [
-    {
-      type: "box",
-      layout: "horizontal",
-      margin: "sm",
-      contents: [
-        { type: "text", text: subject, size: "sm", color: "#64748b", flex: 4, wrap: true },
-        { type: "text", text: formatScore(score), size: "sm", color: "#0f172a", weight: "bold", align: "end", flex: 1 },
-      ],
-    },
-  ]);
+  // คะแนนรายวิชาแสดงเป็น 2 คอลัมน์ (จับคู่ทีละ 2 วิชา/แถว) เพื่อลดความสูงการ์ด
+  const subjectEntries = Object.entries(result.result.scoreBreakdown).slice(0, 8);
+  const subjectColumn = (entry: [string, number]): Record<string, unknown> => ({
+    type: "box",
+    layout: "horizontal",
+    flex: 1,
+    spacing: "sm",
+    contents: [
+      { type: "text", text: entry[0], size: "xs", color: "#64748b", flex: 3, wrap: true },
+      { type: "text", text: formatScore(entry[1]), size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 1 },
+    ],
+  });
+  const subjectRows: Record<string, unknown>[] = [];
+  for (let i = 0; i < subjectEntries.length; i += 2) {
+    const pair: Record<string, unknown>[] = subjectEntries.slice(i, i + 2).map(subjectColumn);
+    if (pair.length === 1) pair.push({ type: "filler" });
+    subjectRows.push({ type: "box", layout: "horizontal", margin: "sm", spacing: "lg", contents: pair });
+  }
 
   const passContents =
     result.result.status === "PASSED"
@@ -192,7 +199,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
           { type: "text", text: result.school.schoolName, size: "sm", color: "#0369a1", weight: "bold", wrap: true },
           { type: "text", text: result.exam.name, size: "sm", color: "#64748b", wrap: true },
           { type: "separator", margin: "sm" },
-          { type: "text", text: result.student.name, size: "xl", color: "#0f172a", weight: "bold", wrap: true, margin: "sm" },
+          { type: "text", text: result.student.name, size: "lg", color: "#0f172a", weight: "bold", wrap: true, margin: "sm" },
           { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#64748b" },
           { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#0f172a", weight: "bold", margin: "sm" },
           ...subjectRows,
@@ -209,24 +216,33 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 type: "box",
                 layout: "horizontal",
                 contents: [
-                  { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", flex: 3 },
-                  { type: "text", text: formatScore(result.result.totalScore), size: "xxl", color: "#0f172a", weight: "bold", align: "end", flex: 3 },
+                  { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", flex: 3, gravity: "center" },
+                  { type: "text", text: formatScore(result.result.totalScore), size: "xl", color: "#0f172a", weight: "bold", align: "end", flex: 3 },
                 ],
               },
               {
                 type: "box",
                 layout: "horizontal",
+                spacing: "lg",
                 contents: [
-                  { type: "text", text: "อันดับห้อง", size: "xs", color: "#64748b", flex: 3 },
-                  { type: "text", text: result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank), size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
-                ],
-              },
-              {
-                type: "box",
-                layout: "horizontal",
-                contents: [
-                  { type: "text", text: "อันดับทั้งชั้น", size: "xs", color: "#64748b", flex: 3 },
-                  { type: "text", text: result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-", size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
+                  {
+                    type: "box",
+                    layout: "horizontal",
+                    flex: 1,
+                    contents: [
+                      { type: "text", text: "อันดับห้อง", size: "xs", color: "#64748b", flex: 3 },
+                      { type: "text", text: result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank), size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
+                    ],
+                  },
+                  {
+                    type: "box",
+                    layout: "horizontal",
+                    flex: 1,
+                    contents: [
+                      { type: "text", text: "อันดับชั้น", size: "xs", color: "#64748b", flex: 3 },
+                      { type: "text", text: result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-", size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
+                    ],
+                  },
                 ],
               },
               {
