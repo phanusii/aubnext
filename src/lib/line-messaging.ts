@@ -175,14 +175,6 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       ? [
           { type: "separator", margin: "sm" },
           { type: "text", text: result.exam.passTitle || "ผ่านการคัดเลือก", weight: "bold", size: "sm", color: "#0369a1", wrap: true, margin: "sm" },
-          {
-            type: "text",
-            text: result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน",
-            size: "xs",
-            color: "#64748b",
-            wrap: true,
-            margin: "xs",
-          },
         ]
       : [];
 

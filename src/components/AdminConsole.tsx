@@ -154,6 +154,8 @@ export function AdminConsole() {
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
   const [resultSort, setResultSort] = useState<ResultSort>("rank");
   const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
+  // ลิงก์เพิ่มเพื่อนบัญชี LINE OA (ให้นักเรียนกดเพิ่มเพื่อนก่อนเช็คผล) — ตั้งทับได้ด้วย NEXT_PUBLIC_LINE_ADD_FRIEND_URL
+  const lineAddFriendUrl = process.env.NEXT_PUBLIC_LINE_ADD_FRIEND_URL || "https://lin.ee/OXREHbG";
   const webResultUrl = "/check-result";
   const schoolContactUrl = "/contact";
 
@@ -661,17 +663,14 @@ export function AdminConsole() {
   }
 
   async function copyLineLink() {
-    // ทำเป็น URL เต็มเสมอ (เผื่อ fallback "/line" ที่เป็น path สัมพัทธ์) เพื่อให้ส่งต่อให้นักเรียนได้
-    const link = lineResultUrl.startsWith("http")
-      ? lineResultUrl
-      : `${window.location.origin}${lineResultUrl}`;
+    // ลิงก์เพิ่มเพื่อน OA (lin.ee/...) เป็น URL เต็มอยู่แล้ว ส่งต่อให้นักเรียนกดเพิ่มเพื่อนแล้วเช็คผลได้เลย
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(lineAddFriendUrl);
       setLineLinkCopied(true);
-      setMessage("คัดลอกลิงก์ LINE แล้ว ส่งต่อให้นักเรียนเช็คผลได้เลย");
+      setMessage("คัดลอกลิงก์เพิ่มเพื่อน LINE แล้ว ส่งต่อให้นักเรียนได้เลย");
       setTimeout(() => setLineLinkCopied(false), 2000);
     } catch {
-      setMessage(`คัดลอกอัตโนมัติไม่สำเร็จ คัดลอกลิงก์นี้เอง: ${link}`);
+      setMessage(`คัดลอกอัตโนมัติไม่สำเร็จ คัดลอกลิงก์นี้เอง: ${lineAddFriendUrl}`);
     }
   }
 
@@ -1303,7 +1302,7 @@ export function AdminConsole() {
               <div className="space-y-2">
                 <button type="button" onClick={copyLineLink} className="app-button-primary w-full">
                   {lineLinkCopied ? <Check size={16} /> : <Copy size={16} />}
-                  {lineLinkCopied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์ LINE ให้นักเรียน"}
+                  {lineLinkCopied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์เพิ่มเพื่อน LINE ให้นักเรียน"}
                 </button>
                 <a href={lineResultUrl} className="app-button-secondary w-full" target="_blank" rel="noreferrer">
                   <Link2 size={16} />
