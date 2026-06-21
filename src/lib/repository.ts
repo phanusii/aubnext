@@ -150,6 +150,15 @@ const activePublishedExamMemoryCache = new Map<
 >();
 const activePublishedExamCacheMs = 30_000;
 
+// SchoolSettings ถูกอ่านในแทบทุก request (LINE + เว็บ + auth) แต่เปลี่ยนนาน ๆ ครั้ง
+// แคชในหน่วยความจำ (per-isolate) สั้น ๆ ลดทั้ง query และ "write บนเส้นทางอ่าน" (เดิม upsert ทุกครั้ง)
+let schoolSettingsMemoryCache: { expiresAt: number; data: Awaited<ReturnType<typeof loadSchoolSettings>> } | null = null;
+const schoolSettingsCacheMs = 30_000;
+
+function clearSchoolSettingsCache() {
+  schoolSettingsMemoryCache = null;
+}
+
 type ResultLookupTrace = {
   mark: (label: string, extra?: Record<string, unknown>) => void;
   done: (outcome: string, extra?: Record<string, unknown>) => void;
@@ -213,16 +222,30 @@ export async function upsertSchoolSettings(input: {
     create: { id: "main", ...input },
   });
   clearActivePublishedExamCache();
+  clearSchoolSettingsCache();
   return settings;
 }
 
-export async function getSchoolSettings() {
+async function loadSchoolSettings() {
   const prisma = getPrisma();
+  // อ่านอย่างเดียว (findUnique) — เดิมใช้ upsert ซึ่งเป็น write ทุกครั้งบนเส้นทางอ่าน
+  const existing = await prisma.schoolSettings.findUnique({ where: { id: "main" } });
+  if (existing) return existing;
+  // ยังไม่มีแถว (รันครั้งแรกเท่านั้น) ค่อยสร้าง
   return prisma.schoolSettings.upsert({
     where: { id: "main" },
     update: {},
     create: { id: "main" },
   });
+}
+
+export async function getSchoolSettings() {
+  if (schoolSettingsMemoryCache && schoolSettingsMemoryCache.expiresAt > Date.now()) {
+    return schoolSettingsMemoryCache.data;
+  }
+  const data = await loadSchoolSettings();
+  schoolSettingsMemoryCache = { expiresAt: Date.now() + schoolSettingsCacheMs, data };
+  return data;
 }
 
 export async function getAdminCredentials() {
