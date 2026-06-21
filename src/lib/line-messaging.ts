@@ -173,15 +173,15 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   const passContents =
     result.result.status === "PASSED"
       ? [
-          { type: "separator", margin: "md" },
-          { type: "text", text: result.exam.passTitle || "ผ่านการคัดเลือก", weight: "bold", size: "sm", color: "#0369a1", wrap: true, margin: "md" },
+          { type: "separator", margin: "sm" },
+          { type: "text", text: result.exam.passTitle || "ผ่านการคัดเลือก", weight: "bold", size: "sm", color: "#0369a1", wrap: true, margin: "sm" },
           {
             type: "text",
             text: result.exam.passInstructions || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน",
             size: "xs",
             color: "#64748b",
             wrap: true,
-            margin: "sm",
+            margin: "xs",
           },
         ]
       : [];
@@ -194,24 +194,24 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       body: {
         type: "box",
         layout: "vertical",
-        spacing: "md",
-        paddingAll: "20px",
+        spacing: "sm",
+        paddingAll: "16px",
         contents: [
           { type: "text", text: result.school.schoolName, size: "sm", color: "#0369a1", weight: "bold", wrap: true },
           { type: "text", text: result.exam.name, size: "sm", color: "#64748b", wrap: true },
-          { type: "separator", margin: "md" },
-          { type: "text", text: result.student.name, size: "xl", color: "#0f172a", weight: "bold", wrap: true, margin: "md" },
+          { type: "separator", margin: "sm" },
+          { type: "text", text: result.student.name, size: "xl", color: "#0f172a", weight: "bold", wrap: true, margin: "sm" },
           { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#64748b" },
-          { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#0f172a", weight: "bold", margin: "md" },
+          { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#0f172a", weight: "bold", margin: "sm" },
           ...subjectRows,
           {
             type: "box",
             layout: "vertical",
             backgroundColor: "#f0f9ff",
             cornerRadius: "16px",
-            paddingAll: "16px",
-            spacing: "sm",
-            margin: "md",
+            paddingAll: "12px",
+            spacing: "xs",
+            margin: "sm",
             contents: [
               {
                 type: "box",
@@ -253,24 +253,15 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       footer: {
         type: "box",
         layout: "vertical",
-        spacing: "sm",
         contents: [
           {
             type: "button",
             style: "secondary",
+            height: "sm",
             action: {
               type: "uri",
               label: "ดูผลผ่านเว็บเต็ม",
               uri: webResultUrl,
-            },
-          },
-          {
-            type: "button",
-            style: "link",
-            action: {
-              type: "uri",
-              label: "ติดต่อโรงเรียน",
-              uri: `${baseUrl()}/contact`,
             },
           },
         ],
