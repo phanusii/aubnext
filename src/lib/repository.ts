@@ -203,6 +203,8 @@ export async function upsertSchoolSettings(input: {
   logoUrl?: string | null;
   activeExamSessionId?: string | null;
   schoolContact?: string | null;
+  adminEmail?: string | null;
+  adminPasswordHash?: string | null;
 }) {
   const prisma = getPrisma();
   const settings = await prisma.schoolSettings.upsert({
@@ -223,6 +225,14 @@ export async function getSchoolSettings() {
   });
 }
 
+export async function getAdminCredentials() {
+  const settings = await getSchoolSettings();
+  return {
+    email: (settings.adminEmail || process.env.ADMIN_EMAIL || "admin@example.com").trim().toLowerCase(),
+    passwordHash: settings.adminPasswordHash || verifierHash(process.env.ADMIN_PASSWORD || "admin1234"),
+  };
+}
+
 export async function getPublicResultSettings() {
   const prisma = getPrisma();
   const settings = await getSchoolSettings();
@@ -237,7 +247,16 @@ export async function getPublicResultSettings() {
         select: { id: true, name: true, classLevel: true, status: true, publishedAt: true },
       });
 
-  return { ...settings, logoUrl: publicLogoUrl(settings.logoUrl), activeExam };
+  return {
+    id: settings.id,
+    schoolName: settings.schoolName,
+    examTitle: settings.examTitle,
+    logoUrl: publicLogoUrl(settings.logoUrl),
+    activeExamSessionId: settings.activeExamSessionId,
+    schoolContact: settings.schoolContact,
+    updatedAt: settings.updatedAt,
+    activeExam,
+  };
 }
 
 export async function createExamSession(input: {

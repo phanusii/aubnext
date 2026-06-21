@@ -29,6 +29,8 @@ model SchoolSettings {
   logoUrl             String?
   activeExamSessionId String?
   schoolContact       String?
+  adminEmail          String?
+  adminPasswordHash   String?
   updatedAt           DateTime @updatedAt
 }
 

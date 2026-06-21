@@ -117,6 +117,9 @@ export function AdminConsole() {
     logoUrl: "",
     activeExamSessionId: "",
     schoolContact: "",
+    adminEmail: "phanu9818@anubanubon.ac.th",
+    adminPassword: "",
+    adminPasswordConfirm: "",
   });
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -187,16 +190,33 @@ export function AdminConsole() {
     }
   }, []);
 
+  const loadAdminSettings = useCallback(async () => {
+    const response = await fetch("/api/admin/settings");
+    if (!response.ok) return;
+    const data = await response.json();
+    setSettings((current) => ({
+      ...current,
+      schoolName: data.schoolName ?? current.schoolName,
+      logoUrl: data.logoUrl ?? current.logoUrl,
+      activeExamSessionId: data.activeExamSessionId ?? "",
+      schoolContact: data.schoolContact ?? "",
+      adminEmail: data.adminEmail ?? current.adminEmail,
+      adminPassword: "",
+      adminPasswordConfirm: "",
+    }));
+  }, []);
+
   useEffect(() => {
     fetch("/api/settings")
       .then((response) => response.json())
       .then((data) =>
-        setSettings({
+        setSettings((current) => ({
+          ...current,
           schoolName: data.schoolName ?? "โรงเรียนตัวอย่าง",
           logoUrl: data.logoUrl ?? "",
           activeExamSessionId: data.activeExamSessionId ?? "",
           schoolContact: data.schoolContact ?? "",
-        }),
+        })),
       )
       .catch(() => undefined);
   }, []);
@@ -206,10 +226,11 @@ export function AdminConsole() {
       .then((response) => {
         if (!response.ok) return;
         setIsLoggedIn(true);
+        void loadAdminSettings();
         return loadExams();
       })
       .catch(() => undefined);
-  }, [loadExams]);
+  }, [loadAdminSettings, loadExams]);
 
   useEffect(() => {
     if (!selectedExamId || !publicResultCacheHealth || publicResultCacheHealth.missing <= 0) return;
@@ -308,15 +329,38 @@ export function AdminConsole() {
     setEmail("");
     setPassword("");
     setMessage("เข้าสู่ระบบแล้ว");
+    await loadAdminSettings();
     await loadExams();
   }
 
   async function saveSettings() {
+    const nextAdminEmail = settings.adminEmail.trim().toLowerCase();
+    const nextAdminPassword = settings.adminPassword.trim();
+    const nextAdminPasswordConfirm = settings.adminPasswordConfirm.trim();
+
+    if (!nextAdminEmail) {
+      setMessage("กรุณากรอกอีเมลผู้ดูแล");
+      return;
+    }
+
+    if (nextAdminPassword || nextAdminPasswordConfirm) {
+      if (nextAdminPassword.length < 8) {
+        setMessage("รหัสผ่านผู้ดูแลต้องมีอย่างน้อย 8 ตัวอักษร");
+        return;
+      }
+      if (nextAdminPassword !== nextAdminPasswordConfirm) {
+        setMessage("รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน");
+        return;
+      }
+    }
+
     setBusy(true);
     const body = {
       schoolName: settings.schoolName,
       activeExamSessionId: settings.activeExamSessionId || null,
       schoolContact: settings.schoolContact.trim() || null,
+      adminEmail: nextAdminEmail,
+      ...(nextAdminPassword ? { adminPassword: nextAdminPassword } : {}),
       ...(logoChanged ? { logoUrl: settings.logoUrl } : {}),
     };
     const response = await fetch("/api/settings", {
@@ -340,10 +384,14 @@ export function AdminConsole() {
 
     setLogoChanged(false);
     setSettings((current) => ({
+      ...current,
       schoolName: data.schoolName ?? current.schoolName,
       logoUrl: data.logoUrl ?? current.logoUrl,
       activeExamSessionId: data.activeExamSessionId ?? "",
       schoolContact: data.schoolContact ?? "",
+      adminEmail: data.adminEmail ?? current.adminEmail,
+      adminPassword: "",
+      adminPasswordConfirm: "",
     }));
     setMessage("บันทึกตั้งค่าระบบแล้ว");
   }
@@ -791,6 +839,43 @@ export function AdminConsole() {
                 <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
                   หากกรอกเป็นเบอร์โทร ระบบจะเปิดเป็นปุ่มโทรออก ถ้ากรอกเป็นลิงก์ ระบบจะเปิดลิงก์นั้นจากปุ่มติดต่อโรงเรียนใน LINE
                 </p>
+                <div className="mt-5 rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
+                  <h3 className="text-base font-semibold text-[var(--text-main)]">บัญชีผู้ดูแลระบบ</h3>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    ใช้สำหรับเข้าสู่หน้าแอดมิน หากไม่ต้องการเปลี่ยนรหัสผ่านให้เว้นช่องรหัสผ่านใหม่ไว้
+                  </p>
+                  <div className="mt-4 grid gap-3">
+                    <Field label="อีเมลผู้ดูแล">
+                      <input
+                        className="app-input"
+                        type="email"
+                        value={settings.adminEmail}
+                        onChange={(event) => setSettings({ ...settings, adminEmail: event.target.value })}
+                        placeholder="admin@example.com"
+                      />
+                    </Field>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="รหัสผ่านใหม่">
+                        <input
+                          className="app-input"
+                          type="password"
+                          value={settings.adminPassword}
+                          onChange={(event) => setSettings({ ...settings, adminPassword: event.target.value })}
+                          placeholder="เว้นว่างถ้าไม่เปลี่ยน"
+                        />
+                      </Field>
+                      <Field label="ยืนยันรหัสผ่านใหม่">
+                        <input
+                          className="app-input"
+                          type="password"
+                          value={settings.adminPasswordConfirm}
+                          onChange={(event) => setSettings({ ...settings, adminPasswordConfirm: event.target.value })}
+                          placeholder="กรอกซ้ำเมื่อเปลี่ยนรหัส"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
                 <button type="button" onClick={saveSettings} disabled={busy} className="app-button-primary mt-4">
                   <Save size={16} />
                   บันทึกตั้งค่า
