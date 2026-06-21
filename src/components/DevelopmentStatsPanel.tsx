@@ -238,7 +238,7 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
   const panelId = "development-stats-panel";
 
   return (
-    <section className="mt-7 border-t border-sky-100 pt-5">
+    <section className="mt-5 border-t border-sky-100 pt-4">
       <button
         type="button"
         aria-expanded={isOpen}
