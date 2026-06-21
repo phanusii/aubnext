@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   description: "Exam result announcement and private result checking system",
 };
 
+// วาง dynamic page (เช่น /check-result, /line) ใน region เดียวกับ Postgres (สิงคโปร์)
+export const preferredRegion = "sin1";
+
 export default function RootLayout({
   children,
 }: Readonly<{
