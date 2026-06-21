@@ -6,7 +6,9 @@ import {
   BadgeCheck,
   BookOpen,
   Calculator,
+  Check,
   ClipboardList,
+  Copy,
   Download,
   ImageUp,
   Link2,
@@ -127,6 +129,7 @@ export function AdminConsole() {
   const [busy, setBusy] = useState(false);
   const [logoChanged, setLogoChanged] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("settings");
+  const [lineLinkCopied, setLineLinkCopied] = useState(false);
   const [pendingExamAction, setPendingExamAction] = useState<ExamAction | null>(null);
 
   const [newExamName, setNewExamName] = useState("สอบแข่งขันประจำปี");
@@ -151,6 +154,8 @@ export function AdminConsole() {
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
   const [resultSort, setResultSort] = useState<ResultSort>("rank");
   const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
+  // ลิงก์เพิ่มเพื่อนบัญชี LINE OA (ให้นักเรียนกดเพิ่มเพื่อนก่อนเช็คผล) — ตั้งทับได้ด้วย NEXT_PUBLIC_LINE_ADD_FRIEND_URL
+  const lineAddFriendUrl = process.env.NEXT_PUBLIC_LINE_ADD_FRIEND_URL || "https://lin.ee/OXREHbG";
   const webResultUrl = "/check-result";
   const schoolContactUrl = "/contact";
 
@@ -655,6 +660,18 @@ export function AdminConsole() {
     }
 
     setMessage(response.ok ? "อัปเดต Rich Menu ใน LINE แล้ว" : data.error ?? "อัปเดต Rich Menu ไม่สำเร็จ");
+  }
+
+  async function copyLineLink() {
+    // ลิงก์เพิ่มเพื่อน OA (lin.ee/...) เป็น URL เต็มอยู่แล้ว ส่งต่อให้นักเรียนกดเพิ่มเพื่อนแล้วเช็คผลได้เลย
+    try {
+      await navigator.clipboard.writeText(lineAddFriendUrl);
+      setLineLinkCopied(true);
+      setMessage("คัดลอกลิงก์เพิ่มเพื่อน LINE แล้ว ส่งต่อให้นักเรียนได้เลย");
+      setTimeout(() => setLineLinkCopied(false), 2000);
+    } catch {
+      setMessage(`คัดลอกอัตโนมัติไม่สำเร็จ คัดลอกลิงก์นี้เอง: ${lineAddFriendUrl}`);
+    }
   }
 
   const visibleRooms = useMemo(
@@ -1283,7 +1300,11 @@ export function AdminConsole() {
                 <p><span className="font-semibold text-[var(--text-main)]">Webhook</span> ตั้งค่า LINE Developers เป็น /api/line/webhook และให้ปุ่มดูผลคะแนนส่ง postback action=check_result</p>
               </div>
               <div className="space-y-2">
-                <a href={lineResultUrl} className="app-button-primary w-full" target="_blank" rel="noreferrer">
+                <button type="button" onClick={copyLineLink} className="app-button-primary w-full">
+                  {lineLinkCopied ? <Check size={16} /> : <Copy size={16} />}
+                  {lineLinkCopied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์เพิ่มเพื่อน LINE ให้นักเรียน"}
+                </button>
+                <a href={lineResultUrl} className="app-button-secondary w-full" target="_blank" rel="noreferrer">
                   <Link2 size={16} />
                   เปิดลิงก์ LINE แชท bot
                 </a>
