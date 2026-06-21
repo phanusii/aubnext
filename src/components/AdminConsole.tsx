@@ -24,6 +24,7 @@ import {
   Trash2,
   UploadCloud,
   Users,
+  Zap,
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
@@ -130,6 +131,7 @@ export function AdminConsole() {
   const [logoChanged, setLogoChanged] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("settings");
   const [lineLinkCopied, setLineLinkCopied] = useState(false);
+  const [warming, setWarming] = useState(false);
   const [pendingExamAction, setPendingExamAction] = useState<ExamAction | null>(null);
 
   const [newExamName, setNewExamName] = useState("สอบแข่งขันประจำปี");
@@ -660,6 +662,31 @@ export function AdminConsole() {
     }
 
     setMessage(response.ok ? "อัปเดต Rich Menu ใน LINE แล้ว" : data.error ?? "อัปเดต Rich Menu ไม่สำเร็จ");
+  }
+
+  async function warmDatabase() {
+    // ปลุก Neon (free tier scale-to-zero) ก่อนกดประกาศ → คลื่นแรกของนักเรียนไม่ต้องรอ DB ตื่น
+    // ยิง 2 ครั้ง: ครั้งแรกปลุก (อาจช้า) ครั้งสองวัดว่าตื่นแล้วเร็วจริง
+    if (warming) return;
+    setWarming(true);
+    setMessage("");
+    try {
+      let lastMs: number | null = null;
+      for (let i = 0; i < 2; i++) {
+        const res = await fetch("/api/keep-warm", { headers: { Accept: "application/json" } });
+        const data = await res.json().catch(() => ({}));
+        if (typeof data?.warmMs === "number") lastMs = data.warmMs;
+      }
+      setMessage(
+        lastMs != null
+          ? `ปลุก DB พร้อมแล้ว ( query ล่าสุด ${lastMs} ms) — กดประกาศได้เลยภายใน ~5 นาที`
+          : "ปลุก DB ไม่สำเร็จ ลองใหม่อีกครั้ง",
+      );
+    } catch {
+      setMessage("ปลุก DB ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    } finally {
+      setWarming(false);
+    }
   }
 
   async function copyLineLink() {
@@ -1300,6 +1327,10 @@ export function AdminConsole() {
                 <p><span className="font-semibold text-[var(--text-main)]">Webhook</span> ตั้งค่า LINE Developers เป็น /api/line/webhook และให้ปุ่มดูผลคะแนนส่ง postback action=check_result</p>
               </div>
               <div className="space-y-2">
+                <button type="button" onClick={warmDatabase} disabled={warming} className="app-button-pink w-full">
+                  <Zap size={16} />
+                  {warming ? "กำลังปลุก DB..." : "ปลุก DB เตรียมประกาศ (กดก่อนแจ้งนักเรียน)"}
+                </button>
                 <button type="button" onClick={copyLineLink} className="app-button-primary w-full">
                   {lineLinkCopied ? <Check size={16} /> : <Copy size={16} />}
                   {lineLinkCopied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์เพิ่มเพื่อน LINE ให้นักเรียน"}
