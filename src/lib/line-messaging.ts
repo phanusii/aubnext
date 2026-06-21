@@ -158,21 +158,29 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   const webResultUrl = webLookup
     ? `${baseUrl()}/line/result-web?token=${encodeURIComponent(signLineResultWebToken(webLookup))}`
     : `${baseUrl()}/check-result`;
-  // คะแนนรายวิชาแสดงเป็น 2 คอลัมน์ (จับคู่ทีละ 2 วิชา/แถว) เพื่อลดความสูงการ์ด
-  const subjectEntries = Object.entries(result.result.scoreBreakdown).slice(0, 8);
-  const subjectColumn = (entry: [string, number]): Record<string, unknown> => ({
+  // เซลล์เมตริกมาตรฐาน: ป้ายชิดซ้าย (flex 5) + ค่าชิดขวา (flex 4, align end) จัดกึ่งกลางแนวดิ่ง
+  // ใช้ตัวเดียวกันทั้งคะแนนวิชา/อันดับ/คะแนนรวม/สถานะ → ตัวเลขตรงคอลัมน์กันทั้งการ์ด
+  const metricCell = (
+    label: string,
+    value: string,
+    opts: { labelColor?: string; labelSize?: string; valueColor?: string; valueSize?: string; wrap?: boolean } = {},
+  ): Record<string, unknown> => ({
     type: "box",
     layout: "horizontal",
     flex: 1,
-    spacing: "sm",
     contents: [
-      { type: "text", text: entry[0], size: "xs", color: "#64748b", flex: 3, wrap: true },
-      { type: "text", text: formatScore(entry[1]), size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 1 },
+      { type: "text", text: label, size: opts.labelSize ?? "xs", color: opts.labelColor ?? "#64748b", flex: 5, wrap: true, gravity: "center" },
+      { type: "text", text: value, size: opts.valueSize ?? "xs", color: opts.valueColor ?? "#0f172a", weight: "bold", align: "end", flex: 4, gravity: "center", wrap: opts.wrap ?? false },
     ],
   });
+
+  // คะแนนรายวิชา 2 คอลัมน์ (จับคู่ทีละ 2 วิชา/แถว) ใช้เซลล์เดียวกับอันดับ → เลขตรงแนว
+  const subjectEntries = Object.entries(result.result.scoreBreakdown).slice(0, 8);
   const subjectRows: Record<string, unknown>[] = [];
   for (let i = 0; i < subjectEntries.length; i += 2) {
-    const pair: Record<string, unknown>[] = subjectEntries.slice(i, i + 2).map(subjectColumn);
+    const pair: Record<string, unknown>[] = subjectEntries
+      .slice(i, i + 2)
+      .map(([subject, score]) => metricCell(subject, formatScore(score)));
     if (pair.length === 1) pair.push({ type: "filler" });
     subjectRows.push({ type: "box", layout: "horizontal", margin: "sm", spacing: "lg", contents: pair });
   }
@@ -216,8 +224,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 type: "box",
                 layout: "horizontal",
                 contents: [
-                  { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", flex: 3, gravity: "center" },
-                  { type: "text", text: formatScore(result.result.totalScore), size: "xl", color: "#0f172a", weight: "bold", align: "end", flex: 3 },
+                  metricCell("คะแนนรวม", formatScore(result.result.totalScore), { labelColor: "#0369a1", labelSize: "sm", valueSize: "xl" }),
                 ],
               },
               {
@@ -225,32 +232,24 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 layout: "horizontal",
                 spacing: "lg",
                 contents: [
-                  {
-                    type: "box",
-                    layout: "horizontal",
-                    flex: 1,
-                    contents: [
-                      { type: "text", text: "อันดับห้อง", size: "xs", color: "#64748b", flex: 3 },
-                      { type: "text", text: result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank), size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
-                    ],
-                  },
-                  {
-                    type: "box",
-                    layout: "horizontal",
-                    flex: 1,
-                    contents: [
-                      { type: "text", text: "อันดับชั้น", size: "xs", color: "#64748b", flex: 3 },
-                      { type: "text", text: result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-", size: "xs", color: "#0f172a", weight: "bold", align: "end", flex: 2 },
-                    ],
-                  },
+                  metricCell(
+                    "อันดับห้อง",
+                    result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank),
+                  ),
+                  metricCell(
+                    "อันดับชั้น",
+                    result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-",
+                  ),
                 ],
               },
               {
                 type: "box",
                 layout: "horizontal",
                 contents: [
-                  { type: "text", text: "สถานะ", size: "xs", color: "#64748b", flex: 3 },
-                  { type: "text", text: statusText[result.result.status], size: "xs", color: result.result.status === "PASSED" ? "#0369a1" : "#64748b", weight: "bold", align: "end", flex: 4, wrap: true },
+                  metricCell("สถานะ", statusText[result.result.status], {
+                    valueColor: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
+                    wrap: true,
+                  }),
                 ],
               },
             ],
