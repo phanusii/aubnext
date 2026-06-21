@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { requireAdmin } from "@/lib/auth";
 import { getLineRichMenuPayload } from "@/lib/line-rich-menu";
 
-export const runtime = "nodejs";
+// nodejs เป็น runtime default อยู่แล้ว (cacheComponents เลิกรองรับ `export const runtime`)
 
 function lineToken() {
   return process.env.LINE_CHANNEL_ACCESS_TOKEN || "";

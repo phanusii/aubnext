@@ -2,8 +2,9 @@
 // ใช้คู่กับ external pinger (UptimeRobot/cron-job.org) ยิงทุก ~5 นาทีเฉพาะช่วงที่อยากให้ DB ตื่น
 // (อย่ายิง 24/7 บน Neon free — compute .25 CU ตลอดเวลา = ~180 CU-hrs/เดือน เกินโควตาฟรี 100)
 // รัน region เดียวกับ DB (สิงคโปร์)
+// route handler นี้อ่าน searchParams (request.url) จึงเป็น dynamic อยู่แล้ว + ตอบ no-store
+// (cacheComponents เลิกใช้ `export const dynamic` แล้ว)
 export const preferredRegion = "sin1";
-export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
