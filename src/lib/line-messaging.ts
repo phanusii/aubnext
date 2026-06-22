@@ -169,8 +169,8 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     layout: "horizontal",
     flex: 1,
     contents: [
-      { type: "text", text: label, size: opts.labelSize ?? "xs", color: opts.labelColor ?? "#64748b", flex: 5, wrap: true, gravity: "center" },
-      { type: "text", text: value, size: opts.valueSize ?? "xs", color: opts.valueColor ?? "#0f172a", weight: "bold", align: "end", flex: 4, gravity: "center", wrap: opts.wrap ?? false },
+      { type: "text", text: label, size: opts.labelSize ?? "sm", color: opts.labelColor ?? "#64748b", flex: 6, wrap: true, gravity: "center" },
+      { type: "text", text: value, size: opts.valueSize ?? "md", color: opts.valueColor ?? "#0f172a", weight: "bold", align: "end", flex: 4, gravity: "center", wrap: opts.wrap ?? false },
     ],
   });
 
@@ -178,11 +178,12 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   const subjectEntries = Object.entries(result.result.scoreBreakdown).slice(0, 8);
   const subjectRows: Record<string, unknown>[] = [];
   for (let i = 0; i < subjectEntries.length; i += 2) {
-    const pair: Record<string, unknown>[] = subjectEntries
+    const cells: Record<string, unknown>[] = subjectEntries
       .slice(i, i + 2)
       .map(([subject, score]) => metricCell(subject, formatScore(score)));
-    if (pair.length === 1) pair.push({ type: "filler" });
-    subjectRows.push({ type: "box", layout: "horizontal", margin: "sm", spacing: "lg", contents: pair });
+    // เส้นคั่นแนวตั้งกลาง 2 คอลัมน์ → ชัดว่าเลขไหนของวิชาไหน (กรณีคี่ใส่ filler แทน)
+    const contents = cells.length === 2 ? [cells[0], { type: "separator" }, cells[1]] : [cells[0], { type: "filler" }];
+    subjectRows.push({ type: "box", layout: "horizontal", margin: "md", spacing: "md", contents });
   }
 
   const passContents =
@@ -230,12 +231,13 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
               {
                 type: "box",
                 layout: "horizontal",
-                spacing: "lg",
+                spacing: "md",
                 contents: [
                   metricCell(
                     "อันดับห้อง",
                     result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank),
                   ),
+                  { type: "separator" },
                   metricCell(
                     "อันดับชั้น",
                     result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-",
