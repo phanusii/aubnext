@@ -263,7 +263,9 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
               {
                 // ผลการคัดเลือก: แสดงบรรทัดเดียวเด่น ๆ ไม่มีป้าย (✓ เฉพาะตอนผ่าน)
                 type: "text",
-                text: (result.result.status === "PASSED" ? "✓ " : "") + statusText[result.result.status],
+                text:
+                  (result.result.status === "PASSED" ? "✓ " : result.result.status === "FAILED" ? "✕ " : "") +
+                  statusText[result.result.status],
                 size: "sm",
                 weight: "bold",
                 color: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
