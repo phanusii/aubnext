@@ -173,21 +173,24 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   const webResultUrl = webLookup
     ? `${baseUrl()}/line/result-web?token=${encodeURIComponent(signLineResultWebToken(webLookup))}`
     : `${baseUrl()}/check-result`;
-  // เซลล์เมตริกมาตรฐาน: ป้ายชิดซ้าย (flex 5) + ค่าชิดขวา (flex 4, align end) จัดกึ่งกลางแนวดิ่ง
-  // ใช้ตัวเดียวกันทั้งคะแนนวิชา/อันดับ/คะแนนรวม/สถานะ → ตัวเลขตรงคอลัมน์กันทั้งการ์ด
+  // เซลล์เมตริก: ป้าย + ค่าอยู่ชิดกัน (flex 0 ทั้งคู่ + margin) ตัวเลขมาอยู่ใกล้ชื่อ ไม่ถูกผลักไปขวาสุด
+  // ตัวอักษร (ป้าย) กับตัวเลข (ค่า) ขนาดฟอนต์เท่ากัน · ตัวเลขเป็นตัวทึบ (bold) ป้ายเป็นตัวปกติ
   const metricCell = (
     label: string,
     value: string,
     opts: { labelColor?: string; labelSize?: string; valueColor?: string; valueSize?: string; wrap?: boolean } = {},
-  ): Record<string, unknown> => ({
-    type: "box",
-    layout: "horizontal",
-    flex: 1,
-    contents: [
-      { type: "text", text: label, size: opts.labelSize ?? "sm", color: opts.labelColor ?? "#64748b", flex: 6, wrap: true, gravity: "center" },
-      { type: "text", text: value, size: opts.valueSize ?? "md", color: opts.valueColor ?? "#0f172a", weight: "bold", align: "end", flex: 4, gravity: "center", wrap: opts.wrap ?? false },
-    ],
-  });
+  ): Record<string, unknown> => {
+    const size = opts.valueSize ?? opts.labelSize ?? "sm"; // ค่า = ขนาดเดียวกับป้าย
+    return {
+      type: "box",
+      layout: "horizontal",
+      flex: 1,
+      contents: [
+        { type: "text", text: label, size: opts.labelSize ?? "sm", color: opts.labelColor ?? "#64748b", flex: 0, wrap: false, gravity: "center" },
+        { type: "text", text: value, size, color: opts.valueColor ?? "#0f172a", weight: "bold", flex: 0, margin: "sm", gravity: "center", wrap: opts.wrap ?? false },
+      ],
+    };
+  };
 
   // สไตล์แถบสถานะตามผลการคัดเลือก
   const statusStyle = {
@@ -242,7 +245,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 layout: "horizontal",
                 contents: [
                   { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", weight: "bold", flex: 0, gravity: "center" },
-                  { type: "text", text: formatScore(result.result.totalScore), size: "lg", color: "#0f172a", weight: "bold", flex: 0, margin: "md", gravity: "center" },
+                  { type: "text", text: formatScore(result.result.totalScore), size: "sm", color: "#0f172a", weight: "bold", flex: 0, margin: "md", gravity: "center" },
                 ],
               },
               {
