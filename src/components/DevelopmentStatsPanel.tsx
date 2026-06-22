@@ -4,6 +4,14 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { BarChart3, ChevronDown, ChevronUp, GraduationCap, LineChart, Medal, Target, TrendingUp } from "lucide-react";
 import type { PublicStudentResult } from "@/lib/repository";
+import {
+  pointsToNextBand,
+  scoreBand,
+  subjectBandAdvice,
+  totalBandAdvice,
+  type ScoreBand,
+  type ScoreBandTone,
+} from "@/lib/score-bands";
 
 type SubjectStats = PublicStudentResult["statistics"]["subjects"][number];
 type InsightLevel = "strength" | "above" | "near" | "improve";
@@ -12,6 +20,9 @@ type DevelopmentTier = "single" | "top" | "lead" | "strong" | "good" | "steady" 
 type SubjectInsight = SubjectStats & {
   deltaLevel: number;
   advice: string;
+  band: ScoreBand | null; // ช่วงคะแนน (decile %) ของวิชานี้ — null ถ้าไม่มีคะแนนเต็ม
+  pct: number; // % ของคะแนนเต็ม (ใช้จัดอันดับจุดแข็ง/จุดที่ต้องพัฒนา)
+  bandAdvice: string; // คำแนะนำตามช่วงคะแนน (ผสมกับ advice อันดับเดิมในการ์ด)
 };
 
 function cx(...values: Array<string | false | null | undefined>) {
@@ -211,13 +222,28 @@ function scoreBarWidth(value: number, max: number) {
   return Math.max(4, Math.min(100, (value / max) * 100));
 }
 
-function buildSubjectInsights(subjects: SubjectStats[]) {
+function buildSubjectInsights(subjects: SubjectStats[]): SubjectInsight[] {
   return subjects.map((subject) => {
     const deltaLevel = subject.score - subject.levelAverage;
+    const band = scoreBand(subject.score, subject.maxScore);
+    const pct = band?.pct ?? (subject.maxScore && subject.maxScore > 0 ? (subject.score / subject.maxScore) * 100 : -1);
+    const next = pointsToNextBand(subject.score, subject.maxScore);
+    const bandAdvice = band
+      ? subjectBandAdvice(
+          band,
+          subject.name,
+          next?.points ?? 0,
+          next?.nextLabel ?? null,
+          textSeed(subject.name, subject.score, band.index),
+        )
+      : "";
     return {
       ...subject,
       deltaLevel,
       advice: subjectAdvice(subject.name, deltaLevel, subject.levelRank, subject.levelCount, subject.score),
+      band,
+      pct,
+      bandAdvice,
     };
   });
 }
@@ -228,13 +254,27 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
   const totalDeltaRoom = total.score - total.roomAverage;
   const totalDeltaLevel = total.score - total.levelAverage;
   const totalLevel = rankBand(total.levelRank, total.levelCount);
+  const totalBand = scoreBand(total.score, total.maxScore);
   const subjectInsights = useMemo(() => buildSubjectInsights(subjects), [subjects]);
-  const strongestSubject = subjectInsights.length
-    ? [...subjectInsights].sort((a, b) => b.deltaLevel - a.deltaLevel)[0]
-    : null;
-  const focusSubject = subjectInsights.length
-    ? [...subjectInsights].sort((a, b) => a.deltaLevel - b.deltaLevel)[0]
-    : null;
+  // จัดอันดับจุดแข็ง/จุดที่ควรพัฒนาด้วย % (ช่วงคะแนน) ถ้ามีคะแนนเต็ม — ไม่งั้น fallback ส่วนต่างจากเฉลี่ย
+  const rankedSubjects = useMemo(() => {
+    const hasBands = subjectInsights.some((item) => item.band);
+    return [...subjectInsights].sort((a, b) => (hasBands ? b.pct - a.pct : b.deltaLevel - a.deltaLevel));
+  }, [subjectInsights]);
+  const strongestSubject = rankedSubjects[0] ?? null;
+  const focusSubject = rankedSubjects.length ? rankedSubjects[rankedSubjects.length - 1] : null;
+
+  // เป้าหมายถัดไป = คำแนะนำตามช่วงคะแนน + คะแนนที่ต้องเพิ่มขึ้นช่วงถัดไป + บริบทอันดับเดิม (ผสม)
+  const rankMessage = totalMessage(totalDeltaLevel, total.levelRank, total.levelCount);
+  const totalNext = pointsToNextBand(total.score, total.maxScore);
+  const goalValue = totalBand ? `${totalBand.label} (${totalBand.rangeLabel})` : "ฝึกต่ออย่างมีทิศทาง";
+  const goalDescription = totalBand
+    ? `${totalBandAdvice(totalBand, textSeed(total.score, totalBand.index))} ${
+        totalNext
+          ? `เป้าหมายถัดไป: เพิ่มอีก ${formatScore(totalNext.points)} คะแนนเพื่อขึ้นช่วง “${totalNext.nextLabel}”.`
+          : "อยู่ช่วงคะแนนสูงสุดแล้ว รักษาระดับนี้ไว้."
+      } ${rankMessage}`
+    : `${rankMessage} ${nextGoalText(totalDeltaLevel)}`;
   const panelId = "development-stats-panel";
 
   return (
@@ -277,6 +317,7 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
             levelRank={total.levelRank}
             levelCount={total.levelCount}
             totalLevel={totalLevel}
+            totalBand={totalBand}
           />
 
           <ComparisonAndRankSection
@@ -290,14 +331,30 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
           />
 
           <DevelopmentFocusSection
-            message={totalMessage(totalDeltaLevel, total.levelRank, total.levelCount)}
-            goal={nextGoalText(totalDeltaLevel)}
+            goalValue={goalValue}
+            goalDescription={goalDescription}
             strongestSubject={strongestSubject}
             focusSubject={focusSubject}
           />
         </div>
       )}
     </section>
+  );
+}
+
+const bandChipClass: Record<ScoreBandTone, string> = {
+  rose: "bg-rose-50 text-rose-700 ring-rose-100",
+  amber: "bg-amber-50 text-amber-700 ring-amber-100",
+  sky: "bg-sky-50 text-sky-700 ring-sky-100",
+  emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+};
+
+function ScoreBandChip({ band, prefix }: { band: ScoreBand; prefix?: string }) {
+  return (
+    <span className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1", bandChipClass[band.tone])}>
+      {prefix && <span className="opacity-70">{prefix}</span>}
+      {band.label} · {band.rangeLabel}
+    </span>
   );
 }
 
@@ -312,6 +369,7 @@ function OverviewSection({
   levelRank,
   levelCount,
   totalLevel,
+  totalBand,
 }: {
   score: number;
   roomAverage: number;
@@ -323,12 +381,14 @@ function OverviewSection({
   levelRank: number;
   levelCount: number;
   totalLevel: InsightLevel;
+  totalBand: ScoreBand | null;
 }) {
   return (
     <div className="rounded-[1.5rem] border border-sky-100 bg-white p-4 shadow-[0_12px_30px_rgba(14,165,233,0.07)]">
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Target size={18} className="text-sky-700" />
         <h3 className="text-lg font-semibold leading-tight text-slate-950">ภาพรวมเพื่อการพัฒนา</h3>
+        {totalBand && <ScoreBandChip band={totalBand} prefix="ช่วงคะแนนรวม" />}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <InsightCard label="คะแนนรวม" value={formatScore(score)} subValue={nextGoalText(deltaLevel)} tone="sky" />
@@ -490,13 +550,13 @@ function DevelopmentRankBar({ label, rank, count }: { label: string; rank: numbe
 }
 
 function DevelopmentFocusSection({
-  message,
-  goal,
+  goalValue,
+  goalDescription,
   strongestSubject,
   focusSubject,
 }: {
-  message: string;
-  goal: string;
+  goalValue: string;
+  goalDescription: string;
   strongestSubject: SubjectInsight | null;
   focusSubject: SubjectInsight | null;
 }) {
@@ -505,22 +565,32 @@ function DevelopmentFocusSection({
       <FocusCard
         icon={<TrendingUp size={18} />}
         title="เป้าหมายถัดไป"
-        value="ฝึกต่ออย่างมีทิศทาง"
-        description={`${message} ${goal}`}
+        value={goalValue}
+        description={goalDescription}
         tone="sky"
       />
       <FocusCard
         icon={<Medal size={18} />}
         title="รักษาจุดแข็ง"
         value={strongestSubject?.name ?? "-"}
-        description={strongestSubject ? strongestSubject.advice : "ยังไม่มีข้อมูลรายวิชาสำหรับวิเคราะห์จุดแข็ง"}
+        description={
+          strongestSubject
+            ? strongestSubject.bandAdvice || strongestSubject.advice
+            : "ยังไม่มีข้อมูลรายวิชาสำหรับวิเคราะห์จุดแข็ง"
+        }
+        band={strongestSubject?.band ?? null}
         tone="emerald"
       />
       <FocusCard
         icon={<Target size={18} />}
         title="เริ่มพัฒนาที่วิชา"
         value={focusSubject?.name ?? "-"}
-        description={focusSubject ? focusSubject.advice : "ยังไม่มีข้อมูลรายวิชาสำหรับวิเคราะห์จุดที่ควรเสริม"}
+        description={
+          focusSubject
+            ? focusSubject.bandAdvice || focusSubject.advice
+            : "ยังไม่มีข้อมูลรายวิชาสำหรับวิเคราะห์จุดที่ควรเสริม"
+        }
+        band={focusSubject?.band ?? null}
         tone="pink"
       />
     </div>
@@ -533,12 +603,14 @@ function FocusCard({
   value,
   description,
   tone,
+  band,
 }: {
   icon: ReactNode;
   title: string;
   value: string;
   description: string;
   tone: "sky" | "emerald" | "pink";
+  band?: ScoreBand | null;
 }) {
   const iconClass = {
     sky: "bg-sky-50 text-sky-700 ring-sky-100",
@@ -553,6 +625,11 @@ function FocusCard({
         <p className="text-sm font-semibold text-slate-900">{title}</p>
       </div>
       <p className="mt-3 text-xl font-semibold leading-tight text-slate-950">{value}</p>
+      {band && (
+        <div className="mt-2">
+          <ScoreBandChip band={band} prefix="ช่วงคะแนน" />
+        </div>
+      )}
       <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{description}</p>
     </article>
   );
