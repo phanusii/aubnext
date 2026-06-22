@@ -33,12 +33,6 @@ const replyEndpoint = "https://api.line.me/v2/bot/message/reply";
 const pushEndpoint = "https://api.line.me/v2/bot/message/push";
 const loadingEndpoint = "https://api.line.me/v2/bot/chat/loading/start";
 
-const statusText = {
-  PASSED: "ผ่านการคัดเลือก",
-  FAILED: "ไม่ผ่านการคัดเลือก",
-  REVIEW: "รอตรวจสอบโดยกรรมการ",
-};
-
 function channelSecret() {
   return process.env.LINE_CHANNEL_SECRET || "";
 }
@@ -195,6 +189,13 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     ],
   });
 
+  // สไตล์แถบสถานะตามผลการคัดเลือก
+  const statusStyle = {
+    PASSED: { bg: "#dcfce7", color: "#15803d", text: "✓ ผ่านการคัดเลือก" },
+    FAILED: { bg: "#fee2e2", color: "#b91c1c", text: "✕ ไม่ผ่านการคัดเลือก" },
+    REVIEW: { bg: "#fef3c7", color: "#b45309", text: "รอตรวจสอบโดยกรรมการ" },
+  }[result.result.status];
+
   // คะแนนรายวิชา 2 คอลัมน์ (จับคู่ทีละ 2 วิชา/แถว) ใช้เซลล์เดียวกับอันดับ → เลขตรงแนว
   const subjectEntries = Object.entries(result.result.scoreBreakdown).slice(0, 8);
   const subjectRows: Record<string, unknown>[] = [];
@@ -260,18 +261,25 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                   ),
                 ],
               },
+            ],
+          },
+          // แถบสถานะ (ออกมานอกกล่องคะแนน) — สีตามผล: เขียว=ผ่าน, แดง=ไม่ผ่าน, เหลือง=รอตรวจ
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: statusStyle.bg,
+            cornerRadius: "12px",
+            paddingAll: "12px",
+            margin: "md",
+            contents: [
               {
-                // ผลการคัดเลือก: แสดงบรรทัดเดียวเด่น ๆ ไม่มีป้าย (✓ เฉพาะตอนผ่าน)
                 type: "text",
-                text:
-                  (result.result.status === "PASSED" ? "✓ " : result.result.status === "FAILED" ? "✕ " : "") +
-                  statusText[result.result.status],
-                size: "sm",
+                text: statusStyle.text,
+                size: "md",
                 weight: "bold",
-                color: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
+                color: statusStyle.color,
                 align: "center",
                 wrap: false,
-                margin: "sm",
               },
             ],
           },
