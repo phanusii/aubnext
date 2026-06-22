@@ -136,7 +136,11 @@ export function LinePortal({
     setSuccess(true);
     setBinding({ student: data.student, exam: data.exam });
     setShowChangeForm(false);
-    setMessage(`ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว กำลังกลับไป LINE`);
+    setMessage(
+      data.resultPushed
+        ? `ผูกบัญชีกับ ${data.student.name} แล้ว ส่งผลคะแนนเข้าแชท LINE แล้ว กำลังกลับไป...`
+        : `ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว กำลังกลับไป LINE`,
+    );
     closeLiffWindow();
   }
 
