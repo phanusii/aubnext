@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { Award, BarChart3, ChevronLeft, Medal, School, ShieldCheck, Trophy } from "lucide-react";
+import { BarChart3, ChevronLeft, School, Trophy } from "lucide-react";
 import type { PublicStudentResult } from "@/lib/repository";
 
 // แผง "ภาพรวมเพื่อการพัฒนา" ใหญ่ (~560 บรรทัด) และพับเก็บ default + อยู่ใต้ fold
@@ -28,11 +28,26 @@ const statusText = {
   REVIEW: "รอตรวจสอบ",
 };
 
-function statusClass(status: StudentResult["result"]["status"]) {
-  if (status === "PASSED") return "bg-sky-50 text-sky-700 ring-sky-100";
-  if (status === "REVIEW") return "bg-pink-50 text-pink-700 ring-pink-100";
-  return "bg-slate-100 text-slate-600 ring-slate-200";
+// คอนเฟตตีร่วงในหัวการ์ด (เฉพาะคนที่ผ่าน) — CSS ล้วน เบา ไม่กระตุกบนมือถือ
+const confettiCss = `
+@keyframes resultConfettiFall {
+  0% { transform: translateY(-12px) rotate(0deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateY(130px) rotate(360deg); opacity: 0; }
 }
+.confetti { position:absolute; top:-12px; width:7px; height:11px; border-radius:2px; animation: resultConfettiFall 2.6s ease-in infinite; }
+@media (prefers-reduced-motion: reduce) { .confetti { animation: none; opacity: 0; } }
+`;
+const CONFETTI = [
+  { left: "8%", color: "#f472b6", delay: "0s" },
+  { left: "20%", color: "#38bdf8", delay: "0.5s" },
+  { left: "33%", color: "#a78bfa", delay: "1.1s" },
+  { left: "46%", color: "#fbbf24", delay: "0.2s" },
+  { left: "60%", color: "#34d399", delay: "0.8s" },
+  { left: "72%", color: "#f472b6", delay: "1.4s" },
+  { left: "85%", color: "#38bdf8", delay: "0.35s" },
+  { left: "93%", color: "#a78bfa", delay: "0.95s" },
+];
 
 function formatScore(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
@@ -59,9 +74,9 @@ function formatPublishedAt(value: string | Date | null) {
 
 export function ResultShell({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_58%,#ffffff_100%)] text-[var(--text-main)]">
-      <section className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 py-4 md:px-5 md:py-8">
-        <Link href="/check-result" className="mb-3 inline-flex w-fit items-center gap-1 text-sm font-semibold text-[var(--primary-blue-strong)]">
+    <main className="min-h-screen bg-[linear-gradient(180deg,#e0f2fe_0%,#ede9fe_42%,#fce7f3_100%)] text-[var(--text-main)]">
+      <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-3 py-4 md:px-5 md:py-8">
+        <Link href="/check-result" className="mb-3 inline-flex w-fit items-center gap-1 rounded-full bg-white/70 px-3 py-1.5 text-sm font-semibold text-[var(--primary-blue-strong)] shadow-sm backdrop-blur">
           <ChevronLeft size={18} />
           กลับไปกรอกรหัส
         </Link>
@@ -76,38 +91,48 @@ export function ResultContent({ result }: { result: StudentResult }) {
   const passTitle = result.exam.passTitle?.trim() || "ผ่านการคัดเลือก";
   const passInstructions = result.exam.passInstructions?.trim() || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน";
 
+  const celebrate = result.result.status === "PASSED";
+
   return (
-    <article className="overflow-hidden rounded-[1.75rem] border border-sky-100 bg-white/95 shadow-[0_18px_55px_rgba(14,165,233,0.10)]">
-      <header className="border-b border-sky-100 bg-[linear-gradient(135deg,#ffffff_0%,#eff9ff_54%,#fff5fb_100%)] p-3.5 md:p-6">
-        <div className="flex gap-3 md:gap-4">
+    <article className="overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/95 shadow-[0_24px_70px_rgba(219,39,119,0.16)]">
+      <style>{confettiCss}</style>
+      <header className="relative overflow-hidden bg-[linear-gradient(135deg,#38bdf8_0%,#a78bfa_52%,#f472b6_100%)] p-4 md:p-6">
+        <div className="pointer-events-none absolute right-3 top-2 text-lg opacity-90">✨</div>
+        <div className="pointer-events-none absolute right-12 bottom-2 text-sm opacity-80">⭐️</div>
+        {celebrate && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+            {CONFETTI.map((c, i) => (
+              <span key={i} className="confetti" style={{ left: c.left, background: c.color, animationDelay: c.delay }} />
+            ))}
+          </div>
+        )}
+        <div className="relative flex gap-3 md:gap-4">
           {result.school.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={result.school.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-1 ring-sky-100 md:size-20" />
+            <img src={result.school.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-2 ring-white/60 md:size-20" />
           ) : (
-            <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white text-[var(--primary-blue-strong)] ring-1 ring-sky-100 md:size-20">
+            <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/25 text-white ring-2 ring-white/50 backdrop-blur md:size-20">
               <School size={34} />
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-2xl font-semibold leading-tight text-[var(--primary-blue-strong)] md:text-3xl">{result.school.schoolName}</p>
-            <h1 className="mt-1 text-xl font-semibold leading-snug text-slate-950 md:text-3xl">{result.exam.name}</h1>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
+            <p className="text-lg font-semibold leading-tight text-white md:text-2xl">🌸 {result.school.schoolName}</p>
+            <h1 className="mt-1 text-base font-semibold leading-snug text-white/95 md:text-2xl">{result.exam.name}</h1>
+            <p className="mt-2 text-xs text-white/85 md:text-sm">
               ระดับชั้น {result.exam.classLevel}
-              {publishedAt ? ` · ประกาศวันที่ ${publishedAt}` : ""}
+              {publishedAt ? ` · ประกาศ ${publishedAt}` : ""}
             </p>
           </div>
         </div>
       </header>
 
-      <div className="p-3.5 md:p-6">
-        <div className="rounded-[1.5rem] border border-sky-100 bg-white p-3.5 shadow-[0_10px_30px_rgba(14,165,233,0.06)]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <span className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${statusClass(result.result.status)}`}>
-              {statusText[result.result.status]}
-            </span>
-          </div>
-          <div className="mt-2">
-            <p className="text-sm font-medium text-[var(--text-muted)]">ผู้เข้าสอบ</p>
+      <div className="p-3 md:p-6">
+        <div className="rounded-[1.5rem] bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-4 ring-1 ring-white/70 shadow-[0_10px_30px_rgba(14,165,233,0.08)]">
+          <span className={`inline-flex w-fit items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm bg-gradient-to-r ${celebrate ? "from-emerald-400 to-green-500" : result.result.status === "REVIEW" ? "from-amber-400 to-amber-500" : "from-slate-400 to-slate-500"}`}>
+            {celebrate ? "🎉 " : ""}{statusText[result.result.status]}
+          </span>
+          <div className="mt-2.5">
+            <p className="text-xs font-medium text-[var(--text-muted)]">ผู้เข้าสอบ</p>
             <h2 className="mt-1 text-2xl font-semibold leading-tight md:text-3xl">{result.student.name}</h2>
             <p className="mt-1.5 text-sm text-[var(--text-muted)]">
               รหัส {result.student.examNo} · {result.student.classLevel}/{result.student.room}
@@ -116,31 +141,33 @@ export function ResultContent({ result }: { result: StudentResult }) {
         </div>
 
         <section className="mt-4">
-          <SectionTitle title="คะแนนรายวิชา" />
-          <div className="mt-2.5 overflow-hidden rounded-[1.35rem] border border-sky-100 bg-white">
-            {Object.entries(result.result.scoreBreakdown).map(([subject, score]) => (
-              <div key={subject} className="grid grid-cols-[1fr_auto] gap-4 border-b border-sky-50 px-4 py-2.5 last:border-b-0">
-                <span className="font-medium text-slate-700">{subject}</span>
-                <span className="text-lg font-semibold text-slate-950">{formatScore(score)}</span>
-              </div>
-            ))}
+          <SectionTitle title="คะแนนรายวิชา" emoji="📊" />
+          <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+            {Object.entries(result.result.scoreBreakdown).map(([subject, score], idx) => {
+              const sky = idx % 2 === 0;
+              return (
+                <div key={subject} className={`flex items-center justify-between gap-2 rounded-2xl px-3.5 py-3 bg-gradient-to-br ${sky ? "from-sky-50 to-sky-100" : "from-pink-50 to-pink-100"}`}>
+                  <span className={`min-w-0 truncate text-sm font-medium ${sky ? "text-sky-800" : "text-pink-800"}`}>{subject}</span>
+                  <span className={`shrink-0 text-xl font-semibold ${sky ? "text-sky-700" : "text-pink-700"}`}>{formatScore(score)}</span>
+                </div>
+              );
+            })}
           </div>
         </section>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric icon={<Award size={18} />} label="คะแนนรวม" value={formatScore(result.result.totalScore)} />
-          <Metric icon={<Medal size={18} />} label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} />
-          <Metric icon={<Trophy size={18} />} label="อันดับในชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} />
-          <Metric icon={<ShieldCheck size={18} />} label="สถานะ" value={statusText[result.result.status]} />
+        <div className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          <Metric emoji="🏆" label="คะแนนรวม" value={formatScore(result.result.totalScore)} tone="pink" />
+          <Metric emoji="🥇" label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} tone="sky" />
+          <Metric emoji="🎖" label="อันดับในชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} tone="violet" />
+          <Metric emoji={celebrate ? "✓" : "•"} label="สถานะ" value={statusText[result.result.status]} tone={celebrate ? "emerald" : "slate"} />
         </div>
 
-        {result.result.status === "PASSED" && (
-          <section className="mt-4 rounded-[1.35rem] border border-sky-100 bg-sky-50 px-4 py-3.5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-sky-800">
-              <ShieldCheck size={18} />
-              {passTitle}
+        {celebrate && (
+          <section className="mt-4 overflow-hidden rounded-[1.35rem] bg-[linear-gradient(135deg,#dcfce7,#d1fae5)] px-4 py-3.5 ring-1 ring-emerald-100">
+            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+              🎉 {passTitle}
             </div>
-            <p className="mt-1.5 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">
+            <p className="mt-1.5 whitespace-pre-line text-sm leading-6 text-emerald-900/80">
               {passInstructions}
             </p>
           </section>
@@ -204,21 +231,32 @@ export function MissingResult({
   );
 }
 
-function Metric({ icon, label, value }: { icon?: ReactNode; label: string; value: string }) {
+type MetricTone = "pink" | "sky" | "violet" | "emerald" | "slate";
+
+function Metric({ emoji, label, value, tone }: { emoji: string; label: string; value: string; tone: MetricTone }) {
+  const toneClass: Record<MetricTone, { box: string; label: string; value: string }> = {
+    pink: { box: "from-pink-50 to-pink-100", label: "text-pink-700/80", value: "text-pink-700" },
+    sky: { box: "from-sky-50 to-sky-100", label: "text-sky-700/80", value: "text-sky-700" },
+    violet: { box: "from-violet-50 to-violet-100", label: "text-violet-700/80", value: "text-violet-700" },
+    emerald: { box: "from-emerald-50 to-emerald-100", label: "text-emerald-700/80", value: "text-emerald-700" },
+    slate: { box: "from-slate-50 to-slate-100", label: "text-slate-600", value: "text-slate-700" },
+  };
+  const t = toneClass[tone];
   return (
-    <div className="rounded-[1.35rem] border border-sky-100 bg-[#fbfdff] p-3.5 shadow-[0_8px_24px_rgba(14,165,233,0.05)] md:p-4">
-      <div className="flex items-center gap-2 text-xs font-medium text-[var(--text-muted)] md:text-sm">
-        {icon ? icon : null}
+    <div className={`rounded-[1.35rem] bg-gradient-to-br ${t.box} p-3.5 shadow-[0_8px_24px_rgba(14,165,233,0.06)] md:p-4`}>
+      <div className={`flex items-center gap-1.5 text-xs font-medium ${t.label} md:text-sm`}>
+        <span>{emoji}</span>
         {label}
       </div>
-      <div className="mt-2 text-2xl font-semibold leading-none md:text-3xl">{value}</div>
+      <div className={`mt-1.5 text-xl font-semibold leading-tight ${t.value} md:text-2xl`}>{value}</div>
     </div>
   );
 }
 
-function SectionTitle({ title, icon }: { title: string; icon?: ReactNode }) {
+function SectionTitle({ title, icon, emoji }: { title: string; icon?: ReactNode; emoji?: string }) {
   return (
     <div className="mb-2.5 flex items-center gap-2">
+      {emoji ? <span className="text-base">{emoji}</span> : null}
       {icon ? <span className="text-sky-700">{icon}</span> : null}
       <h3 className="text-lg font-semibold leading-tight text-slate-950">{title}</h3>
     </div>
@@ -257,9 +295,9 @@ function TotalComparisonChart({
           </div>
         </div>
         <div className="space-y-3">
-          <ChartBar label="นักเรียน" value={score} max={maxScore} colorClass="bg-sky-500" valueClass="text-sky-700" />
-          <ChartBar label="เฉลี่ยห้อง" value={roomAverage} max={maxScore} colorClass="bg-pink-400" valueClass="text-pink-700" />
-          <ChartBar label="เฉลี่ยทั้งชั้น" value={levelAverage} max={maxScore} colorClass="bg-sky-200" valueClass="text-sky-700" />
+          <ChartBar label="นักเรียน" value={score} max={maxScore} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" />
+          <ChartBar label="เฉลี่ยห้อง" value={roomAverage} max={maxScore} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
+          <ChartBar label="เฉลี่ยทั้งชั้น" value={levelAverage} max={maxScore} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
         </div>
       </div>
 
@@ -301,9 +339,9 @@ function SubjectComparisonCharts({
 
             <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
               <div className="space-y-3">
-                <ChartBar label="นักเรียน" value={subject.score} max={maxScore} colorClass="bg-sky-500" valueClass="text-sky-700" />
-                <ChartBar label="เฉลี่ยห้อง" value={subject.roomAverage} max={maxScore} colorClass="bg-pink-400" valueClass="text-pink-700" />
-                <ChartBar label="เฉลี่ยทั้งชั้น" value={subject.levelAverage} max={maxScore} colorClass="bg-sky-200" valueClass="text-sky-700" />
+                <ChartBar label="นักเรียน" value={subject.score} max={maxScore} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" />
+                <ChartBar label="เฉลี่ยห้อง" value={subject.roomAverage} max={maxScore} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
+                <ChartBar label="เฉลี่ยทั้งชั้น" value={subject.levelAverage} max={maxScore} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
               </div>
               <div className="space-y-3 rounded-2xl bg-[#f8fbff] p-3">
                 <RankBar label="อันดับห้อง" rank={subject.roomRank} count={subject.roomCount} compact />
