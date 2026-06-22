@@ -207,13 +207,6 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     subjectRows.push({ type: "box", layout: "horizontal", margin: "md", spacing: "md", contents });
   }
 
-  const passContents =
-    result.result.status === "PASSED"
-      ? [
-          { type: "separator", margin: "sm" },
-          { type: "text", text: result.exam.passTitle || "ผ่านการคัดเลือก", weight: "bold", size: "sm", color: "#0369a1", wrap: true, margin: "sm" },
-        ]
-      : [];
 
   return {
     type: "flex",
@@ -243,10 +236,12 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
             margin: "sm",
             contents: [
               {
+                // คะแนนรวม + ตัวเลข อยู่ชิดกัน (flex 0 ทั้งคู่ + margin) ไม่ผลักเลขไปขวาสุด
                 type: "box",
                 layout: "horizontal",
                 contents: [
-                  metricCell("คะแนนรวม", formatScore(result.result.totalScore), { labelColor: "#0369a1", labelSize: "sm", valueSize: "lg" }),
+                  { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", weight: "bold", flex: 0, gravity: "center" },
+                  { type: "text", text: formatScore(result.result.totalScore), size: "lg", color: "#0f172a", weight: "bold", flex: 0, margin: "md", gravity: "center" },
                 ],
               },
               {
@@ -266,19 +261,19 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 ],
               },
               {
-                // สถานะ: ป้ายแคบ + ค่ากว้าง + ห้ามตัดบรรทัด → "ผ่านการคัดเลือก" อยู่บรรทัดเดียว
+                // ผลการคัดเลือก: สองวลียาวพอกัน ใช้ xs ทั้งคู่ + ห้ามตัดบรรทัด → อยู่บรรทัดเดียวพอดี
                 type: "box",
                 layout: "horizontal",
                 contents: [
-                  { type: "text", text: "สถานะ", size: "sm", color: "#64748b", flex: 3, gravity: "center" },
+                  { type: "text", text: "ผลการคัดเลือก", size: "xs", color: "#64748b", flex: 5, gravity: "center", wrap: false },
                   {
                     type: "text",
                     text: statusText[result.result.status],
-                    size: "sm",
+                    size: "xs",
                     weight: "bold",
                     color: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
                     align: "end",
-                    flex: 7,
+                    flex: 6,
                     gravity: "center",
                     wrap: false,
                   },
@@ -286,7 +281,6 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
               },
             ],
           },
-          ...passContents,
         ],
       },
       footer: {
