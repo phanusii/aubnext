@@ -246,7 +246,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 type: "box",
                 layout: "horizontal",
                 contents: [
-                  metricCell("คะแนนรวม", formatScore(result.result.totalScore), { labelColor: "#0369a1", labelSize: "sm", valueSize: "xl" }),
+                  metricCell("คะแนนรวม", formatScore(result.result.totalScore), { labelColor: "#0369a1", labelSize: "sm", valueSize: "lg" }),
                 ],
               },
               {
@@ -266,13 +266,22 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 ],
               },
               {
+                // สถานะ: ป้ายแคบ + ค่ากว้าง + ห้ามตัดบรรทัด → "ผ่านการคัดเลือก" อยู่บรรทัดเดียว
                 type: "box",
                 layout: "horizontal",
                 contents: [
-                  metricCell("สถานะ", statusText[result.result.status], {
-                    valueColor: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
-                    wrap: true,
-                  }),
+                  { type: "text", text: "สถานะ", size: "sm", color: "#64748b", flex: 3, gravity: "center" },
+                  {
+                    type: "text",
+                    text: statusText[result.result.status],
+                    size: "sm",
+                    weight: "bold",
+                    color: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
+                    align: "end",
+                    flex: 7,
+                    gravity: "center",
+                    wrap: false,
+                  },
                 ],
               },
             ],
