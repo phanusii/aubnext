@@ -173,41 +173,58 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   const webResultUrl = webLookup
     ? `${baseUrl()}/line/result-web?token=${encodeURIComponent(signLineResultWebToken(webLookup))}`
     : `${baseUrl()}/check-result`;
-  // เซลล์เมตริก: ป้าย + ค่าอยู่ชิดกัน (flex 0 ทั้งคู่ + margin) ตัวเลขมาอยู่ใกล้ชื่อ ไม่ถูกผลักไปขวาสุด
-  // ตัวอักษร (ป้าย) กับตัวเลข (ค่า) ขนาดฟอนต์เท่ากัน · ตัวเลขเป็นตัวทึบ (bold) ป้ายเป็นตัวปกติ
-  const metricCell = (
-    label: string,
-    value: string,
-    opts: { labelColor?: string; labelSize?: string; valueColor?: string; valueSize?: string; wrap?: boolean } = {},
-  ): Record<string, unknown> => {
-    const size = opts.valueSize ?? opts.labelSize ?? "sm"; // ค่า = ขนาดเดียวกับป้าย
-    return {
-      type: "box",
-      layout: "horizontal",
-      flex: 1,
-      contents: [
-        { type: "text", text: label, size: opts.labelSize ?? "sm", color: opts.labelColor ?? "#64748b", flex: 0, wrap: false, gravity: "center" },
-        { type: "text", text: value, size, color: opts.valueColor ?? "#0f172a", weight: "bold", flex: 0, margin: "sm", gravity: "center", wrap: opts.wrap ?? false },
-      ],
-    };
-  };
+  // ไล่สีพื้น (LINE รองรับ linearGradient บน box) — โทนชมพู+ฟ้า
+  const gradient = (startColor: string, endColor: string, centerColor?: string) => ({
+    type: "linearGradient",
+    angle: "135deg",
+    startColor,
+    endColor,
+    ...(centerColor ? { centerColor, centerPosition: "50%" } : {}),
+  });
 
-  // สไตล์แถบสถานะตามผลการคัดเลือก
+  // พิลล์คะแนนรายวิชา: สลับโทนฟ้า/ชมพู · ชื่อซ้าย เลขขวา (อยู่ในพิลล์เดียวกันจึงดูเป็นชุด) · เลขตัวทึบ
+  const subjectPill = (name: string, value: string, tone: "sky" | "pink"): Record<string, unknown> => ({
+    type: "box",
+    layout: "horizontal",
+    flex: 1,
+    cornerRadius: "14px",
+    paddingAll: "10px",
+    background: tone === "sky" ? gradient("#e0f2fe", "#bae6fd") : gradient("#fce7f3", "#fbcfe8"),
+    contents: [
+      { type: "text", text: name, size: "sm", color: tone === "sky" ? "#075985" : "#9d174d", flex: 1, gravity: "center", wrap: false },
+      { type: "text", text: value, size: "sm", weight: "bold", color: tone === "sky" ? "#0369a1" : "#db2777", flex: 0, gravity: "center", align: "end" },
+    ],
+  });
+
+  // พิลล์อันดับ (พื้นขาวโปร่งบนกล่องไล่สี) · ป้ายกับเลขขนาดเท่ากัน เลขตัวทึบ
+  const rankPill = (label: string, value: string, tone: "sky" | "pink"): Record<string, unknown> => ({
+    type: "box",
+    layout: "horizontal",
+    flex: 1,
+    cornerRadius: "11px",
+    paddingAll: "8px",
+    backgroundColor: "#FFFFFFB3",
+    contents: [
+      { type: "text", text: label, size: "xs", color: tone === "sky" ? "#075985" : "#9d174d", flex: 1, gravity: "center", wrap: false },
+      { type: "text", text: value, size: "xs", weight: "bold", color: tone === "sky" ? "#0369a1" : "#db2777", flex: 0, gravity: "center", align: "end" },
+    ],
+  });
+
+  // แถบสถานะตามผล — พื้นไล่สี (เขียว=ผ่าน, แดง=ไม่ผ่าน, เหลือง=รอตรวจ)
   const statusStyle = {
-    PASSED: { bg: "#dcfce7", color: "#15803d", text: "✓ ผ่านการคัดเลือก" },
-    FAILED: { bg: "#fee2e2", color: "#b91c1c", text: "✕ ไม่ผ่านการคัดเลือก" },
-    REVIEW: { bg: "#fef3c7", color: "#b45309", text: "รอตรวจสอบโดยกรรมการ" },
+    PASSED: { bg: gradient("#bbf7d0", "#86efac"), color: "#15803d", text: "✓ ผ่านการคัดเลือก" },
+    FAILED: { bg: gradient("#fecaca", "#fca5a5"), color: "#b91c1c", text: "✕ ไม่ผ่านการคัดเลือก" },
+    REVIEW: { bg: gradient("#fde68a", "#fcd34d"), color: "#b45309", text: "รอตรวจสอบโดยกรรมการ" },
   }[result.result.status];
 
-  // คะแนนรายวิชา 2 คอลัมน์ (จับคู่ทีละ 2 วิชา/แถว) ใช้เซลล์เดียวกับอันดับ → เลขตรงแนว
+  // คะแนนรายวิชา 2 คอลัมน์/แถว สลับโทนฟ้า-ชมพู
   const subjectEntries = Object.entries(result.result.scoreBreakdown).slice(0, 8);
   const subjectRows: Record<string, unknown>[] = [];
   for (let i = 0; i < subjectEntries.length; i += 2) {
     const cells: Record<string, unknown>[] = subjectEntries
       .slice(i, i + 2)
-      .map(([subject, score]) => metricCell(subject, formatScore(score)));
-    // เส้นคั่นแนวตั้งกลาง 2 คอลัมน์ → ชัดว่าเลขไหนของวิชาไหน (กรณีคี่ใส่ filler แทน)
-    const contents = cells.length === 2 ? [cells[0], { type: "separator" }, cells[1]] : [cells[0], { type: "filler" }];
+      .map(([subject, score], idx) => subjectPill(subject, formatScore(score), (i + idx) % 2 === 0 ? "sky" : "pink"));
+    const contents = cells.length === 2 ? cells : [cells[0], { type: "filler" }];
     subjectRows.push({ type: "box", layout: "horizontal", margin: "md", spacing: "md", contents });
   }
 
@@ -217,73 +234,88 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     altText: `ผลคะแนนของ ${result.student.name}`,
     contents: {
       type: "bubble",
+      // หัวการ์ด: แถบไล่สี ฟ้า→ม่วง→ชมพู ชื่อโรงเรียนตัวขาว + ชื่อรอบสอบ
+      header: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "16px",
+        spacing: "xs",
+        background: gradient("#38bdf8", "#f472b6", "#a78bfa"),
+        contents: [
+          { type: "text", text: `🌸 ${result.school.schoolName} ✨`, size: "sm", color: "#ffffff", weight: "bold", wrap: true },
+          { type: "text", text: result.exam.name, size: "xxs", color: "#eef2ff", wrap: true },
+        ],
+      },
       body: {
         type: "box",
         layout: "vertical",
         spacing: "sm",
         paddingAll: "16px",
         contents: [
-          { type: "text", text: result.school.schoolName, size: "sm", color: "#0369a1", weight: "bold", wrap: true },
-          { type: "text", text: result.exam.name, size: "sm", color: "#64748b", wrap: true },
-          { type: "separator", margin: "sm" },
-          { type: "text", text: result.student.name, size: "lg", color: "#0f172a", weight: "bold", wrap: true, margin: "sm" },
+          { type: "text", text: result.student.name, size: "lg", color: "#0f172a", weight: "bold", wrap: true },
           { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#64748b" },
-          { type: "text", text: "คะแนนรายวิชา", size: "sm", color: "#0f172a", weight: "bold", margin: "sm" },
+          {
+            type: "box",
+            layout: "horizontal",
+            margin: "md",
+            spacing: "sm",
+            alignItems: "center",
+            contents: [
+              { type: "text", text: "📊 คะแนนรายวิชา", size: "sm", color: "#db2777", weight: "bold", flex: 0 },
+              { type: "separator", color: "#f9a8d4" },
+            ],
+          },
           ...subjectRows,
+          // กล่องคะแนนรวม + อันดับ พื้นไล่สี ฟ้า→ม่วง→ชมพู
           {
             type: "box",
             layout: "vertical",
-            backgroundColor: "#f0f9ff",
+            background: gradient("#dbeafe", "#fce7f3", "#ede9fe"),
             cornerRadius: "16px",
             paddingAll: "12px",
-            spacing: "xs",
-            margin: "sm",
+            spacing: "sm",
+            margin: "md",
             contents: [
               {
-                // คะแนนรวม + ตัวเลข อยู่ชิดกัน (flex 0 ทั้งคู่ + margin) ไม่ผลักเลขไปขวาสุด
                 type: "box",
                 layout: "horizontal",
+                alignItems: "center",
                 contents: [
                   { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", weight: "bold", flex: 0, gravity: "center" },
-                  { type: "text", text: formatScore(result.result.totalScore), size: "sm", color: "#0f172a", weight: "bold", flex: 0, margin: "md", gravity: "center" },
+                  { type: "text", text: formatScore(result.result.totalScore), size: "lg", color: "#db2777", weight: "bold", flex: 0, margin: "md", gravity: "center" },
+                  { type: "filler" },
+                  { type: "text", text: "🏆", size: "sm", flex: 0, gravity: "center" },
                 ],
               },
               {
                 type: "box",
                 layout: "horizontal",
-                spacing: "md",
+                spacing: "sm",
                 contents: [
-                  metricCell(
+                  rankPill(
                     "อันดับห้อง",
                     result.statistics ? `${result.statistics.total.roomRank}/${result.statistics.total.roomCount}` : String(result.result.rank),
+                    "sky",
                   ),
-                  { type: "separator" },
-                  metricCell(
+                  rankPill(
                     "อันดับชั้น",
                     result.statistics ? `${result.statistics.total.levelRank}/${result.statistics.total.levelCount}` : "-",
+                    "pink",
                   ),
                 ],
               },
             ],
           },
-          // แถบสถานะ (ออกมานอกกล่องคะแนน) — สีตามผล: เขียว=ผ่าน, แดง=ไม่ผ่าน, เหลือง=รอตรวจ
+          // แถบสถานะ พื้นไล่สีตามผล
           {
             type: "box",
             layout: "vertical",
-            backgroundColor: statusStyle.bg,
-            cornerRadius: "12px",
+            background: statusStyle.bg,
+            cornerRadius: "13px",
             paddingAll: "12px",
             margin: "md",
             contents: [
-              {
-                type: "text",
-                text: statusStyle.text,
-                size: "md",
-                weight: "bold",
-                color: statusStyle.color,
-                align: "center",
-                wrap: false,
-              },
+              { type: "text", text: statusStyle.text, size: "md", weight: "bold", color: statusStyle.color, align: "center", wrap: false },
             ],
           },
         ],
@@ -291,16 +323,19 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       footer: {
         type: "box",
         layout: "vertical",
+        paddingAll: "12px",
         contents: [
+          // ปุ่มไล่สีชมพู→ฟ้า (ใช้ box + action แทน button เพื่อให้ไล่สีได้)
           {
-            type: "button",
-            style: "secondary",
-            height: "sm",
-            action: {
-              type: "uri",
-              label: "ดูผลผ่านเว็บเต็ม",
-              uri: webResultUrl,
-            },
+            type: "box",
+            layout: "vertical",
+            background: gradient("#f472b6", "#38bdf8"),
+            cornerRadius: "13px",
+            paddingAll: "12px",
+            action: { type: "uri", label: "ดูผลผ่านเว็บเต็ม", uri: webResultUrl },
+            contents: [
+              { type: "text", text: "🔎 ดูผลผ่านเว็บเต็ม", size: "sm", weight: "bold", color: "#ffffff", align: "center" },
+            ],
           },
         ],
       },
