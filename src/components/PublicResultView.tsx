@@ -1,10 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 import { Award, BarChart3, ChevronLeft, Medal, School, ShieldCheck, Trophy } from "lucide-react";
-import { DevelopmentStatsPanel } from "@/components/DevelopmentStatsPanel";
 import type { PublicStudentResult } from "@/lib/repository";
+
+// แผง "ภาพรวมเพื่อการพัฒนา" ใหญ่ (~560 บรรทัด) และพับเก็บ default + อยู่ใต้ fold
+// → lazy-load แยก chunk โหลดทีหลัง ลด JS ที่ต้อง parse ตอนเปิดหน้าผลครั้งแรก (เร็วขึ้นบนมือถือ)
+const DevelopmentStatsPanel = dynamic(
+  () => import("@/components/DevelopmentStatsPanel").then((m) => m.DevelopmentStatsPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <section className="mt-5 border-t border-sky-100 pt-4">
+        <div className="h-[68px] animate-pulse rounded-[1.35rem] border border-sky-100 bg-[linear-gradient(135deg,#f0f9ff,#fff7fb)]" />
+      </section>
+    ),
+  },
+);
 
 export type StudentResult = PublicStudentResult;
 
