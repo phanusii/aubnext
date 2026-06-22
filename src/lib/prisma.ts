@@ -17,16 +17,17 @@ function databaseUrl() {
   );
 }
 
-// ยกระดับความปลอดภัย TLS ของการต่อ Postgres:
-// sslmode=verify-ca ตรวจแค่ว่า cert มาจาก CA ที่เชื่อถือ แต่ไม่เช็คชื่อโฮสต์ → เสี่ยง MITM
-// (pg-connection-string จะ emit "SECURITY WARNING" ทุก connection) จึงยกเป็น verify-full
-// ที่เช็คชื่อโฮสต์ด้วย (Neon รองรับ) — ตั้งทับได้ด้วย PG_SSLMODE หากต้องบังคับค่าอื่น
+// pg-connection-string เตือน SECURITY WARNING ทุก connection เมื่อ sslmode เป็น prefer/require/verify-ca
+// เพราะ v ถัดไป (pg v9) จะเปลี่ยนให้ค่าพวกนี้เป็น libpq semantics ที่อ่อนกว่า
+// ปัจจุบัน require ถูกตีความเป็น verify-full อยู่แล้ว → ตั้งเป็น verify-full ชัด ๆ:
+//   พฤติกรรม TLS เดิมเป๊ะ (verify cert + ชื่อโฮสต์) + ตัด warning + future-proof
+// ตั้งทับด้วย env PG_SSLMODE ได้หากต้องบังคับค่าอื่น
 function hardenSslMode(connectionString: string) {
   const override = process.env.PG_SSLMODE?.trim();
   if (override) {
     return connectionString.replace(/([?&]sslmode=)[^&]+/i, `$1${override}`);
   }
-  return connectionString.replace(/([?&]sslmode=)verify-ca\b/i, "$1verify-full");
+  return connectionString.replace(/([?&]sslmode=)(prefer|require|verify-ca)\b/i, "$1verify-full");
 }
 
 export function getPrisma() {
