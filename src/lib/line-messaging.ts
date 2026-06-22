@@ -261,23 +261,15 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 ],
               },
               {
-                // ผลการคัดเลือก: สองวลียาวพอกัน ใช้ xs ทั้งคู่ + ห้ามตัดบรรทัด → อยู่บรรทัดเดียวพอดี
-                type: "box",
-                layout: "horizontal",
-                contents: [
-                  { type: "text", text: "ผลการคัดเลือก", size: "xs", color: "#64748b", flex: 5, gravity: "center", wrap: false },
-                  {
-                    type: "text",
-                    text: statusText[result.result.status],
-                    size: "xs",
-                    weight: "bold",
-                    color: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
-                    align: "end",
-                    flex: 6,
-                    gravity: "center",
-                    wrap: false,
-                  },
-                ],
+                // ผลการคัดเลือก: แสดงบรรทัดเดียวเด่น ๆ ไม่มีป้าย (✓ เฉพาะตอนผ่าน)
+                type: "text",
+                text: (result.result.status === "PASSED" ? "✓ " : "") + statusText[result.result.status],
+                size: "sm",
+                weight: "bold",
+                color: result.result.status === "PASSED" ? "#0369a1" : "#64748b",
+                align: "center",
+                wrap: false,
+                margin: "sm",
               },
             ],
           },
