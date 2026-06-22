@@ -38,6 +38,9 @@ export type PublicStudentResult = {
   statistics: {
     total: {
       score: number;
+      // คะแนนเต็มรวม (= ผลรวม maxScore ทุกวิชา) ใช้คิด % เพื่อแบ่งช่วงคะแนน
+      // optional เผื่อ snapshot เก่าที่แคชไว้ก่อนเพิ่ม field นี้ (ยังไม่ rebuild)
+      maxScore?: number;
       roomAverage: number;
       levelAverage: number;
       roomRank: number;
@@ -49,6 +52,7 @@ export type PublicStudentResult = {
       id: string;
       name: string;
       score: number;
+      maxScore?: number;
       roomAverage: number;
       levelAverage: number;
       roomRank: number;
@@ -139,7 +143,7 @@ type PublicResultExamInput = {
   publishedAt: Date | null;
   passTitle: string | null;
   passInstructions: string | null;
-  subjects: Array<{ id: string; name: string }>;
+  subjects: Array<{ id: string; name: string; maxScore: number | null }>;
 };
 
 const peerSnapshotMemoryCache = new Map<string, { expiresAt: number; data: PeerResultSnapshot[] }>();
@@ -906,6 +910,7 @@ function buildPublicResultPayloads(
         statistics: {
           total: {
             score: snapshot.totalScore,
+            maxScore: exam.subjects.reduce((sum, subject) => sum + Number(subject.maxScore ?? 0), 0),
             roomAverage: room.totalAverage,
             levelAverage: levelStats.totalAverage,
             roomRank: room.totalRanks.get(snapshot.studentId) ?? room.count,
@@ -920,6 +925,7 @@ function buildPublicResultPayloads(
               id: subject.id,
               name: subject.name,
               score: Number(rawBreakdown[subject.id] ?? 0),
+              maxScore: Number(subject.maxScore ?? 0),
               roomAverage: roomSubject?.average ?? 0,
               levelAverage: levelSubject?.average ?? 0,
               roomRank: roomSubject?.ranks.get(snapshot.studentId) ?? room.count,
