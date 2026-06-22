@@ -30,6 +30,7 @@ type LineStudentResult = {
 };
 
 const replyEndpoint = "https://api.line.me/v2/bot/message/reply";
+const pushEndpoint = "https://api.line.me/v2/bot/message/push";
 const loadingEndpoint = "https://api.line.me/v2/bot/chat/loading/start";
 
 const statusText = {
@@ -75,6 +76,26 @@ export async function replyLineMessage(replyToken: string, messages: LineMessage
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(`LINE reply failed: ${response.status} ${detail}`);
+  }
+}
+
+// push ข้อความเข้าแชทผู้ใช้โดยตรง (ไม่ต้องมี replyToken) — ใช้หลังผูกบัญชีจาก LIFF เพื่อส่งการ์ดผลคะแนนทันที
+export async function pushLineMessage(to: string, messages: LineMessage[]) {
+  const token = channelAccessToken();
+  if (!token) throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN");
+
+  const response = await fetch(pushEndpoint, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ to, messages }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`LINE push failed: ${response.status} ${detail}`);
   }
 }
 
