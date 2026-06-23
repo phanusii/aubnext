@@ -222,7 +222,7 @@ function scoreBarWidth(value: number, max: number) {
   return Math.max(4, Math.min(100, (value / max) * 100));
 }
 
-function buildSubjectInsights(subjects: SubjectStats[]): SubjectInsight[] {
+function buildSubjectInsights(subjects: SubjectStats[], seedKey: string): SubjectInsight[] {
   return subjects.map((subject) => {
     const deltaLevel = subject.score - subject.levelAverage;
     const band = scoreBand(subject.score, subject.maxScore);
@@ -234,7 +234,8 @@ function buildSubjectInsights(subjects: SubjectStats[]): SubjectInsight[] {
           subject.name,
           next?.points ?? 0,
           next?.nextLabel ?? null,
-          textSeed(subject.name, subject.score, band.index),
+          // ผสม seedKey (รหัสนักเรียน) → คนคะแนนเท่ากันได้ประโยคต่างกัน ลดความซ้ำข้ามคน
+          textSeed(seedKey, subject.name, subject.score, band.index),
         )
       : "";
     return {
@@ -255,7 +256,10 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
   const totalDeltaLevel = total.score - total.levelAverage;
   const totalLevel = rankBand(total.levelRank, total.levelCount);
   const totalBand = scoreBand(total.score, total.maxScore);
-  const subjectInsights = useMemo(() => buildSubjectInsights(subjects), [subjects]);
+  const subjectInsights = useMemo(
+    () => buildSubjectInsights(subjects, result.student.examNo),
+    [subjects, result.student.examNo],
+  );
   // จัดอันดับจุดแข็ง/จุดที่ควรพัฒนาด้วย % (ช่วงคะแนน) ถ้ามีคะแนนเต็ม — ไม่งั้น fallback ส่วนต่างจากเฉลี่ย
   const rankedSubjects = useMemo(() => {
     const hasBands = subjectInsights.some((item) => item.band);
@@ -269,11 +273,11 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
   const totalNext = pointsToNextBand(total.score, total.maxScore);
   const goalValue = totalBand ? `${totalBand.label} (${totalBand.rangeLabel})` : "ฝึกต่ออย่างมีทิศทาง";
   const goalDescription = totalBand
-    ? `${totalBandAdvice(totalBand, textSeed(total.score, totalBand.index))} ${
+    ? `${totalBandAdvice(totalBand, textSeed(result.student.examNo, total.score, totalBand.index))} ${
         totalNext
           ? `เป้าหมายถัดไป: เพิ่มอีก ${formatScore(totalNext.points)} คะแนนเพื่อขึ้นช่วง “${totalNext.nextLabel}”.`
           : "อยู่ช่วงคะแนนสูงสุดแล้ว รักษาระดับนี้ไว้."
-      } ${rankMessage}`
+      }`
     : `${rankMessage} ${nextGoalText(totalDeltaLevel)}`;
   const panelId = "development-stats-panel";
 
