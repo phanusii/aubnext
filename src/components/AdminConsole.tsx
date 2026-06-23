@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
+import { ScoreEntryCard } from "@/components/ScoreEntryCard";
 import { AppFooter } from "@/components/AppFooter";
 
 type RoomQuota = { id?: string; room: string; quota: number };
@@ -75,7 +76,7 @@ type ImportValidation = {
   errors: string[];
   isReady: boolean;
 };
-type AdminTab = "settings" | "exam" | "rooms" | "import" | "results" | "line";
+type AdminTab = "settings" | "exam" | "rooms" | "import" | "scores" | "results" | "line";
 type ExamAction = "calculate" | "publish";
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
@@ -791,7 +792,8 @@ export function AdminConsole() {
     { id: "settings", label: "ตั้งค่า", icon: <Settings size={16} /> },
     { id: "exam", label: "รอบสอบ", icon: <Megaphone size={16} /> },
     { id: "rooms", label: "ห้องและวิชา", icon: <Table2 size={16} /> },
-    { id: "import", label: "นำเข้าคะแนน", icon: <ClipboardList size={16} /> },
+    { id: "import", label: "นำเข้านักเรียน", icon: <ClipboardList size={16} /> },
+    { id: "scores", label: "กรอกคะแนน", icon: <ListChecks size={16} /> },
     { id: "results", label: "ผลคะแนน", icon: <Calculator size={16} /> },
     { id: "line", label: "LINE เช็คผล", icon: <Link2 size={16} /> },
   ];
@@ -1175,6 +1177,15 @@ export function AdminConsole() {
                 <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(event) => event.target.files?.[0] && importFile(event.target.files[0])} />
               </label>
             </div>
+          </Panel>
+        )}
+
+        {activeTab === "scores" && selectedExam && (
+          <Panel icon={<ListChecks size={18} />} title="กรอกคะแนนรายคน">
+            <p className="mb-3 text-sm text-[var(--text-muted)]">
+              กรอก/แก้คะแนนแต่ละวิชาได้โดยตรง (สำหรับนำเข้ารายชื่อก่อนแล้วค่อยกรอกคะแนน) · เว้นว่าง = ยังไม่กรอก · กดบันทึกเมื่อแก้เสร็จ
+            </p>
+            <ScoreEntryCard key={selectedExam.id} examId={selectedExam.id} />
           </Panel>
         )}
 
