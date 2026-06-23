@@ -21,11 +21,13 @@ type LineStudentResult = {
   };
   statistics?: {
     total: {
+      maxScore?: number;
       roomRank: number;
       levelRank: number;
       roomCount: number;
       levelCount: number;
     };
+    subjects?: Array<{ name: string; maxScore?: number }>;
   };
 };
 
@@ -217,16 +219,32 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     REVIEW: { bg: gradient("#fde68a", "#fcd34d"), color: "#b45309", text: "รอตรวจสอบโดยกรรมการ" },
   }[result.result.status];
 
+  // คะแนนเต็มรายวิชา (จาก statistics ถ้ามี) → แสดงเป็น "คะแนน/เต็ม"
+  const maxByName = new Map<string, number>();
+  for (const subject of result.statistics?.subjects ?? []) {
+    if (subject?.name && typeof subject.maxScore === "number" && subject.maxScore > 0) maxByName.set(subject.name, subject.maxScore);
+  }
+  const withMax = (subject: string, score: number) => {
+    const max = maxByName.get(subject);
+    return max ? `${formatScore(score)}/${formatScore(max)}` : formatScore(score);
+  };
+
   // คะแนนรายวิชา 2 คอลัมน์/แถว สลับโทนฟ้า-ชมพู
   const subjectEntries = Object.entries(result.result.scoreBreakdown).slice(0, 8);
   const subjectRows: Record<string, unknown>[] = [];
   for (let i = 0; i < subjectEntries.length; i += 2) {
     const cells: Record<string, unknown>[] = subjectEntries
       .slice(i, i + 2)
-      .map(([subject, score], idx) => subjectPill(subject, formatScore(score), (i + idx) % 2 === 0 ? "sky" : "pink"));
+      .map(([subject, score], idx) => subjectPill(subject, withMax(subject, score), (i + idx) % 2 === 0 ? "sky" : "pink"));
     const contents = cells.length === 2 ? cells : [cells[0], { type: "filler" }];
     subjectRows.push({ type: "box", layout: "horizontal", margin: "sm", spacing: "md", contents });
   }
+
+  // คะแนนรวม/เต็ม (ถ้ามีคะแนนเต็มรวม)
+  const totalMax = result.statistics?.total?.maxScore;
+  const totalText = totalMax && totalMax > 0
+    ? `${formatScore(result.result.totalScore)}/${formatScore(totalMax)}`
+    : formatScore(result.result.totalScore);
 
 
   return {
@@ -282,7 +300,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
                 alignItems: "center",
                 contents: [
                   { type: "text", text: "คะแนนรวม", size: "sm", color: "#0369a1", weight: "bold", flex: 0, gravity: "center" },
-                  { type: "text", text: formatScore(result.result.totalScore), size: "lg", color: "#db2777", weight: "bold", flex: 0, margin: "md", gravity: "center" },
+                  { type: "text", text: totalText, size: "lg", color: "#db2777", weight: "bold", flex: 0, margin: "md", gravity: "center" },
                   { type: "filler" },
                   { type: "text", text: "🏆", size: "sm", flex: 0, gravity: "center" },
                 ],
