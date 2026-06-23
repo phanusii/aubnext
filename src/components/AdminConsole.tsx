@@ -564,6 +564,35 @@ export function AdminConsole() {
     setPendingExamAction(action);
   }
 
+  // กดคำนวณ: เช็กก่อนว่ากรอกคะแนนครบทุกคนทุกวิชาไหม — ไม่ครบ → แจ้งเตือนว่าใครขาด
+  async function handleCalculateClick() {
+    if (!selectedExam || busy) return;
+    try {
+      const response = await fetch(`/api/exams/${selectedExam.id}/scores`);
+      const data = await response.json();
+      if (!response.ok || !data?.subjects) {
+        setMessage(data?.error ?? "โหลดข้อมูลคะแนนไม่สำเร็จ");
+        return;
+      }
+      const subjects = data.subjects as Array<{ id: string }>;
+      const students = data.students as Array<{ examNo: string; name: string; room: string; scores: Record<string, number> }>;
+      if (students.length === 0) {
+        setMessage("ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน");
+        return;
+      }
+      const incomplete = students.filter((student) => subjects.some((subject) => student.scores[subject.id] == null));
+      if (incomplete.length > 0) {
+        const names = incomplete.slice(0, 12).map((student) => `• ${student.examNo} ${student.name} (ห้อง ${student.room})`).join("\n");
+        const more = incomplete.length > 12 ? `\n…และอีก ${incomplete.length - 12} คน` : "";
+        window.alert(`ยังกรอกคะแนนไม่ครบ ${incomplete.length} คน\nกรุณากรอกคะแนนให้ครบทุกวิชาก่อนคำนวณ (แท็บ “กรอกคะแนน”):\n\n${names}${more}`);
+        return;
+      }
+      openExamActionDialog("calculate");
+    } catch {
+      setMessage("เช็กความครบของคะแนนไม่สำเร็จ");
+    }
+  }
+
   async function confirmExamAction() {
     if (!pendingExamAction) return;
     await runExamAction(pendingExamAction);
@@ -1054,22 +1083,17 @@ export function AdminConsole() {
             </Panel>
 
             <Panel icon={<Megaphone size={18} />} title="รอบสอบและการประกาศผล">
-              <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
-                <select className="app-input" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
-                  <option value="">เลือกรอบสอบ</option>
-                  {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
-                  ))}
-                </select>
-                <button type="button" onClick={() => openExamActionDialog("calculate")} disabled={busy || !selectedExam} className="app-button-secondary">
-                  <Calculator size={16} />
-                  คำนวณ
-                </button>
-                <button type="button" onClick={() => openExamActionDialog("publish")} disabled={busy || !selectedExam} className="app-button-pink">
-                  <BadgeCheck size={16} />
-                  ประกาศผล
-                </button>
-              </div>
+              <select className="app-input" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
+                <option value="">เลือกรอบสอบ</option>
+                {exams.map((exam) => (
+                  <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
+                ))}
+              </select>
+              {selectedExam && (
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  เมื่อกรอกคะแนนครบแล้ว ไปกด <span className="font-semibold text-sky-700">คำนวณ</span> และ <span className="font-semibold text-pink-600">ประกาศผล</span> ที่แท็บ <span className="font-semibold">“ผลคะแนน”</span>
+                </p>
+              )}
               {selectedExam ? (
                 <>
                   <div className="mt-4 grid gap-3 md:grid-cols-4">
@@ -1298,6 +1322,31 @@ export function AdminConsole() {
 
         {activeTab === "results" && selectedExam && (
           <Panel icon={<ListChecks size={18} />} title="ผลคะแนน อันดับ และผู้ผ่านเกณฑ์">
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-3">
+              <button type="button" onClick={handleCalculateClick} disabled={busy} className="app-button-secondary">
+                <Calculator size={16} />
+                คำนวณผล
+              </button>
+              {(calculatedResults.length > 0 || (selectedExam._count?.resultSnapshots ?? 0) > 0) ? (
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    <Check size={13} /> คำนวณแล้ว {calculatedResults.length || selectedExam._count?.resultSnapshots} รายการ
+                  </span>
+                  <button type="button" onClick={() => openExamActionDialog("publish")} disabled={busy} className="app-button-pink">
+                    <BadgeCheck size={16} />
+                    ประกาศผล
+                  </button>
+                </>
+              ) : (
+                <span className="text-sm text-[var(--text-muted)]">กดคำนวณก่อน แล้วปุ่ม “ประกาศผล” จะปรากฏ</span>
+              )}
+              {selectedExam.status === "PUBLISHED" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
+                  <Megaphone size={13} /> ประกาศแล้ว
+                </span>
+              )}
+            </div>
+
             <div className="mb-4 flex gap-2 overflow-x-auto rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-2">
               <button
                 type="button"
