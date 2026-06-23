@@ -680,7 +680,12 @@ export async function saveExamScores(input: {
   }
 
   if (errors.length > 0) return { ok: false as const, errors: [...new Set(errors)] };
-  if (ops.length > 0) await prisma.$transaction(ops);
+  if (ops.length > 0) {
+    await prisma.$transaction(ops);
+    // คะแนนเปลี่ยน → ผลที่เคยคำนวณ/แคชไว้ถือว่า stale ล้าง peer cache กันค่าค้าง
+    // (ครูต้องกด "คำนวณ" หรือ "ประกาศผล" ใหม่เพื่อให้ snapshot/หน้าเว็บอัปเดต — publish คำนวณใหม่ให้เสมอแล้ว)
+    peerSnapshotMemoryCache.delete(input.examSessionId);
+  }
   return { ok: true as const, saved: ops.length };
 }
 
@@ -787,10 +792,9 @@ export async function publishExam(
   announcement?: { passTitle?: string | null; passInstructions?: string | null },
 ) {
   const prisma = getPrisma();
-  const snapshotCount = await prisma.resultSnapshot.count({ where: { examSessionId } });
-  if (snapshotCount === 0) {
-    await calculateExamResults(examSessionId);
-  }
+  // คำนวณใหม่ทุกครั้งก่อนประกาศ → ผลที่ประกาศสะท้อนคะแนนล่าสุดเสมอ
+  // (เดิมคำนวณเฉพาะตอนยังไม่มี snapshot → ถ้าแก้คะแนนหลังเคยคำนวณ จะประกาศอันดับเก่า)
+  await calculateExamResults(examSessionId);
 
   const publishedAt = new Date();
   await prisma.$transaction([
