@@ -1105,10 +1105,13 @@ export function AdminConsole() {
                   เพิ่มห้อง
                 </button>
               </div>
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-5 text-amber-800">
+                <span className="font-semibold">โควตาผู้ผ่าน</span> — จำนวนผู้ผ่านการคัดเลือกของห้องนั้น (เช่น 10 = ผ่าน 10 อันดับแรก) · <span className="font-semibold">ต้องมากกว่า 0</span> ไม่งั้นห้องนั้นจะไม่มีใครผ่าน
+              </div>
               <div className="max-h-[460px] overflow-y-auto rounded-xl border border-[var(--border-soft)]">
                 <div className="grid grid-cols-[1fr_130px_56px] gap-2 bg-[var(--blue-wash)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
                   <span>ห้อง</span>
-                  <span>โควตา</span>
+                  <span>โควตาผู้ผ่าน</span>
                   <span />
                 </div>
                 <div className="divide-y divide-[var(--border-soft)]">
@@ -1130,24 +1133,30 @@ export function AdminConsole() {
             </Panel>
 
             <Panel icon={<BookOpen size={18} />} title="วิชาสอบและคะแนนเต็ม">
-              <div className="mb-3 rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                หากคะแนนรวมเท่ากัน ระบบจะดูคะแนนรายวิชาตามลำดับที่กำหนดในช่อง <span className="font-semibold text-[var(--text-main)]">ลำดับตัดสิน</span> เช่น ใส่ 1 ที่วิทยาศาสตร์เพื่อดูวิชานี้ก่อน และใส่ 2 ที่คณิตศาสตร์เพื่อดูถัดไป
+              <div className="mb-3 space-y-1.5 rounded-xl border border-sky-100 bg-[var(--blue-wash)] px-4 py-3 text-xs leading-5 text-[var(--text-muted)]">
+                <p><span className="font-semibold text-[var(--text-main)]">คะแนนเต็ม</span> — คะแนนเต็มของวิชานั้น ใช้คิด % และกันกรอกคะแนนเกิน</p>
+                <p><span className="font-semibold text-[var(--text-main)]">ลำดับตัดสิน</span> — ใส่เลขเฉพาะวิชาที่ใช้ตัดสินเมื่อ “คะแนนรวมเท่ากัน” เลขน้อยดูก่อน (1 → 2 → 3) · เว้นว่างได้</p>
               </div>
-              <div className="mb-2 hidden grid-cols-[1fr_110px_120px_44px] gap-2 px-1 text-xs font-semibold text-[var(--text-muted)] lg:grid">
-                <span>วิชา</span>
-                <span>คะแนนเต็ม</span>
-                <span>ลำดับตัดสิน</span>
-                <span />
-              </div>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {subjects.map((subject, index) => (
-                  <div key={subject.id ?? `subject-${index}`} className="grid gap-2 lg:grid-cols-[1fr_110px_120px_auto]">
-                    <input className="app-input" placeholder="ชื่อวิชา" value={subject.name} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
-                    <input className="app-input" type="number" min={1} aria-label="คะแนนเต็ม" value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
-                    <input className="app-input" type="number" min={1} aria-label="ลำดับตัดสินเมื่อคะแนนเท่ากัน" placeholder="เช่น 1" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
-                    <button type="button" className="app-icon-button" onClick={() => setSubjects(subjects.filter((_, itemIndex) => itemIndex !== index))}>
-                      <Trash2 size={16} />
-                    </button>
+                  <div key={subject.id ?? `subject-${index}`} className="rounded-xl border border-[var(--border-soft)] bg-white p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-100 text-xs font-bold text-sky-700">{index + 1}</span>
+                      <input className="app-input flex-1" placeholder="ชื่อวิชา เช่น คณิตศาสตร์" value={subject.name} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
+                      <button type="button" className="app-icon-button shrink-0" aria-label="ลบวิชา" onClick={() => setSubjects(subjects.filter((_, itemIndex) => itemIndex !== index))}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 pl-8">
+                      <label className="block text-xs font-medium text-[var(--text-muted)]">
+                        คะแนนเต็ม
+                        <input className="app-input mt-1" type="number" min={1} value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
+                      </label>
+                      <label className="block text-xs font-medium text-[var(--text-muted)]">
+                        ลำดับตัดสิน <span className="font-normal text-[10px]">(ถ้าเสมอ)</span>
+                        <input className="app-input mt-1" type="number" min={1} placeholder="—" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
+                      </label>
+                    </div>
                   </div>
                 ))}
               </div>
