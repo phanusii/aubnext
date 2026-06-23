@@ -169,8 +169,8 @@ export function AdminConsole() {
     [exams, selectedExamId],
   );
   const pasteValidation = useMemo(
-    () => validateImportPreview(pasteText, subjects),
-    [pasteText, subjects],
+    () => validateImportPreview(pasteText, subjects, importMode === "withScores"),
+    [pasteText, subjects, importMode],
   );
 
   const loadExams = useCallback(async (preferredExamId?: string) => {
@@ -514,7 +514,7 @@ export function AdminConsole() {
     );
     if (!confirmed) return;
 
-    const { rows } = prepareRoomImportTable(pasteText, subjects);
+    const { rows } = prepareRoomImportTable(pasteText, subjects, importMode === "withScores");
     setBusy(true);
     const modeQuery = importMode === "roster" ? "?mode=roster" : "";
     const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import${modeQuery}`, {
@@ -1660,10 +1660,10 @@ function findColumn(headers: string[], aliases: string[]) {
   return headers.find((header) => normalizedAliases.includes(normalizeColumnName(header)));
 }
 
-function validateImportPreview(text: string, subjects: Subject[]): ImportValidation | null {
+function validateImportPreview(text: string, subjects: Subject[], requireScores = true): ImportValidation | null {
   if (!text.trim()) return null;
 
-  const parsed = prepareRoomImportTable(text, subjects);
+  const parsed = prepareRoomImportTable(text, subjects, requireScores);
   const activeSubjects = subjects.filter((subject) => subject.name.trim());
   const errors: string[] = [];
   const studentIdColumn = findColumn(parsed.headers, ["student_id", "รหัสนักเรียน", "exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ"]);
@@ -1673,12 +1673,15 @@ function validateImportPreview(text: string, subjects: Subject[]): ImportValidat
 
   if (!studentIdColumn) errors.push("ไม่พบคอลัมน์ student_id หรือ รหัสนักเรียน");
   if (!studentNameColumn) errors.push("ไม่พบคอลัมน์ student_name หรือ ชื่อนักเรียน");
-  if (activeSubjects.length === 0) errors.push("ต้องสร้างวิชาก่อนตรวจข้อมูลนำเข้า");
+  // โหมดบังคับคะแนน: ต้องมีวิชา + คอลัมน์คะแนนครบ · โหมด roster: ข้าม (กรอกทีหลัง)
+  if (requireScores && activeSubjects.length === 0) errors.push("ต้องสร้างวิชาก่อนตรวจข้อมูลนำเข้า");
   if (parsed.rows.length === 0) errors.push("ไม่พบข้อมูลนักเรียน");
 
-  for (const subject of activeSubjects) {
-    if (!parsed.headers.includes(subject.name)) {
-      errors.push(`ไม่พบคอลัมน์วิชา ${subject.name}`);
+  if (requireScores) {
+    for (const subject of activeSubjects) {
+      if (!parsed.headers.includes(subject.name)) {
+        errors.push(`ไม่พบคอลัมน์วิชา ${subject.name}`);
+      }
     }
   }
 
