@@ -93,6 +93,15 @@ export function ResultContent({ result }: { result: StudentResult }) {
 
   const celebrate = result.result.status === "PASSED";
 
+  // คะแนนเต็มรายวิชา/รวม (จาก statistics ถ้ามี) → แสดง "/เต็ม" แบบจาง ไม่เพิ่มความสูง
+  const maxByName = new Map<string, number>();
+  for (const subject of result.statistics.subjects) {
+    if (subject.name && typeof subject.maxScore === "number" && subject.maxScore > 0) maxByName.set(subject.name, subject.maxScore);
+  }
+  const totalMax = result.statistics.total.maxScore;
+  const maxSuffix = (max?: number, size = "text-sm") =>
+    max && max > 0 ? <span className={`${size} font-normal opacity-60`}>/{formatScore(max)}</span> : null;
+
   return (
     <article className="overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/95 shadow-[0_24px_70px_rgba(219,39,119,0.16)]">
       <style>{confettiCss}</style>
@@ -148,7 +157,7 @@ export function ResultContent({ result }: { result: StudentResult }) {
               return (
                 <div key={subject} className={`flex items-center justify-between gap-2 rounded-2xl px-3.5 py-3 bg-gradient-to-br ${sky ? "from-sky-50 to-sky-100" : "from-pink-50 to-pink-100"}`}>
                   <span className={`min-w-0 truncate text-sm font-medium ${sky ? "text-sky-800" : "text-pink-800"}`}>{subject}</span>
-                  <span className={`shrink-0 text-xl font-semibold ${sky ? "text-sky-700" : "text-pink-700"}`}>{formatScore(score)}</span>
+                  <span className={`shrink-0 text-xl font-semibold ${sky ? "text-sky-700" : "text-pink-700"}`}>{formatScore(score)}{maxSuffix(maxByName.get(subject))}</span>
                 </div>
               );
             })}
@@ -156,7 +165,7 @@ export function ResultContent({ result }: { result: StudentResult }) {
         </section>
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-          <Metric emoji="🏆" label="คะแนนรวม" value={formatScore(result.result.totalScore)} tone="pink" />
+          <Metric emoji="🏆" label="คะแนนรวม" value={<>{formatScore(result.result.totalScore)}{maxSuffix(totalMax, "text-base")}</>} tone="pink" />
           <Metric emoji="🥇" label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} tone="sky" />
           <Metric emoji="🎖" label="อันดับในชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} tone="violet" />
           <Metric emoji={celebrate ? "✓" : "•"} label="สถานะ" value={statusText[result.result.status]} tone={celebrate ? "emerald" : "slate"} />
@@ -233,7 +242,7 @@ export function MissingResult({
 
 type MetricTone = "pink" | "sky" | "violet" | "emerald" | "slate";
 
-function Metric({ emoji, label, value, tone }: { emoji: string; label: string; value: string; tone: MetricTone }) {
+function Metric({ emoji, label, value, tone }: { emoji: string; label: string; value: ReactNode; tone: MetricTone }) {
   const toneClass: Record<MetricTone, { box: string; label: string; value: string }> = {
     pink: { box: "from-pink-50 to-pink-100", label: "text-pink-700/80", value: "text-pink-700" },
     sky: { box: "from-sky-50 to-sky-100", label: "text-sky-700/80", value: "text-sky-700" },
