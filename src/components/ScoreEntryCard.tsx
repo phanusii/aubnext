@@ -158,6 +158,11 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
     return <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-800">ยังไม่มีวิชา — กรุณาตั้งวิชาในขั้น &quot;ห้องและวิชา&quot; ก่อน แล้วจึงกรอกคะแนน</div>;
   }
 
+  // คะแนนเต็มรวม = ผลรวมคะแนนเต็มทุกวิชา (แสดงเมื่อทุกวิชามีคะแนนเต็มครบ)
+  const totalMax = sheet.subjects.every((subject) => subject.maxScore != null)
+    ? sheet.subjects.reduce((sum, subject) => sum + (subject.maxScore ?? 0), 0)
+    : null;
+
   return (
     <div className="overflow-hidden rounded-[1.25rem] border border-sky-100 bg-white shadow-[0_8px_28px_rgba(14,165,233,0.07)]">
       <div className="flex flex-wrap items-center justify-between gap-3 bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] px-4 py-3">
@@ -200,7 +205,10 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                   {subject.maxScore != null && <span className="block text-[10px] font-normal opacity-60">เต็ม {subject.maxScore}</span>}
                 </th>
               ))}
-              <th className="px-3 py-2 text-center font-medium">รวม</th>
+              <th className="px-3 py-2 text-center font-medium">
+                รวม
+                {totalMax != null && <span className="block text-[10px] font-normal opacity-60">เต็ม {totalMax}</span>}
+              </th>
               <th className="px-2 py-2 font-medium" />
             </tr>
           </thead>
@@ -225,7 +233,10 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                     />
                   </td>
                 ))}
-                <td className="px-3 py-1.5 text-center font-semibold text-slate-900">{rowTotal(student) || "–"}</td>
+                <td className="px-3 py-1.5 text-center font-semibold text-slate-900">
+                  {rowTotal(student) || "–"}
+                  {totalMax != null && rowTotal(student) > 0 && <span className="text-xs font-normal opacity-50">/{totalMax}</span>}
+                </td>
                 <td className="px-2 py-1.5 text-center">
                   <button
                     type="button"
