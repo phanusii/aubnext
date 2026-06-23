@@ -188,7 +188,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     layout: "horizontal",
     flex: 1,
     cornerRadius: "14px",
-    paddingAll: "10px",
+    paddingAll: "8px",
     background: tone === "sky" ? gradient("#e0f2fe", "#bae6fd") : gradient("#fce7f3", "#fbcfe8"),
     contents: [
       { type: "text", text: name, size: "sm", color: tone === "sky" ? "#075985" : "#9d174d", flex: 1, gravity: "center", wrap: false },
@@ -202,7 +202,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     layout: "horizontal",
     flex: 1,
     cornerRadius: "11px",
-    paddingAll: "8px",
+    paddingAll: "6px",
     backgroundColor: "#FFFFFFB3",
     contents: [
       { type: "text", text: label, size: "xs", color: tone === "sky" ? "#075985" : "#9d174d", flex: 1, gravity: "center", wrap: false },
@@ -225,7 +225,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       .slice(i, i + 2)
       .map(([subject, score], idx) => subjectPill(subject, formatScore(score), (i + idx) % 2 === 0 ? "sky" : "pink"));
     const contents = cells.length === 2 ? cells : [cells[0], { type: "filler" }];
-    subjectRows.push({ type: "box", layout: "horizontal", margin: "md", spacing: "md", contents });
+    subjectRows.push({ type: "box", layout: "horizontal", margin: "sm", spacing: "md", contents });
   }
 
 
@@ -238,7 +238,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       header: {
         type: "box",
         layout: "vertical",
-        paddingAll: "16px",
+        paddingAll: "12px",
         spacing: "xs",
         background: gradient("#38bdf8", "#f472b6", "#a78bfa"),
         contents: [
@@ -249,15 +249,15 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       body: {
         type: "box",
         layout: "vertical",
-        spacing: "sm",
-        paddingAll: "16px",
+        spacing: "xs",
+        paddingAll: "12px",
         contents: [
           { type: "text", text: result.student.name, size: "lg", color: "#0f172a", weight: "bold", wrap: true },
           { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#64748b" },
           {
             type: "box",
             layout: "horizontal",
-            margin: "md",
+            margin: "sm",
             spacing: "sm",
             alignItems: "center",
             contents: [
@@ -272,9 +272,9 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
             layout: "vertical",
             background: gradient("#dbeafe", "#fce7f3", "#ede9fe"),
             cornerRadius: "16px",
-            paddingAll: "12px",
-            spacing: "sm",
-            margin: "md",
+            paddingAll: "10px",
+            spacing: "xs",
+            margin: "sm",
             contents: [
               {
                 type: "box",
@@ -312,8 +312,8 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
             layout: "vertical",
             background: statusStyle.bg,
             cornerRadius: "13px",
-            paddingAll: "12px",
-            margin: "md",
+            paddingAll: "9px",
+            margin: "sm",
             contents: [
               { type: "text", text: statusStyle.text, size: "md", weight: "bold", color: statusStyle.color, align: "center", wrap: false },
             ],
@@ -323,7 +323,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
       footer: {
         type: "box",
         layout: "vertical",
-        paddingAll: "12px",
+        paddingAll: "8px",
         contents: [
           // ปุ่มไล่สีชมพู→ฟ้า (ใช้ box + action แทน button เพื่อให้ไล่สีได้)
           {
@@ -331,7 +331,7 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
             layout: "vertical",
             background: gradient("#f472b6", "#38bdf8"),
             cornerRadius: "13px",
-            paddingAll: "12px",
+            paddingAll: "10px",
             action: { type: "uri", label: "ดูผลผ่านเว็บเต็ม", uri: webResultUrl },
             contents: [
               { type: "text", text: "🔎 ดูผลผ่านเว็บเต็ม", size: "sm", weight: "bold", color: "#ffffff", align: "center" },
