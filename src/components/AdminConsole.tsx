@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
+import { ScoreEntryCard } from "@/components/ScoreEntryCard";
 import { AppFooter } from "@/components/AppFooter";
 
 type RoomQuota = { id?: string; room: string; quota: number };
@@ -75,7 +76,7 @@ type ImportValidation = {
   errors: string[];
   isReady: boolean;
 };
-type AdminTab = "settings" | "exam" | "rooms" | "import" | "results" | "line";
+type AdminTab = "settings" | "exam" | "rooms" | "import" | "scores" | "results" | "line";
 type ExamAction = "calculate" | "publish";
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
@@ -129,7 +130,7 @@ export function AdminConsole() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [logoChanged, setLogoChanged] = useState(false);
-  const [activeTab, setActiveTab] = useState<AdminTab>("settings");
+  const [activeTab, setActiveTab] = useState<AdminTab>("exam");
   const [lineLinkCopied, setLineLinkCopied] = useState(false);
   const [warming, setWarming] = useState(false);
   const [pendingExamAction, setPendingExamAction] = useState<ExamAction | null>(null);
@@ -144,6 +145,8 @@ export function AdminConsole() {
   const [rooms, setRooms] = useState<RoomQuota[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([emptySubject(0)]);
   const [importRoom, setImportRoom] = useState("");
+  // โหมดนำเข้า: "withScores" (แบบ 1 พร้อมคะแนน) | "roster" (แบบ 2 รายชื่อก่อน กรอกทีหลัง)
+  const [importMode, setImportMode] = useState<"withScores" | "roster">("withScores");
   const [pasteText, setPasteText] = useState("");
   const [calculatedResults, setCalculatedResults] = useState<CalculatedResult[]>([]);
   const [resultsLoadedExamId, setResultsLoadedExamId] = useState("");
@@ -513,7 +516,8 @@ export function AdminConsole() {
 
     const { rows } = prepareRoomImportTable(pasteText, subjects);
     setBusy(true);
-    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import`, {
+    const modeQuery = importMode === "roster" ? "?mode=roster" : "";
+    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import${modeQuery}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rawRows: rows }),
@@ -537,7 +541,8 @@ export function AdminConsole() {
     const formData = new FormData();
     formData.append("file", file);
     setBusy(true);
-    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import`, {
+    const modeQuery = importMode === "roster" ? "?mode=roster" : "";
+    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import${modeQuery}`, {
       method: "POST",
       body: formData,
     });
@@ -787,25 +792,29 @@ export function AdminConsole() {
     );
   }
 
-  const tabs: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
-    { id: "settings", label: "ตั้งค่า", icon: <Settings size={16} /> },
+  // ขั้นตอนการทำงานหลัก (เรียงลำดับ 1→5) + เมนูตั้งค่า (แยกกลุ่ม)
+  const workflowTabs: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
     { id: "exam", label: "รอบสอบ", icon: <Megaphone size={16} /> },
     { id: "rooms", label: "ห้องและวิชา", icon: <Table2 size={16} /> },
-    { id: "import", label: "นำเข้าคะแนน", icon: <ClipboardList size={16} /> },
+    { id: "import", label: "นำเข้านักเรียน", icon: <ClipboardList size={16} /> },
+    { id: "scores", label: "กรอกคะแนน", icon: <ListChecks size={16} /> },
     { id: "results", label: "ผลคะแนน", icon: <Calculator size={16} /> },
-    { id: "line", label: "LINE เช็คผล", icon: <Link2 size={16} /> },
+  ];
+  const utilityTabs: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
+    { id: "line", label: "LINE", icon: <Link2 size={16} /> },
+    { id: "settings", label: "ตั้งค่า", icon: <Settings size={16} /> },
   ];
 
   return (
     <main className="min-h-screen bg-[var(--app-bg)] text-[var(--text-main)]">
       <div className="mx-auto w-full max-w-7xl px-5 py-6">
-        <header className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-4 shadow-[var(--shadow-soft)]">
+        <header className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#eff6ff,#fdf2f8)] px-5 py-4 shadow-[var(--shadow-soft)]">
           <div className="flex items-center gap-4">
             {settings.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={settings.logoUrl} alt="" className="size-14 rounded-xl object-cover ring-2 ring-[var(--pink-soft)]" />
+              <img src={settings.logoUrl} alt="" className="size-14 rounded-xl object-cover ring-2 ring-white" />
             ) : (
-              <div className="grid size-14 place-items-center rounded-xl bg-[var(--primary-blue)] text-white">
+              <div className="grid size-14 place-items-center rounded-xl bg-[linear-gradient(135deg,#38bdf8,#f472b6)] text-white">
                 <School size={26} />
               </div>
             )}
@@ -831,15 +840,34 @@ export function AdminConsole() {
           </div>
         )}
 
-        <nav className="mb-5 flex gap-2 overflow-x-auto rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 shadow-[var(--shadow-soft)]">
-          {tabs.map((tab) => (
+        <nav className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-2 shadow-[var(--shadow-soft)]">
+          <span className="px-2 text-xs font-semibold text-[var(--text-muted)]">ขั้นตอน</span>
+          {workflowTabs.map((tab, index) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cx(
-                "flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text-muted)] transition",
-                activeTab === tab.id && "bg-[var(--primary-blue)] text-white shadow-sm",
+                "flex min-w-max items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition",
+                activeTab === tab.id
+                  ? "bg-[linear-gradient(135deg,#38bdf8,#f472b6)] text-white shadow-sm"
+                  : "text-[var(--text-muted)] hover:bg-white/70",
+              )}
+            >
+              <span className={cx("grid size-5 place-items-center rounded-full text-[11px]", activeTab === tab.id ? "bg-white/25" : "bg-white text-sky-700 ring-1 ring-sky-100")}>{index + 1}</span>
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+          <span className="mx-1 h-6 w-px bg-sky-200" />
+          {utilityTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cx(
+                "flex min-w-max items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition",
+                activeTab === tab.id ? "bg-white text-pink-600 shadow-sm ring-1 ring-pink-100" : "text-[var(--text-muted)] hover:bg-white/70",
               )}
             >
               {tab.icon}
@@ -1138,7 +1166,31 @@ export function AdminConsole() {
         )}
 
         {activeTab === "import" && selectedExam && (
-          <Panel icon={<ClipboardList size={18} />} title="นำเข้ารายชื่อพร้อมคะแนนทีละห้อง">
+          <Panel icon={<ClipboardList size={18} />} title="นำเข้านักเรียนทีละห้อง">
+            <div className="mb-3 grid gap-2.5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setImportMode("withScores")}
+                className={cx(
+                  "rounded-xl border-2 px-4 py-3 text-left transition",
+                  importMode === "withScores" ? "border-sky-300 bg-[linear-gradient(135deg,#eff6ff,#f0f9ff)]" : "border-[var(--border-soft)] bg-white",
+                )}
+              >
+                <p className="text-sm font-semibold text-sky-700">📥 แบบที่ 1 — พร้อมคะแนน</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">ไฟล์มีคะแนนทุกวิชา → ประกาศได้เลย</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportMode("roster")}
+                className={cx(
+                  "rounded-xl border-2 px-4 py-3 text-left transition",
+                  importMode === "roster" ? "border-pink-300 bg-[linear-gradient(135deg,#fdf2f8,#fce7f3)]" : "border-[var(--border-soft)] bg-white",
+                )}
+              >
+                <p className="text-sm font-semibold text-pink-700">📝 แบบที่ 2 — รายชื่อก่อน</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">รหัส+ชื่อ (ยังไม่ต้องมีคะแนน) → กรอกทีหลัง</p>
+              </button>
+            </div>
             <div className="grid gap-3 md:grid-cols-[220px_1fr]">
               <Field label="เลือกห้อง">
                 <select className="app-input" value={importRoom} onChange={(event) => setImportRoom(event.target.value)}>
@@ -1148,7 +1200,11 @@ export function AdminConsole() {
                 </select>
               </Field>
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"} หรือวางแบบไม่มีหัวตารางตามลำดับนี้ได้
+                {importMode === "roster" ? (
+                  <>คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> (ไม่ต้องมีคะแนน) แล้วไปกรอกคะแนนที่แท็บ &quot;กรอกคะแนน&quot;</>
+                ) : (
+                  <>คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"} หรือวางแบบไม่มีหัวตารางตามลำดับนี้ได้</>
+                )}
               </div>
             </div>
             <textarea
@@ -1175,6 +1231,15 @@ export function AdminConsole() {
                 <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(event) => event.target.files?.[0] && importFile(event.target.files[0])} />
               </label>
             </div>
+          </Panel>
+        )}
+
+        {activeTab === "scores" && selectedExam && (
+          <Panel icon={<ListChecks size={18} />} title="กรอกคะแนนรายคน">
+            <p className="mb-3 text-sm text-[var(--text-muted)]">
+              กรอก/แก้คะแนนแต่ละวิชาได้โดยตรง (สำหรับนำเข้ารายชื่อก่อนแล้วค่อยกรอกคะแนน) · เว้นว่าง = ยังไม่กรอก · กดบันทึกเมื่อแก้เสร็จ
+            </p>
+            <ScoreEntryCard key={selectedExam.id} examId={selectedExam.id} />
           </Panel>
         )}
 

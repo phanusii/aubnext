@@ -458,7 +458,11 @@ export async function importExam(input: {
 export function normalizeRoomImportRows(input: {
   rawRows: Record<string, unknown>[];
   subjects: Array<{ id: string; name: string; maxScore: number | null }>;
+  requireScores?: boolean;
 }) {
+  // requireScores=true (แบบที่ 1): ทุกวิชาต้องมีคอลัมน์+คะแนน
+  // requireScores=false (แบบที่ 2: นำเข้ารายชื่อก่อน): ไม่มีคอลัมน์คะแนน/ปล่อยว่างได้ → กรอกทีหลัง
+  const requireScores = input.requireScores ?? true;
   const errors: string[] = [];
   const subjectsByName = new Map(input.subjects.map((subject) => [subject.name, subject]));
   const seenExamNos = new Set<string>();
@@ -478,15 +482,20 @@ export function normalizeRoomImportRows(input: {
     seenExamNos.add(examNo);
 
     for (const subject of subjectsByName.values()) {
-      if (!(subject.name in row)) {
-        errors.push(`แถว ${index + 2}: ไม่พบคอลัมน์วิชา ${subject.name}`);
+      const raw = row[subject.name];
+      const blank = !(subject.name in row) || raw == null || String(raw).trim() === "";
+      if (blank) {
+        // โหมดบังคับคะแนน → error · โหมด roster → ข้าม (ยังไม่กรอก)
+        if (requireScores) {
+          errors.push(`แถว ${index + 2}: ${subject.name in row ? "ยังไม่มีคะแนนวิชา" : "ไม่พบคอลัมน์วิชา"} ${subject.name}`);
+        }
         continue;
       }
 
-      const value = Number(row[subject.name]);
+      const value = Number(raw);
       if (!Number.isFinite(value)) {
         errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} ไม่ใช่ตัวเลข`);
-        scores[subject.id] = 0;
+        if (requireScores) scores[subject.id] = 0;
       } else if (value < 0) {
         errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} ต้องไม่ติดลบ`);
         scores[subject.id] = value;
@@ -508,6 +517,7 @@ export async function importRoomStudents(input: {
   examSessionId: string;
   room: string;
   rawRows: Record<string, unknown>[];
+  requireScores?: boolean;
 }) {
   const prisma = getPrisma();
   const exam = await prisma.examSession.findUnique({
@@ -518,6 +528,7 @@ export async function importRoomStudents(input: {
 
   const normalized = normalizeRoomImportRows({
     rawRows: input.rawRows,
+    requireScores: input.requireScores,
     subjects: exam.subjects.map((subject) => ({
       id: subject.id,
       name: subject.name,
@@ -594,6 +605,83 @@ export async function importRoomStudents(input: {
   }, { timeout: 20_000 });
 
   return { ok: true as const, imported: normalized.rows.length };
+}
+
+// ===== กรอก/แก้คะแนนรายคนภายหลัง (สำหรับนำเข้าแบบที่ 2) =====
+// โหลดตารางกรอกคะแนน: วิชา + นักเรียน(พร้อมคะแนนที่กรอกไว้แล้ว)
+export async function getExamScoreSheet(examSessionId: string) {
+  const prisma = getPrisma();
+  const exam = await prisma.examSession.findUnique({
+    where: { id: examSessionId },
+    include: {
+      subjects: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true, maxScore: true } },
+      students: {
+        orderBy: [{ room: "asc" }, { examNo: "asc" }],
+        select: { id: true, examNo: true, name: true, room: true, scores: { select: { subjectId: true, value: true } } },
+      },
+    },
+  });
+  if (!exam) return null;
+  return {
+    examSessionId,
+    status: exam.status,
+    subjects: exam.subjects,
+    students: exam.students.map((student) => ({
+      id: student.id,
+      examNo: student.examNo,
+      name: student.name,
+      room: student.room,
+      scores: Object.fromEntries(student.scores.map((score) => [score.subjectId, score.value])) as Record<string, number>,
+    })),
+  };
+}
+
+// บันทึกคะแนนที่กรอก/แก้: ค่า null หรือ "" = ลบคะแนนวิชานั้นของคนนั้น (ยังไม่กรอก)
+export async function saveExamScores(input: {
+  examSessionId: string;
+  updates: Array<{ studentId: string; scores: Record<string, number | null> }>;
+}) {
+  const prisma = getPrisma();
+  const subjects = await prisma.subject.findMany({ where: { examSessionId: input.examSessionId }, select: { id: true, name: true, maxScore: true } });
+  const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
+  const studentIds = input.updates.map((update) => update.studentId);
+  const validStudents = await prisma.student.findMany({ where: { id: { in: studentIds }, examSessionId: input.examSessionId }, select: { id: true } });
+  const validStudentIds = new Set(validStudents.map((student) => student.id));
+
+  const errors: string[] = [];
+  const ops: Array<ReturnType<typeof prisma.score.upsert> | ReturnType<typeof prisma.score.deleteMany>> = [];
+
+  for (const update of input.updates) {
+    if (!validStudentIds.has(update.studentId)) continue;
+    for (const [subjectId, rawValue] of Object.entries(update.scores)) {
+      const subject = subjectById.get(subjectId);
+      if (!subject) continue;
+      if (rawValue == null || Number.isNaN(rawValue)) {
+        ops.push(prisma.score.deleteMany({ where: { studentId: update.studentId, subjectId } }));
+        continue;
+      }
+      const value = Number(rawValue);
+      if (!Number.isFinite(value) || value < 0) {
+        errors.push(`คะแนนวิชา ${subject.name} ไม่ถูกต้อง`);
+        continue;
+      }
+      if (subject.maxScore != null && value > subject.maxScore) {
+        errors.push(`คะแนนวิชา ${subject.name} เกินคะแนนเต็ม ${subject.maxScore}`);
+        continue;
+      }
+      ops.push(
+        prisma.score.upsert({
+          where: { studentId_subjectId: { studentId: update.studentId, subjectId } },
+          create: { studentId: update.studentId, subjectId, value },
+          update: { value },
+        }),
+      );
+    }
+  }
+
+  if (errors.length > 0) return { ok: false as const, errors: [...new Set(errors)] };
+  if (ops.length > 0) await prisma.$transaction(ops);
+  return { ok: true as const, saved: ops.length };
 }
 
 export async function getExamResultSnapshots(examSessionId: string) {

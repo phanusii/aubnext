@@ -35,11 +35,14 @@ export async function POST(
   }
 
   const { id, room } = await params;
+  // ?mode=roster → นำเข้ารายชื่อก่อน (ไม่บังคับคะแนน · กรอกทีหลัง) · ค่าปกติ = บังคับคะแนน
+  const requireScores = new URL(request.url).searchParams.get("mode") !== "roster";
   try {
     const result = await importRoomStudents({
       examSessionId: id,
       room: decodeURIComponent(room),
       rawRows,
+      requireScores,
     });
     if (!result.ok) {
       return NextResponse.json({ error: "พบข้อผิดพลาดในข้อมูล", errors: result.errors }, { status: 400 });
