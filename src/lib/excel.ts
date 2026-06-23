@@ -149,7 +149,14 @@ export function suggestMapping(headers: string[]): ImportMapping {
   };
 }
 
-export function normalizeImportRows(rows: Record<string, unknown>[], mapping: ImportMapping) {
+export function normalizeImportRows(
+  rows: Record<string, unknown>[],
+  mapping: ImportMapping,
+  opts: { requireScores?: boolean } = {},
+) {
+  // requireScores=true (แบบที่ 1: นำเข้าพร้อมคะแนน) → ต้องมีคอลัมน์คะแนน + คะแนนต้องครบ
+  // requireScores=false (แบบที่ 2: นำเข้ารายชื่อก่อน) → ไม่มีคะแนนก็ได้, ช่องว่าง = ยังไม่กรอก
+  const requireScores = opts.requireScores ?? true;
   const errors: string[] = [];
   const seenExamNos = new Set<string>();
 
@@ -158,7 +165,7 @@ export function normalizeImportRows(rows: Record<string, unknown>[], mapping: Im
     errors.push(`ยังไม่ได้จับคู่คอลัมน์: ${missing.join(", ")}`);
   }
 
-  if (mapping.subjects.length === 0) {
+  if (requireScores && mapping.subjects.length === 0) {
     errors.push("ต้องมีคอลัมน์คะแนนอย่างน้อย 1 วิชา");
   }
 
@@ -166,10 +173,20 @@ export function normalizeImportRows(rows: Record<string, unknown>[], mapping: Im
     const scores: Record<string, number> = {};
 
     for (const subject of mapping.subjects) {
-      const value = Number(row[subject]);
+      const raw = row[subject];
+      const blank = raw == null || stringifyCell(raw) === "";
+      if (blank) {
+        // ปล่อยว่าง: โหมดบังคับ → error, โหมดไม่บังคับ → ข้าม (ยังไม่กรอก)
+        if (requireScores) {
+          errors.push(`แถว ${index + 2}: ยังไม่มีคะแนนวิชา ${subject}`);
+          scores[subject] = 0;
+        }
+        continue;
+      }
+      const value = Number(raw);
       if (!Number.isFinite(value)) {
         errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject} ไม่ใช่ตัวเลข`);
-        scores[subject] = 0;
+        if (requireScores) scores[subject] = 0;
       } else {
         scores[subject] = value;
       }
