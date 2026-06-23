@@ -169,7 +169,7 @@ export function LinePortal({
               </div>
             </div>
           )}
-          <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">เชื่อมต่อบัญชี LINE</h1>
+          <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">กรอกรหัสนักเรียน</h1>
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
             กรอกรหัสนักเรียนเพื่อผูกกับบัญชี LINE แล้วกลับไปกดดูผลคะแนนในแชท
           </p>
