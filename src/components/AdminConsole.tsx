@@ -145,6 +145,8 @@ export function AdminConsole() {
   const [rooms, setRooms] = useState<RoomQuota[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([emptySubject(0)]);
   const [importRoom, setImportRoom] = useState("");
+  // โหมดนำเข้า: "withScores" (แบบ 1 พร้อมคะแนน) | "roster" (แบบ 2 รายชื่อก่อน กรอกทีหลัง)
+  const [importMode, setImportMode] = useState<"withScores" | "roster">("withScores");
   const [pasteText, setPasteText] = useState("");
   const [calculatedResults, setCalculatedResults] = useState<CalculatedResult[]>([]);
   const [resultsLoadedExamId, setResultsLoadedExamId] = useState("");
@@ -514,7 +516,8 @@ export function AdminConsole() {
 
     const { rows } = prepareRoomImportTable(pasteText, subjects);
     setBusy(true);
-    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import`, {
+    const modeQuery = importMode === "roster" ? "?mode=roster" : "";
+    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import${modeQuery}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rawRows: rows }),
@@ -538,7 +541,8 @@ export function AdminConsole() {
     const formData = new FormData();
     formData.append("file", file);
     setBusy(true);
-    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import`, {
+    const modeQuery = importMode === "roster" ? "?mode=roster" : "";
+    const response = await fetch(`/api/exams/${selectedExam.id}/rooms/${encodeURIComponent(importRoom)}/import${modeQuery}`, {
       method: "POST",
       body: formData,
     });
@@ -1140,7 +1144,31 @@ export function AdminConsole() {
         )}
 
         {activeTab === "import" && selectedExam && (
-          <Panel icon={<ClipboardList size={18} />} title="นำเข้ารายชื่อพร้อมคะแนนทีละห้อง">
+          <Panel icon={<ClipboardList size={18} />} title="นำเข้านักเรียนทีละห้อง">
+            <div className="mb-3 grid gap-2.5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setImportMode("withScores")}
+                className={cx(
+                  "rounded-xl border-2 px-4 py-3 text-left transition",
+                  importMode === "withScores" ? "border-sky-300 bg-[linear-gradient(135deg,#eff6ff,#f0f9ff)]" : "border-[var(--border-soft)] bg-white",
+                )}
+              >
+                <p className="text-sm font-semibold text-sky-700">📥 แบบที่ 1 — พร้อมคะแนน</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">ไฟล์มีคะแนนทุกวิชา → ประกาศได้เลย</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportMode("roster")}
+                className={cx(
+                  "rounded-xl border-2 px-4 py-3 text-left transition",
+                  importMode === "roster" ? "border-pink-300 bg-[linear-gradient(135deg,#fdf2f8,#fce7f3)]" : "border-[var(--border-soft)] bg-white",
+                )}
+              >
+                <p className="text-sm font-semibold text-pink-700">📝 แบบที่ 2 — รายชื่อก่อน</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">รหัส+ชื่อ (ยังไม่ต้องมีคะแนน) → กรอกทีหลัง</p>
+              </button>
+            </div>
             <div className="grid gap-3 md:grid-cols-[220px_1fr]">
               <Field label="เลือกห้อง">
                 <select className="app-input" value={importRoom} onChange={(event) => setImportRoom(event.target.value)}>
@@ -1150,7 +1178,11 @@ export function AdminConsole() {
                 </select>
               </Field>
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"} หรือวางแบบไม่มีหัวตารางตามลำดับนี้ได้
+                {importMode === "roster" ? (
+                  <>คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> (ไม่ต้องมีคะแนน) แล้วไปกรอกคะแนนที่แท็บ &quot;กรอกคะแนน&quot;</>
+                ) : (
+                  <>คอลัมน์ที่ต้องมี: <span className="font-medium text-[var(--text-main)]">student_id, student_name</span> และชื่อวิชา เช่น {subjects.map((subject) => subject.name).filter(Boolean).join(", ") || "คณิตศาสตร์"} หรือวางแบบไม่มีหัวตารางตามลำดับนี้ได้</>
+                )}
               </div>
             </div>
             <textarea
