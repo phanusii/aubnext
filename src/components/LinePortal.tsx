@@ -171,7 +171,9 @@ export function LinePortal({
           )}
           <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">กรอกรหัสนักเรียน</h1>
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
-            กรอกรหัสนักเรียนเพื่อผูกกับบัญชี LINE แล้วกลับไปกดดูผลคะแนนในแชท
+            {binding
+              ? "เปลี่ยนรหัสที่ผูกได้ โดยกรอกรหัสใหม่ด้านล่าง"
+              : "รอบสอบนี้ยังไม่ได้ผูกบัญชี — กรอกรหัสนักเรียนเพื่อดูผลคะแนนในแชท LINE"}
           </p>
         </div>
 
