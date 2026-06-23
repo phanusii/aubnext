@@ -847,6 +847,34 @@ export async function deleteExamPublishedResults(examSessionId: string) {
   return { deleted: deleted.count };
 }
 
+// ลบรอบสอบทั้งรอบ (cascade: วิชา/ห้อง/นักเรียน/คะแนน/ผล/การผูก LINE หายตามทั้งหมด)
+export async function deleteExamSession(examSessionId: string) {
+  const prisma = getPrisma();
+  const settings = await prisma.schoolSettings.findUnique({ where: { id: "main" }, select: { activeExamSessionId: true } });
+  await prisma.$transaction(async (tx) => {
+    // ถ้าเป็นรอบสอบที่ตั้งเป็น active อยู่ → ปลดออกก่อน กัน activeExamSessionId ค้างชี้รอบที่ลบ
+    if (settings?.activeExamSessionId === examSessionId) {
+      await tx.schoolSettings.update({ where: { id: "main" }, data: { activeExamSessionId: null } });
+    }
+    await tx.examSession.delete({ where: { id: examSessionId } });
+  });
+  peerSnapshotMemoryCache.delete(examSessionId);
+  clearActivePublishedExamCache();
+  clearSchoolSettingsCache();
+  return { ok: true as const };
+}
+
+// ลบนักเรียนรายคน (cascade: คะแนน/ผล/การผูก LINE ของคนนั้นหายตาม)
+// อันดับคนอื่นจะ stale จนกว่าจะกด "คำนวณ"/"ประกาศผล" ใหม่ (publish คำนวณใหม่ให้เสมอ)
+export async function deleteStudent(studentId: string) {
+  const prisma = getPrisma();
+  const student = await prisma.student.findUnique({ where: { id: studentId }, select: { examSessionId: true } });
+  if (!student) return { ok: false as const, error: "ไม่พบนักเรียน" };
+  await prisma.student.delete({ where: { id: studentId } });
+  peerSnapshotMemoryCache.delete(student.examSessionId);
+  return { ok: true as const, examSessionId: student.examSessionId };
+}
+
 function average(values: number[]) {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
