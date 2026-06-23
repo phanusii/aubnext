@@ -14,7 +14,11 @@ export type PreparedRoomImportTable = {
 const studentIdAliases = ["student_id", "รหัสนักเรียน", "exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ"];
 const studentNameAliases = ["student_name", "ชื่อนักเรียน", "ชื่อ-สกุล", "ชื่อ", "name"];
 
-export function prepareRoomImportTable(text: string, subjects: RoomImportSubject[]): PreparedRoomImportTable {
+export function prepareRoomImportTable(
+  text: string,
+  subjects: RoomImportSubject[],
+  requireScores = true,
+): PreparedRoomImportTable {
   const activeSubjects = subjects.filter((subject) => subject.name.trim());
   const rawRows = parseDelimitedRows(text);
 
@@ -23,7 +27,9 @@ export function prepareRoomImportTable(text: string, subjects: RoomImportSubject
   }
 
   const firstRow = rawRows[0];
-  const expectedHeaderlessColumns = activeSubjects.length + 2;
+  // โหมด roster (ไม่บังคับคะแนน): วางแค่ รหัส+ชื่อ (2 คอลัมน์) · โหมดปกติ: id+name+วิชา
+  const headerlessSubjects = requireScores ? activeSubjects : [];
+  const expectedHeaderlessColumns = headerlessSubjects.length + 2;
   const firstRowLooksLikeHeader = firstRow.some((cell) => {
     const normalized = normalizeColumnName(cell);
     return (
@@ -33,8 +39,8 @@ export function prepareRoomImportTable(text: string, subjects: RoomImportSubject
     );
   });
 
-  if (!firstRowLooksLikeHeader && activeSubjects.length > 0 && firstRow.length === expectedHeaderlessColumns) {
-    const headers = ["student_id", "student_name", ...activeSubjects.map((subject) => subject.name)];
+  if (!firstRowLooksLikeHeader && firstRow.length === expectedHeaderlessColumns) {
+    const headers = ["student_id", "student_name", ...headerlessSubjects.map((subject) => subject.name)];
     return {
       headers,
       rows: rawRows.map((row) => toRecord(headers, row)),
