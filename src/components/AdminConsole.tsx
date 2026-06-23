@@ -653,6 +653,39 @@ export function AdminConsole() {
     await loadExams(selectedExam.id);
   }
 
+  async function deleteExam() {
+    if (!selectedExam) return;
+    const confirmed = window.confirm(
+      [
+        `ต้องการลบรอบสอบ "${selectedExam.name}" แบบถาวรหรือไม่`,
+        `จะลบทั้งหมด: วิชา ห้อง นักเรียน ${selectedExam._count?.students ?? 0} คน คะแนน ผลคำนวณ และการผูก LINE`,
+        "⚠️ การลบนี้กู้คืนไม่ได้",
+      ].join("\n"),
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    const response = await fetch(`/api/exams/${selectedExam.id}`, { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+
+    if (response.status === 401) {
+      setIsLoggedIn(false);
+      setMessage("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+      return;
+    }
+    if (!response.ok) {
+      setMessage(data.error ?? "ลบรอบสอบไม่สำเร็จ");
+      return;
+    }
+
+    const deletedName = selectedExam.name;
+    setSelectedExamId("");
+    setCalculatedResults([]);
+    setMessage(`ลบรอบสอบ "${deletedName}" แล้ว`);
+    await loadExams();
+  }
+
   async function updateLineRichMenu() {
     setBusy(true);
     setMessage("");
@@ -1044,6 +1077,17 @@ export function AdminConsole() {
                     <Metric label="รูปแบบ" value={selectedExam.selectionMode === "PER_ROOM" ? "รายห้อง" : "ทั้งชั้น"} />
                     <Metric label="นักเรียน" value={`${selectedExam._count?.students ?? 0} คน`} />
                     <Metric label="สถานะ" value={selectedExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"} />
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={deleteExam}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                    >
+                      <Trash2 size={16} />
+                      ลบรอบสอบนี้
+                    </button>
                   </div>
                   <div className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[#fbfdff] p-4">
                     <div className="mb-3 flex items-center gap-2 font-semibold">

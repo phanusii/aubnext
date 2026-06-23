@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Trash2 } from "lucide-react";
 
 type Subject = { id: string; name: string; maxScore: number | null };
 type Student = { id: string; examNo: string; name: string; room: string; scores: Record<string, number> };
@@ -25,6 +25,24 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function deleteStudentRow(student: Student) {
+    if (!window.confirm(`ลบนักเรียน "${student.name}" (${student.examNo}) ออกจากรอบสอบ?\nคะแนนและผลของคนนี้จะถูกลบด้วย — กู้คืนไม่ได้`)) return;
+    setDeletingId(student.id);
+    try {
+      const res = await fetch(`/api/exams/${examId}/students/${student.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setMessage(data?.error ?? "ลบนักเรียนไม่สำเร็จ");
+        return;
+      }
+      setSheet((current) => (current ? { ...current, students: current.students.filter((item) => item.id !== student.id) } : current));
+      setMessage(`ลบ ${student.name} แล้ว — อย่าลืมกด "คำนวณ"/"ประกาศผล" ใหม่เพื่ออัปเดตอันดับ`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     // โหลดครั้งเดียวต่อ examId — parent ใส่ key={examId} ให้ remount เมื่อเปลี่ยนรอบสอบ (loading เริ่ม true เอง)
@@ -183,6 +201,7 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                 </th>
               ))}
               <th className="px-3 py-2 text-center font-medium">รวม</th>
+              <th className="px-2 py-2 font-medium" />
             </tr>
           </thead>
           <tbody>
@@ -207,10 +226,21 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                   </td>
                 ))}
                 <td className="px-3 py-1.5 text-center font-semibold text-slate-900">{rowTotal(student) || "–"}</td>
+                <td className="px-2 py-1.5 text-center">
+                  <button
+                    type="button"
+                    aria-label={`ลบ ${student.name}`}
+                    disabled={deletingId === student.id}
+                    onClick={() => deleteStudentRow(student)}
+                    className="inline-grid size-8 place-items-center rounded-lg text-rose-500 transition hover:bg-rose-50 disabled:opacity-40"
+                  >
+                    {deletingId === student.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                  </button>
+                </td>
               </tr>
             ))}
             {visibleStudents.length === 0 && (
-              <tr><td colSpan={sheet.subjects.length + 3} className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน</td></tr>
+              <tr><td colSpan={sheet.subjects.length + 4} className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน</td></tr>
             )}
           </tbody>
         </table>
