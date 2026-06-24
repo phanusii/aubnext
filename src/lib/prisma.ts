@@ -37,7 +37,7 @@ export function getPrisma() {
   if (!prisma) {
     const rawConnectionString = databaseUrl();
     if (!rawConnectionString) {
-      throw new Error("ไม่พบตัวแปรฐานข้อมูลใน Vercel: DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL หรือ POSTGRES_URL_NON_POOLING");
+      throw new Error("ไม่พบตัวแปรฐานข้อมูลใน Vercel: APP_DATABASE_URL, DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL หรือ POSTGRES_URL_NON_POOLING");
     }
 
     // diagnostic ยืนยันแล้วว่า connection string เป็น sslmode=verify-ca → hardenSslMode ยกเป็น verify-full

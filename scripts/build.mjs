@@ -4,7 +4,9 @@
 import { execSync } from "node:child_process";
 
 const hasDb = Boolean(
-  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.APP_DATABASE_URL_UNPOOLED ||
+    process.env.APP_DATABASE_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
     process.env.DATABASE_URL ||
     process.env.POSTGRES_PRISMA_URL ||
     process.env.POSTGRES_URL,
