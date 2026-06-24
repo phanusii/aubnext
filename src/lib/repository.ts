@@ -291,168 +291,26 @@ export async function createExamSession(input: {
   });
 }
 
-export async function updateExamSession(input: {
-  examSessionId: string;
-  name?: string;
-  classLevel?: string;
-  selectionMode?: "PER_ROOM" | "WHOLE_LEVEL";
-  wholeLevelQuota?: number | null;
-  passTitle?: string | null;
-  passInstructions?: string | null;
-}) {
-  const prisma = getPrisma();
-  const current = await prisma.examSession.findUnique({
-    where: { id: input.examSessionId },
-    select: {
-      id: true,
-      name: true,
-      classLevel: true,
-      selectionMode: true,
-      wholeLevelQuota: true,
-    },
-  });
-  if (!current) throw new Error("ไม่พบรอบสอบ");
-
-  const name = input.name?.trim();
-  const classLevel = input.classLevel?.trim();
-  if (input.name !== undefined && !name) throw new Error("กรุณากรอกชื่อรอบสอบ");
-  if (input.classLevel !== undefined && !classLevel) throw new Error("กรุณากรอกชั้นเรียน");
-
-  const nextName = name || current.name;
-  const nextClassLevel = classLevel || current.classLevel;
-  if (input.name !== undefined || input.classLevel !== undefined) {
-    const duplicate = await prisma.examSession.findFirst({
-      where: {
-        id: { not: input.examSessionId },
-        name: nextName,
-        classLevel: nextClassLevel,
-      },
-      select: { id: true },
-    });
-    if (duplicate) throw new Error("มีรอบสอบชื่อนี้ในชั้นนี้แล้ว");
-  }
-
-  const nextSelectionMode = input.selectionMode ?? current.selectionMode;
-  const nextWholeLevelQuota =
-    nextSelectionMode === "WHOLE_LEVEL"
-      ? Number(input.wholeLevelQuota ?? current.wholeLevelQuota ?? 0)
-      : null;
-  const rankingRuleChanged =
-    nextSelectionMode !== current.selectionMode ||
-    nextWholeLevelQuota !== current.wholeLevelQuota;
-  const classLevelChanged = nextClassLevel !== current.classLevel;
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const exam = await tx.examSession.update({
-      where: { id: input.examSessionId },
-      data: {
-        ...(name ? { name } : {}),
-        ...(classLevel ? { classLevel } : {}),
-        ...(input.selectionMode ? { selectionMode: nextSelectionMode } : {}),
-        ...(input.selectionMode || input.wholeLevelQuota !== undefined
-          ? { wholeLevelQuota: nextWholeLevelQuota }
-          : {}),
-        ...(input.passTitle !== undefined
-          ? { passTitle: input.passTitle?.trim() || null }
-          : {}),
-        ...(input.passInstructions !== undefined
-          ? { passInstructions: input.passInstructions?.trim() || null }
-          : {}),
-        ...(rankingRuleChanged ? { status: "DRAFT", publishedAt: null } : {}),
-      },
-    });
-
-    if (classLevelChanged) {
-      await tx.student.updateMany({
-        where: { examSessionId: input.examSessionId },
-        data: { classLevel: nextClassLevel },
-      });
-    }
-
-    if (rankingRuleChanged) {
-      await tx.resultSnapshot.deleteMany({
-        where: { examSessionId: input.examSessionId },
-      });
-    }
-
-    return exam;
-  });
-
-  if (rankingRuleChanged) {
-    peerSnapshotMemoryCache.delete(input.examSessionId);
-    clearActivePublishedExamCache();
-  } else {
-    await rebuildPublicResultCache(input.examSessionId);
-  }
-  return { exam: updated, rankingRuleChanged };
-}
-
 export async function saveExamRooms(
   examSessionId: string,
   rooms: Array<{ room: string; quota: number }>,
 ) {
   const prisma = getPrisma();
-  const normalizedRooms = rooms.map((room) => ({
-    room: room.room.trim(),
-    quota: Number(room.quota || 0),
-  }));
-  const uniqueRooms = new Set(normalizedRooms.map((room) => room.room).filter(Boolean));
+  const uniqueRooms = new Set(rooms.map((room) => room.room.trim()).filter(Boolean));
   if (uniqueRooms.size !== rooms.length) {
     throw new Error("ชื่อห้องซ้ำหรือว่าง");
   }
 
-  const [existingRooms, studentRooms] = await Promise.all([
-    prisma.roomQuota.findMany({
-      where: { examSessionId },
-      select: { room: true, quota: true },
-      orderBy: { room: "asc" },
-    }),
-    prisma.student.findMany({
-      where: { examSessionId },
-      distinct: ["room"],
-      select: { room: true },
-    }),
-  ]);
-  const missingStudentRoom = studentRooms.find((entry) => !uniqueRooms.has(entry.room));
-  if (missingStudentRoom) {
-    throw new Error(`ห้อง ${missingStudentRoom.room} มีนักเรียนอยู่ จึงลบหรือเปลี่ยนชื่อห้องนี้ไม่ได้`);
-  }
-
-  const currentSignature = existingRooms
-    .map((room) => `${room.room}:${room.quota}`)
-    .sort()
-    .join("|");
-  const nextSignature = normalizedRooms
-    .map((room) => `${room.room}:${room.quota}`)
-    .sort()
-    .join("|");
-  const rankingRuleChanged = currentSignature !== nextSignature;
-
-  await prisma.$transaction([
+  return prisma.$transaction([
     prisma.roomQuota.deleteMany({ where: { examSessionId } }),
     prisma.roomQuota.createMany({
-      data: normalizedRooms.map((room) => ({
+      data: rooms.map((room) => ({
         examSessionId,
-        room: room.room,
-        quota: room.quota,
+        room: room.room.trim(),
+        quota: Number(room.quota || 0),
       })),
     }),
-    ...(rankingRuleChanged
-      ? [
-          prisma.resultSnapshot.deleteMany({ where: { examSessionId } }),
-          prisma.examSession.update({
-            where: { id: examSessionId },
-            data: { status: "DRAFT", publishedAt: null },
-          }),
-        ]
-      : []),
   ]);
-
-  if (rankingRuleChanged) {
-    peerSnapshotMemoryCache.delete(examSessionId);
-    clearActivePublishedExamCache();
-  }
-  return { rankingRuleChanged };
 }
 
 export async function saveExamSubjects(
