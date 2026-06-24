@@ -15,6 +15,7 @@ import {
   ListChecks,
   LogIn,
   Megaphone,
+  Pencil,
   Plus,
   Save,
   School,
@@ -140,6 +141,11 @@ export function AdminConsole() {
   const [newSelectionMode, setNewSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
   const [newWholeQuota, setNewWholeQuota] = useState(10);
   const [roomCount, setRoomCount] = useState(3);
+  const [editExamOpen, setEditExamOpen] = useState(false);
+  const [editExamName, setEditExamName] = useState("");
+  const [editClassLevel, setEditClassLevel] = useState("");
+  const [editSelectionMode, setEditSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
+  const [editWholeQuota, setEditWholeQuota] = useState(0);
   const [passTitle, setPassTitle] = useState("");
   const [passInstructions, setPassInstructions] = useState("");
   const [rooms, setRooms] = useState<RoomQuota[]>([]);
@@ -303,6 +309,11 @@ export function AdminConsole() {
           : [emptySubject(0)],
       );
       setImportRoom(selectedExam.roomQuotas[0]?.room ?? "");
+      setEditExamOpen(false);
+      setEditExamName(selectedExam.name);
+      setEditClassLevel(selectedExam.classLevel);
+      setEditSelectionMode(selectedExam.selectionMode);
+      setEditWholeQuota(Number(selectedExam.wholeLevelQuota ?? 0));
       setPassTitle(selectedExam.passTitle ?? "");
       setPassInstructions(selectedExam.passInstructions ?? "");
       setCalculatedResults([]);
@@ -462,6 +473,41 @@ export function AdminConsole() {
     await loadExams(data.exam.id);
   }
 
+  async function saveExamDetails() {
+    if (!selectedExam) return;
+    setBusy(true);
+    const response = await fetch(`/api/exams/${selectedExam.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editExamName,
+        classLevel: editClassLevel,
+        selectionMode: editSelectionMode,
+        wholeLevelQuota: editSelectionMode === "WHOLE_LEVEL" ? editWholeQuota : null,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+
+    if (!response.ok) {
+      setMessage(data.error ?? "แก้ไขรอบสอบไม่สำเร็จ");
+      return;
+    }
+
+    if (data.rankingRuleChanged) {
+      setCalculatedResults([]);
+      setResultsLoadedExamId("");
+      setPublicResultCacheHealth(null);
+    }
+    setEditExamOpen(false);
+    setMessage(
+      data.rankingRuleChanged
+        ? "บันทึกรอบสอบแล้ว — กติกาคัดเลือกเปลี่ยน ระบบล้างผลเดิม กรุณาคำนวณและประกาศผลใหม่"
+        : "บันทึกข้อมูลรอบสอบแล้ว",
+    );
+    await loadExams(selectedExam.id);
+  }
+
   async function saveRooms() {
     if (!selectedExam) return;
     setBusy(true);
@@ -472,8 +518,21 @@ export function AdminConsole() {
     });
     const data = await response.json().catch(() => ({}));
     setBusy(false);
-    setMessage(response.ok ? "บันทึกห้องและโควตาแล้ว" : data.error ?? "บันทึกห้องไม่สำเร็จ");
-    await loadExams();
+    if (!response.ok) {
+      setMessage(data.error ?? "บันทึกห้องไม่สำเร็จ");
+      return;
+    }
+    if (data.rankingRuleChanged) {
+      setCalculatedResults([]);
+      setResultsLoadedExamId("");
+      setPublicResultCacheHealth(null);
+    }
+    setMessage(
+      data.rankingRuleChanged
+        ? "บันทึกห้องและโควตาแล้ว — ระบบล้างผลเดิม กรุณาคำนวณและประกาศผลใหม่"
+        : "บันทึกห้องและโควตาแล้ว",
+    );
+    await loadExams(selectedExam.id);
   }
 
   async function saveSubjects() {
@@ -1092,7 +1151,7 @@ export function AdminConsole() {
               </select>
               {selectedExam && (
                 <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  เมื่อกรอกคะแนนครบแล้ว ไปกด <span className="font-semibold text-sky-700">คำนวณ</span> และ <span className="font-semibold text-pink-600">ประกาศผล</span> ที่แท็บ <span className="font-semibold">“ผลคะแนน”</span>
+                  {selectedExam.roomQuotas.length} ห้อง · เมื่อกรอกคะแนนครบแล้ว ไปกด <span className="font-semibold text-sky-700">คำนวณ</span> และ <span className="font-semibold text-pink-600">ประกาศผล</span> ที่แท็บ <span className="font-semibold">“ผลคะแนน”</span>
                 </p>
               )}
               {selectedExam ? (
@@ -1103,7 +1162,17 @@ export function AdminConsole() {
                     <Metric label="นักเรียน" value={`${selectedExam._count?.students ?? 0} คน`} />
                     <Metric label="สถานะ" value={selectedExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"} />
                   </div>
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditExamOpen((current) => !current)}
+                      disabled={busy}
+                      aria-expanded={editExamOpen}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
+                    >
+                      <Pencil size={16} />
+                      {editExamOpen ? "ซ่อนการแก้ไข" : "แก้ไขรอบสอบ"}
+                    </button>
                     <button
                       type="button"
                       onClick={deleteExam}
@@ -1114,6 +1183,56 @@ export function AdminConsole() {
                       ลบรอบสอบนี้
                     </button>
                   </div>
+                  {editExamOpen && (
+                    <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/40 p-4">
+                      <div className="mb-3 flex items-center gap-2 font-semibold">
+                        <Pencil size={18} />
+                        แก้ไขข้อมูลรอบสอบ
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <Field label="ชื่อรอบสอบ">
+                          <input className="app-input" value={editExamName} onChange={(event) => setEditExamName(event.target.value)} />
+                        </Field>
+                        <Field label="ชั้นเรียน">
+                          <input className="app-input" value={editClassLevel} onChange={(event) => setEditClassLevel(event.target.value)} placeholder="เช่น ป.6" />
+                        </Field>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {([
+                          ["PER_ROOM", "รายห้อง"],
+                          ["WHOLE_LEVEL", "ทั้งชั้น"],
+                        ] as const).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setEditSelectionMode(value)}
+                            className={cx("app-segment", editSelectionMode === value && "app-segment-active")}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {editSelectionMode === "WHOLE_LEVEL" && (
+                        <Field label="จำนวนผู้ผ่านทั้งชั้น">
+                          <input
+                            className="app-input"
+                            type="number"
+                            min={0}
+                            value={editWholeQuota}
+                            onFocus={selectNumberInput}
+                            onChange={(event) => setEditWholeQuota(Number(event.target.value))}
+                          />
+                        </Field>
+                      )}
+                      <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                        เปลี่ยนรูปแบบคัดเลือกหรือจำนวนผู้ผ่านทั้งชั้น ระบบจะล้างผลที่คำนวณไว้ ต้องคำนวณและประกาศผลใหม่
+                      </p>
+                      <button type="button" onClick={saveExamDetails} disabled={busy} className="app-button-primary mt-3">
+                        <Save size={16} />
+                        บันทึกการแก้ไข
+                      </button>
+                    </div>
+                  )}
                   <div className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[#fbfdff] p-4">
                     <div className="mb-3 flex items-center gap-2 font-semibold">
                       <BadgeCheck size={18} />
