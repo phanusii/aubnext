@@ -1,14 +1,21 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { CheckResultForm } from "@/components/CheckResultForm";
+import { PublicBrandingCard, PublicBrandingCardSkeleton } from "@/components/PublicBrandingCard";
 import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 
-export const dynamic = "force-dynamic";
+// preferredRegion = sin1 มีผลเฉพาะตอน function รันจริง (revalidate / cache miss) ให้ query ไม่ข้าม region
+// ฟอร์ม + หัวข้อ + footer เป็น static shell (prerender + serve จาก CDN) ส่วนการ์ด settings stream เข้ามาทีหลัง
+export const preferredRegion = "sin1";
 
-export default async function CheckResultPage() {
+async function SettingsHeader() {
+  // เป็น dynamic hole: render ตอน request (เลยไม่ต้องแตะ DB ตอน build) แต่ตัว data อ่านจาก use cache
+  // → static shell (ฟอร์ม) serve จาก CDN ทันที ส่วนการ์ด settings stream ตามมาแบบ cached ข้าม request
+  await connection();
   const settings = await getCachedPublicResultSettings();
-
   return (
-    <CheckResultForm
-      initialSettings={{
+    <PublicBrandingCard
+      settings={{
         schoolName: settings.schoolName,
         logoUrl: settings.logoUrl,
         activeExam: settings.activeExam
@@ -19,6 +26,18 @@ export default async function CheckResultPage() {
             }
           : null,
       }}
+    />
+  );
+}
+
+export default function CheckResultPage() {
+  return (
+    <CheckResultForm
+      header={
+        <Suspense fallback={<PublicBrandingCardSkeleton />}>
+          <SettingsHeader />
+        </Suspense>
+      }
     />
   );
 }

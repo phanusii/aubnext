@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 import { publicSettingsCacheTag } from "@/lib/public-settings-cache";
 import {
   findPublishedStudentResultSession,
@@ -27,28 +27,28 @@ function matchesLookup(session: PublishedStudentResultLookupResult, lookup: Publ
   return true;
 }
 
-const getCachedPublishedStudentResultSessionByExamNo = unstable_cache(
-  async (examNo: string) => findPublishedStudentResultSession({ examNo }),
-  ["public-student-result-session"],
-  {
-    tags: [publicStudentResultCacheTag, publicSettingsCacheTag],
-    revalidate: 300,
-  },
-);
+async function getCachedPublishedStudentResultSessionByExamNo(examNo: string) {
+  "use cache";
+  // args (examNo) เป็น cache key อัตโนมัติ — ไม่ต้องระบุ keyParts เองอีกต่อไป
+  cacheTag(publicStudentResultCacheTag, publicSettingsCacheTag);
+  cacheLife({ stale: 300, revalidate: 300, expire: 86400 });
+  return findPublishedStudentResultSession({ examNo });
+}
 
-const getCachedPublishedStudentResultSessionByLookup = unstable_cache(
-  async (examNo: string, studentId: string, examSessionId: string) =>
-    findPublishedStudentResultSession({
-      examNo,
-      studentId: studentId || undefined,
-      examSessionId: examSessionId || undefined,
-    }),
-  ["public-student-result-session-lookup"],
-  {
-    tags: [publicStudentResultCacheTag, publicSettingsCacheTag],
-    revalidate: 300,
-  },
-);
+async function getCachedPublishedStudentResultSessionByLookup(
+  examNo: string,
+  studentId: string,
+  examSessionId: string,
+) {
+  "use cache";
+  cacheTag(publicStudentResultCacheTag, publicSettingsCacheTag);
+  cacheLife({ stale: 300, revalidate: 300, expire: 86400 });
+  return findPublishedStudentResultSession({
+    examNo,
+    studentId: studentId || undefined,
+    examSessionId: examSessionId || undefined,
+  });
+}
 
 export async function getCachedPublishedStudentResultSession(lookup: string | PublicStudentResultLookup) {
   const normalized = normalizeLookup(lookup);

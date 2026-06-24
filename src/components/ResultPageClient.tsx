@@ -56,20 +56,33 @@ function readStoredResult() {
   }
 }
 
-export function ResultPageClient() {
-  const [result, setResult] = useState<StudentResult | null>(null);
+export function ResultPageClient({ initialResult = null }: { initialResult?: StudentResult | null }) {
+  // initialResult = ผลที่ SSR อ่านจาก cookie มาแล้ว → render ได้ทันทีโดยไม่ต้องรอ fetch
+  const [result, setResult] = useState<StudentResult | null>(initialResult);
   const [settings, setSettings] = useState<PublicResultSettings | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialResult);
 
   useEffect(() => {
     let active = true;
     const lineResultToken = new URLSearchParams(window.location.search).get("lineResultToken");
-    const stored = lineResultToken ? null : readStoredResult();
-    if (stored) {
-      queueMicrotask(() => {
-        if (active) setResult(stored);
-      });
+
+    if (!lineResultToken) {
+      // ลำดับความเร็ว: ผลจาก SSR (cookie) > sessionStorage → มีตัวใดตัวหนึ่งก็ข้าม fetch /current ที่ซ้ำซ้อนได้
+      // (cookie เป็น source of truth และถูกเซ็ตไว้แล้วตั้งแต่ POST /api/check-result/session)
+      const fast = initialResult ?? readStoredResult();
+      if (fast) {
+        if (initialResult) cacheStudentResultForPage(initialResult); // sync ลง sessionStorage เผื่อ tab/หน้าอื่น
+        queueMicrotask(() => {
+          if (active) {
+            setResult(fast);
+            setLoading(false);
+          }
+        });
+        return () => {
+          active = false;
+        };
+      }
     }
 
     async function loadCurrentResult() {
@@ -95,12 +108,11 @@ export function ResultPageClient() {
 
         if (!("ok" in data)) {
           if (data.settings) setSettings(data.settings);
-          if (!stored) {
-            setError(data.error ?? "ไม่พบ session สำหรับดูผล หรือ session หมดอายุแล้ว กรุณากลับไปกรอกรหัสนักเรียนอีกครั้ง");
-          }
+          // ถึงตรงนี้แปลว่าไม่มีผลสำรอง (ทั้ง SSR และ sessionStorage) จึงแสดง error ได้เลย
+          setError(data.error ?? "ไม่พบ session สำหรับดูผล หรือ session หมดอายุแล้ว กรุณากลับไปกรอกรหัสนักเรียนอีกครั้ง");
         }
       } catch {
-        if (!active || stored) return;
+        if (!active) return;
         setError("เปิดผลคะแนนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       } finally {
         if (active) setLoading(false);
@@ -111,7 +123,7 @@ export function ResultPageClient() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialResult]);
 
   return (
     <ResultShell>

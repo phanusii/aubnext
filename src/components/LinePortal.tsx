@@ -136,7 +136,11 @@ export function LinePortal({
     setSuccess(true);
     setBinding({ student: data.student, exam: data.exam });
     setShowChangeForm(false);
-    setMessage(`ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว กำลังกลับไป LINE`);
+    setMessage(
+      data.resultPushed
+        ? `ผูกบัญชีกับ ${data.student.name} แล้ว ส่งผลคะแนนเข้าแชท LINE แล้ว กำลังกลับไป...`
+        : `ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว กำลังกลับไป LINE`,
+    );
     closeLiffWindow();
   }
 
@@ -165,9 +169,11 @@ export function LinePortal({
               </div>
             </div>
           )}
-          <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">เชื่อมต่อบัญชี LINE</h1>
+          <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">กรอกรหัสนักเรียน</h1>
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
-            กรอกรหัสนักเรียนเพื่อผูกกับบัญชี LINE แล้วกลับไปกดดูผลคะแนนในแชท
+            {binding
+              ? "เปลี่ยนรหัสที่ผูกได้ โดยกรอกรหัสใหม่ด้านล่าง"
+              : "รอบสอบนี้ยังไม่ได้ผูกบัญชี — กรอกรหัสนักเรียนเพื่อดูผลคะแนนในแชท LINE"}
           </p>
         </div>
 

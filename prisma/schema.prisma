@@ -20,6 +20,7 @@ enum ResultStatus {
   PASSED
   FAILED
   REVIEW
+  ABSENT
 }
 
 model SchoolSettings {
@@ -79,6 +80,7 @@ model Student {
   classLevel    String
   room          String
   verifierHash  String
+  absent        Boolean  @default(false)
   createdAt     DateTime @default(now())
 
   examSession     ExamSession      @relation(fields: [examSessionId], references: [id], onDelete: Cascade)

@@ -19,7 +19,7 @@ export function getLineRichMenuPayload() {
     areas: [
       {
         bounds: { x: 55, y: 500, width: 1160, height: 455 },
-        action: { type: "uri", label: "ผูกบัญชี LINE", uri: getLineLiffUrl() },
+        action: { type: "uri", label: "กรอกรหัสนักเรียน", uri: getLineLiffUrl() },
       },
       {
         bounds: { x: 1260, y: 500, width: 1185, height: 455 },
@@ -31,7 +31,7 @@ export function getLineRichMenuPayload() {
       },
       {
         bounds: { x: 1260, y: 975, width: 1185, height: 455 },
-        action: { type: "uri", label: "ติดต่อโรงเรียน", uri: `${siteUrl}/contact` },
+        action: { type: "uri", label: "ติดต่อสอบถาม", uri: `${siteUrl}/contact` },
       },
     ],
   };

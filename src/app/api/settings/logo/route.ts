@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { connection } from "next/server";
 import { getSchoolSettings } from "@/lib/repository";
 
 function parseDataImage(value: string) {
@@ -11,6 +12,8 @@ function parseDataImage(value: string) {
 }
 
 export async function GET() {
+  // อ่าน DB ตอน request จริง ไม่ใช่ตอน build (cacheComponents จะ prerender route handler ที่ไม่มี dynamic signal)
+  await connection();
   const settings = await getSchoolSettings();
   const logoUrl = settings.logoUrl?.trim();
 

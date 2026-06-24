@@ -15,6 +15,7 @@ function formatScore(value: unknown) {
 function statusLabel(status: string) {
   if (status === "PASSED") return "ผ่าน";
   if (status === "REVIEW") return "รอตรวจ";
+  if (status === "ABSENT") return "ไม่ได้เข้าสอบ";
   return "ไม่ผ่าน";
 }
 
@@ -84,6 +85,20 @@ async function loadExamForExport(id: string, status: ExportStatus) {
   });
 }
 
+const EXPORT_FONT = "Tahoma";
+
+function thinBorder(): Partial<ExcelJS.Borders> {
+  const side = { style: "thin" as const, color: { argb: "FFE2E8F0" } };
+  return { top: side, left: side, bottom: side, right: side };
+}
+
+function statusFont(status: string) {
+  if (status === "PASSED") return { name: EXPORT_FONT, size: 11, bold: true, color: { argb: "FF15803D" } };
+  if (status === "FAILED") return { name: EXPORT_FONT, size: 11, color: { argb: "FFB91C1C" } };
+  if (status === "ABSENT") return { name: EXPORT_FONT, size: 11, color: { argb: "FF94A3B8" } };
+  return { name: EXPORT_FONT, size: 11, color: { argb: "FFB45309" } };
+}
+
 function addResultWorksheet(
   workbook: ExcelJS.Workbook,
   sheetName: string,
@@ -91,23 +106,56 @@ function addResultWorksheet(
   snapshots: ExportSnapshot[],
 ) {
   const worksheet = workbook.addWorksheet(uniqueSheetName(workbook, sheetName));
-  worksheet.columns = [
-    { header: "อันดับ", key: "rank", width: 10 },
+  const columns = [
+    { header: "อันดับ", key: "rank", width: 9 },
     { header: "รหัสนักเรียน", key: "examNo", width: 16 },
-    { header: "ชื่อ", key: "name", width: 34 },
-    { header: "ห้อง", key: "room", width: 10 },
-    ...exam.subjects.map((subject) => ({ header: subject.name, key: subject.id, width: 14 })),
-    { header: "คะแนนรวม", key: "totalScore", width: 14 },
-    { header: "สถานะ", key: "status", width: 14 },
-    { header: "เหตุผล", key: "reason", width: 44 },
+    { header: "ชื่อ - สกุล", key: "name", width: 32 },
+    { header: "ห้อง", key: "room", width: 9 },
+    ...exam.subjects.map((subject) => ({ header: subject.name, key: subject.id, width: 13 })),
+    { header: "คะแนนรวม", key: "totalScore", width: 13 },
+    { header: "สถานะ", key: "status", width: 12 },
+    { header: "เหตุผล", key: "reason", width: 40 },
   ];
+  // ตั้ง key+width อย่างเดียว (ไม่ใส่ header อัตโนมัติ) เพื่อเว้นแถวบนไว้ทำหัวรายงานเอง
+  worksheet.columns = columns.map((column) => ({ key: column.key, width: column.width }));
+  const lastCol = columns.length;
+  const leftAlignKeys = new Set(["name", "reason"]);
 
-  worksheet.getRow(1).font = { bold: true };
-  worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF7FF" } };
+  // หัวรายงาน: ชื่อรอบสอบ + บริบท (ห้อง/ระดับชั้น/วันที่พิมพ์)
+  worksheet.mergeCells(1, 1, 1, lastCol);
+  const titleCell = worksheet.getCell(1, 1);
+  titleCell.value = exam.name;
+  titleCell.font = { name: EXPORT_FONT, size: 16, bold: true, color: { argb: "FF0F172A" } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.getRow(1).height = 26;
 
+  worksheet.mergeCells(2, 1, 2, lastCol);
+  const subtitleCell = worksheet.getCell(2, 1);
+  const printedAt = new Date().toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
+  subtitleCell.value = `${sheetName} · ระดับชั้น ${exam.classLevel} · พิมพ์เมื่อ ${printedAt}`;
+  subtitleCell.font = { name: EXPORT_FONT, size: 10, color: { argb: "FF64748B" } };
+  subtitleCell.alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.getRow(2).height = 18;
+
+  // หัวตาราง (แถว 3) — พื้นฟ้า ตัวขาว หนา จัดกึ่งกลาง
+  const HEADER_ROW = 3;
+  const headerRow = worksheet.getRow(HEADER_ROW);
+  columns.forEach((column, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = column.header;
+    cell.font = { name: EXPORT_FONT, size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0EA5E9" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.border = thinBorder();
+  });
+  headerRow.height = 22;
+
+  // ข้อมูล — เส้นขอบบาง จัดชิด (ชื่อ/เหตุผลซ้าย, อื่นกึ่งกลาง) เน้นคะแนนรวม + สีสถานะ
+  const totalCol = columns.findIndex((column) => column.key === "totalScore") + 1;
+  const statusCol = columns.findIndex((column) => column.key === "status") + 1;
   for (const snapshot of snapshots) {
     const scoreBreakdown = snapshot.scoreBreakdown as Record<string, number>;
-    worksheet.addRow({
+    const row = worksheet.addRow({
       rank: snapshot.rank,
       examNo: snapshot.student.examNo,
       name: snapshot.student.name,
@@ -117,12 +165,25 @@ function addResultWorksheet(
       status: statusLabel(snapshot.status),
       reason: snapshot.reason,
     });
+    row.height = 18;
+    columns.forEach((column, index) => {
+      const cell = row.getCell(index + 1);
+      cell.font = { name: EXPORT_FONT, size: 11 };
+      cell.border = thinBorder();
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: leftAlignKeys.has(column.key) ? "left" : "center",
+        wrapText: column.key === "reason",
+      };
+    });
+    row.getCell(totalCol).font = { name: EXPORT_FONT, size: 11, bold: true };
+    row.getCell(statusCol).font = statusFont(snapshot.status);
   }
 
-  worksheet.views = [{ state: "frozen", ySplit: 1 }];
+  worksheet.views = [{ state: "frozen", ySplit: HEADER_ROW }];
   worksheet.autoFilter = {
-    from: { row: 1, column: 1 },
-    to: { row: 1, column: worksheet.columnCount },
+    from: { row: HEADER_ROW, column: 1 },
+    to: { row: HEADER_ROW, column: lastCol },
   };
 }
 

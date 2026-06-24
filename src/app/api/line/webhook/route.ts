@@ -1,3 +1,6 @@
+// รัน function ใน region เดียวกับ Postgres (สิงคโปร์) — ลด round-trip ต่อ query ของปุ่มเช็คผล LINE
+export const preferredRegion = "sin1";
+
 import { NextResponse } from "next/server";
 import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, startLineLoading, verifyLineSignature } from "@/lib/line-messaging";
 import { getLineBoundResult } from "@/lib/repository";

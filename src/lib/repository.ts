@@ -31,13 +31,16 @@ export type PublicStudentResult = {
   result: {
     rank: number;
     totalScore: number;
-    status: "PASSED" | "FAILED" | "REVIEW";
+    status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
     reason: string;
     scoreBreakdown: Record<string, number>;
   };
   statistics: {
     total: {
       score: number;
+      // คะแนนเต็มรวม (= ผลรวม maxScore ทุกวิชา) ใช้คิด % เพื่อแบ่งช่วงคะแนน
+      // optional เผื่อ snapshot เก่าที่แคชไว้ก่อนเพิ่ม field นี้ (ยังไม่ rebuild)
+      maxScore?: number;
       roomAverage: number;
       levelAverage: number;
       roomRank: number;
@@ -49,6 +52,7 @@ export type PublicStudentResult = {
       id: string;
       name: string;
       score: number;
+      maxScore?: number;
       roomAverage: number;
       levelAverage: number;
       roomRank: number;
@@ -100,7 +104,7 @@ type ResultStudent = {
     examSessionId: string;
     rank: number;
     totalScore: number;
-    status: "PASSED" | "FAILED" | "REVIEW";
+    status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
     reason: string;
     scoreBreakdown: unknown;
   }>;
@@ -120,7 +124,7 @@ type PublicResultSnapshotInput = {
   studentId: string;
   rank: number;
   totalScore: number;
-  status: "PASSED" | "FAILED" | "REVIEW";
+  status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
   reason: string;
   scoreBreakdown: unknown;
   student: {
@@ -139,7 +143,7 @@ type PublicResultExamInput = {
   publishedAt: Date | null;
   passTitle: string | null;
   passInstructions: string | null;
-  subjects: Array<{ id: string; name: string }>;
+  subjects: Array<{ id: string; name: string; maxScore: number | null }>;
 };
 
 const peerSnapshotMemoryCache = new Map<string, { expiresAt: number; data: PeerResultSnapshot[] }>();
@@ -149,6 +153,15 @@ const activePublishedExamMemoryCache = new Map<
   { expiresAt: number; data: Awaited<ReturnType<typeof getActivePublishedExamIdUncached>> }
 >();
 const activePublishedExamCacheMs = 30_000;
+
+// SchoolSettings ถูกอ่านในแทบทุก request (LINE + เว็บ + auth) แต่เปลี่ยนนาน ๆ ครั้ง
+// แคชในหน่วยความจำ (per-isolate) สั้น ๆ ลดทั้ง query และ "write บนเส้นทางอ่าน" (เดิม upsert ทุกครั้ง)
+let schoolSettingsMemoryCache: { expiresAt: number; data: Awaited<ReturnType<typeof loadSchoolSettings>> } | null = null;
+const schoolSettingsCacheMs = 30_000;
+
+function clearSchoolSettingsCache() {
+  schoolSettingsMemoryCache = null;
+}
 
 type ResultLookupTrace = {
   mark: (label: string, extra?: Record<string, unknown>) => void;
@@ -213,16 +226,30 @@ export async function upsertSchoolSettings(input: {
     create: { id: "main", ...input },
   });
   clearActivePublishedExamCache();
+  clearSchoolSettingsCache();
   return settings;
 }
 
-export async function getSchoolSettings() {
+async function loadSchoolSettings() {
   const prisma = getPrisma();
+  // อ่านอย่างเดียว (findUnique) — เดิมใช้ upsert ซึ่งเป็น write ทุกครั้งบนเส้นทางอ่าน
+  const existing = await prisma.schoolSettings.findUnique({ where: { id: "main" } });
+  if (existing) return existing;
+  // ยังไม่มีแถว (รันครั้งแรกเท่านั้น) ค่อยสร้าง
   return prisma.schoolSettings.upsert({
     where: { id: "main" },
     update: {},
     create: { id: "main" },
   });
+}
+
+export async function getSchoolSettings() {
+  if (schoolSettingsMemoryCache && schoolSettingsMemoryCache.expiresAt > Date.now()) {
+    return schoolSettingsMemoryCache.data;
+  }
+  const data = await loadSchoolSettings();
+  schoolSettingsMemoryCache = { expiresAt: Date.now() + schoolSettingsCacheMs, data };
+  return data;
 }
 
 export async function getAdminCredentials() {
@@ -291,26 +318,146 @@ export async function createExamSession(input: {
   });
 }
 
+// แก้ไขข้อมูลรอบสอบ (ชื่อ/ชั้น/รูปแบบคัดเลือก/โควตารวม) — เปลี่ยนกติกาจัดอันดับแล้วล้างผลเก่า
+export async function updateExamSession(input: {
+  examSessionId: string;
+  name?: string;
+  classLevel?: string;
+  selectionMode?: "PER_ROOM" | "WHOLE_LEVEL";
+  wholeLevelQuota?: number | null;
+}) {
+  const prisma = getPrisma();
+  const current = await prisma.examSession.findUnique({
+    where: { id: input.examSessionId },
+    select: { id: true, name: true, classLevel: true, selectionMode: true, wholeLevelQuota: true },
+  });
+  if (!current) throw new Error("ไม่พบรอบสอบ");
+
+  const name = input.name?.trim();
+  const classLevel = input.classLevel?.trim();
+  if (input.name !== undefined && !name) throw new Error("กรุณากรอกชื่อรอบสอบ");
+  if (input.classLevel !== undefined && !classLevel) throw new Error("กรุณากรอกชั้นเรียน");
+
+  const nextName = name || current.name;
+  const nextClassLevel = classLevel || current.classLevel;
+  if (input.name !== undefined || input.classLevel !== undefined) {
+    const duplicate = await prisma.examSession.findFirst({
+      where: { id: { not: input.examSessionId }, name: nextName, classLevel: nextClassLevel },
+      select: { id: true },
+    });
+    if (duplicate) throw new Error("มีรอบสอบชื่อนี้ในชั้นนี้แล้ว");
+  }
+
+  const nextSelectionMode = input.selectionMode ?? current.selectionMode;
+  const nextWholeLevelQuota =
+    nextSelectionMode === "WHOLE_LEVEL"
+      ? Number(input.wholeLevelQuota ?? current.wholeLevelQuota ?? 0)
+      : null;
+  // เปลี่ยนรูปแบบคัดเลือก/โควตารวม = กติกาจัดอันดับเปลี่ยน → ผลเก่าใช้ไม่ได้
+  const rankingRuleChanged =
+    nextSelectionMode !== current.selectionMode || nextWholeLevelQuota !== current.wholeLevelQuota;
+  const classLevelChanged = nextClassLevel !== current.classLevel;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const exam = await tx.examSession.update({
+      where: { id: input.examSessionId },
+      data: {
+        ...(name ? { name } : {}),
+        ...(classLevel ? { classLevel } : {}),
+        ...(input.selectionMode ? { selectionMode: nextSelectionMode } : {}),
+        ...(input.selectionMode || input.wholeLevelQuota !== undefined
+          ? { wholeLevelQuota: nextWholeLevelQuota }
+          : {}),
+        ...(rankingRuleChanged ? { status: "DRAFT" as const, publishedAt: null } : {}),
+      },
+    });
+
+    // ชั้นเรียนเปลี่ยน → อัปเดตนักเรียนทั้งรอบให้ตรงกัน
+    if (classLevelChanged) {
+      await tx.student.updateMany({
+        where: { examSessionId: input.examSessionId },
+        data: { classLevel: nextClassLevel },
+      });
+    }
+
+    if (rankingRuleChanged) {
+      await tx.resultSnapshot.deleteMany({ where: { examSessionId: input.examSessionId } });
+    }
+
+    return exam;
+  });
+
+  peerSnapshotMemoryCache.delete(input.examSessionId);
+  if (rankingRuleChanged) {
+    clearActivePublishedExamCache();
+  } else {
+    await rebuildPublicResultCache(input.examSessionId);
+  }
+  return { exam: updated, rankingRuleChanged };
+}
+
 export async function saveExamRooms(
   examSessionId: string,
   rooms: Array<{ room: string; quota: number }>,
 ) {
   const prisma = getPrisma();
-  const uniqueRooms = new Set(rooms.map((room) => room.room.trim()).filter(Boolean));
+  const normalizedRooms = rooms.map((room) => ({
+    room: room.room.trim(),
+    quota: Number(room.quota || 0),
+  }));
+  const uniqueRooms = new Set(normalizedRooms.map((room) => room.room).filter(Boolean));
   if (uniqueRooms.size !== rooms.length) {
     throw new Error("ชื่อห้องซ้ำหรือว่าง");
   }
 
-  return prisma.$transaction([
-    prisma.roomQuota.deleteMany({ where: { examSessionId } }),
-    prisma.roomQuota.createMany({
-      data: rooms.map((room) => ({
-        examSessionId,
-        room: room.room.trim(),
-        quota: Number(room.quota || 0),
-      })),
+  const [existingRooms, studentRooms] = await Promise.all([
+    prisma.roomQuota.findMany({
+      where: { examSessionId },
+      select: { room: true, quota: true },
+      orderBy: { room: "asc" },
+    }),
+    prisma.student.findMany({
+      where: { examSessionId },
+      distinct: ["room"],
+      select: { room: true },
     }),
   ]);
+  // กันลบ/เปลี่ยนชื่อห้องที่ยังมีนักเรียนอยู่
+  const missingStudentRoom = studentRooms.find((entry) => !uniqueRooms.has(entry.room));
+  if (missingStudentRoom) {
+    throw new Error(`ห้อง ${missingStudentRoom.room} มีนักเรียนอยู่ จึงลบหรือเปลี่ยนชื่อห้องนี้ไม่ได้`);
+  }
+
+  // โควตา/ชุดห้องเปลี่ยน = กติกาจัดอันดับเปลี่ยน → ล้างผลเก่า + กลับเป็นฉบับร่าง
+  const currentSignature = existingRooms.map((room) => `${room.room}:${room.quota}`).sort().join("|");
+  const nextSignature = normalizedRooms.map((room) => `${room.room}:${room.quota}`).sort().join("|");
+  const rankingRuleChanged = currentSignature !== nextSignature;
+
+  await prisma.$transaction([
+    prisma.roomQuota.deleteMany({ where: { examSessionId } }),
+    prisma.roomQuota.createMany({
+      data: normalizedRooms.map((room) => ({
+        examSessionId,
+        room: room.room,
+        quota: room.quota,
+      })),
+    }),
+    ...(rankingRuleChanged
+      ? [
+          prisma.resultSnapshot.deleteMany({ where: { examSessionId } }),
+          prisma.examSession.update({
+            where: { id: examSessionId },
+            data: { status: "DRAFT" as const, publishedAt: null },
+          }),
+        ]
+      : []),
+  ]);
+
+  if (rankingRuleChanged) {
+    peerSnapshotMemoryCache.delete(examSessionId);
+    clearActivePublishedExamCache();
+  }
+  return { rankingRuleChanged };
 }
 
 export async function saveExamSubjects(
@@ -431,7 +578,11 @@ export async function importExam(input: {
 export function normalizeRoomImportRows(input: {
   rawRows: Record<string, unknown>[];
   subjects: Array<{ id: string; name: string; maxScore: number | null }>;
+  requireScores?: boolean;
 }) {
+  // requireScores=true (แบบที่ 1): ทุกวิชาต้องมีคอลัมน์+คะแนน
+  // requireScores=false (แบบที่ 2: นำเข้ารายชื่อก่อน): ไม่มีคอลัมน์คะแนน/ปล่อยว่างได้ → กรอกทีหลัง
+  const requireScores = input.requireScores ?? true;
   const errors: string[] = [];
   const subjectsByName = new Map(input.subjects.map((subject) => [subject.name, subject]));
   const seenExamNos = new Set<string>();
@@ -451,15 +602,20 @@ export function normalizeRoomImportRows(input: {
     seenExamNos.add(examNo);
 
     for (const subject of subjectsByName.values()) {
-      if (!(subject.name in row)) {
-        errors.push(`แถว ${index + 2}: ไม่พบคอลัมน์วิชา ${subject.name}`);
+      const raw = row[subject.name];
+      const blank = !(subject.name in row) || raw == null || String(raw).trim() === "";
+      if (blank) {
+        // โหมดบังคับคะแนน → error · โหมด roster → ข้าม (ยังไม่กรอก)
+        if (requireScores) {
+          errors.push(`แถว ${index + 2}: ${subject.name in row ? "ยังไม่มีคะแนนวิชา" : "ไม่พบคอลัมน์วิชา"} ${subject.name}`);
+        }
         continue;
       }
 
-      const value = Number(row[subject.name]);
+      const value = Number(raw);
       if (!Number.isFinite(value)) {
         errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} ไม่ใช่ตัวเลข`);
-        scores[subject.id] = 0;
+        if (requireScores) scores[subject.id] = 0;
       } else if (value < 0) {
         errors.push(`แถว ${index + 2}: คะแนนวิชา ${subject.name} ต้องไม่ติดลบ`);
         scores[subject.id] = value;
@@ -481,6 +637,7 @@ export async function importRoomStudents(input: {
   examSessionId: string;
   room: string;
   rawRows: Record<string, unknown>[];
+  requireScores?: boolean;
 }) {
   const prisma = getPrisma();
   const exam = await prisma.examSession.findUnique({
@@ -491,6 +648,7 @@ export async function importRoomStudents(input: {
 
   const normalized = normalizeRoomImportRows({
     rawRows: input.rawRows,
+    requireScores: input.requireScores,
     subjects: exam.subjects.map((subject) => ({
       id: subject.id,
       name: subject.name,
@@ -569,6 +727,97 @@ export async function importRoomStudents(input: {
   return { ok: true as const, imported: normalized.rows.length };
 }
 
+// ===== กรอก/แก้คะแนนรายคนภายหลัง (สำหรับนำเข้าแบบที่ 2) =====
+// โหลดตารางกรอกคะแนน: วิชา + นักเรียน(พร้อมคะแนนที่กรอกไว้แล้ว)
+export async function getExamScoreSheet(examSessionId: string) {
+  const prisma = getPrisma();
+  const exam = await prisma.examSession.findUnique({
+    where: { id: examSessionId },
+    include: {
+      subjects: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true, maxScore: true } },
+      students: {
+        orderBy: [{ room: "asc" }, { examNo: "asc" }],
+        select: { id: true, examNo: true, name: true, room: true, absent: true, scores: { select: { subjectId: true, value: true } } },
+      },
+    },
+  });
+  if (!exam) return null;
+  return {
+    examSessionId,
+    status: exam.status,
+    subjects: exam.subjects,
+    students: exam.students.map((student) => ({
+      id: student.id,
+      examNo: student.examNo,
+      name: student.name,
+      room: student.room,
+      absent: student.absent,
+      scores: Object.fromEntries(student.scores.map((score) => [score.subjectId, score.value])) as Record<string, number>,
+    })),
+  };
+}
+
+// บันทึกคะแนนที่กรอก/แก้: ค่า null หรือ "" = ลบคะแนนวิชานั้นของคนนั้น (ยังไม่กรอก)
+export async function saveExamScores(input: {
+  examSessionId: string;
+  updates: Array<{ studentId: string; scores: Record<string, number | null>; absent?: boolean }>;
+}) {
+  const prisma = getPrisma();
+  const subjects = await prisma.subject.findMany({ where: { examSessionId: input.examSessionId }, select: { id: true, name: true, maxScore: true } });
+  const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
+  const studentIds = input.updates.map((update) => update.studentId);
+  const validStudents = await prisma.student.findMany({ where: { id: { in: studentIds }, examSessionId: input.examSessionId }, select: { id: true } });
+  const validStudentIds = new Set(validStudents.map((student) => student.id));
+
+  const errors: string[] = [];
+  const ops: Array<
+    | ReturnType<typeof prisma.score.upsert>
+    | ReturnType<typeof prisma.score.deleteMany>
+    | ReturnType<typeof prisma.student.update>
+  > = [];
+
+  for (const update of input.updates) {
+    if (!validStudentIds.has(update.studentId)) continue;
+    // ติ๊ก/ยกเลิก "ไม่ได้เข้าสอบ"
+    if (typeof update.absent === "boolean") {
+      ops.push(prisma.student.update({ where: { id: update.studentId }, data: { absent: update.absent } }));
+    }
+    for (const [subjectId, rawValue] of Object.entries(update.scores)) {
+      const subject = subjectById.get(subjectId);
+      if (!subject) continue;
+      if (rawValue == null || Number.isNaN(rawValue)) {
+        ops.push(prisma.score.deleteMany({ where: { studentId: update.studentId, subjectId } }));
+        continue;
+      }
+      const value = Number(rawValue);
+      if (!Number.isFinite(value) || value < 0) {
+        errors.push(`คะแนนวิชา ${subject.name} ไม่ถูกต้อง`);
+        continue;
+      }
+      if (subject.maxScore != null && value > subject.maxScore) {
+        errors.push(`คะแนนวิชา ${subject.name} เกินคะแนนเต็ม ${subject.maxScore}`);
+        continue;
+      }
+      ops.push(
+        prisma.score.upsert({
+          where: { studentId_subjectId: { studentId: update.studentId, subjectId } },
+          create: { studentId: update.studentId, subjectId, value },
+          update: { value },
+        }),
+      );
+    }
+  }
+
+  if (errors.length > 0) return { ok: false as const, errors: [...new Set(errors)] };
+  if (ops.length > 0) {
+    await prisma.$transaction(ops);
+    // คะแนนเปลี่ยน → ผลที่เคยคำนวณ/แคชไว้ถือว่า stale ล้าง peer cache กันค่าค้าง
+    // (ครูต้องกด "คำนวณ" หรือ "ประกาศผล" ใหม่เพื่อให้ snapshot/หน้าเว็บอัปเดต — publish คำนวณใหม่ให้เสมอแล้ว)
+    peerSnapshotMemoryCache.delete(input.examSessionId);
+  }
+  return { ok: true as const, saved: ops.length };
+}
+
 export async function getExamResultSnapshots(examSessionId: string) {
   const prisma = getPrisma();
   const exam = await prisma.examSession.findUnique({
@@ -625,7 +874,11 @@ export async function calculateExamResults(examSessionId: string) {
     tieBreakOrder: subject.tieBreakOrder,
   }));
 
-  const candidates: CandidateInput[] = exam.students.map((student) => ({
+  // คนขาดสอบ (absent) ไม่นับในการจัดอันดับ/โควตา/ค่าเฉลี่ย → แยกออกก่อน
+  const presentStudents = exam.students.filter((student) => !student.absent);
+  const absentStudents = exam.students.filter((student) => student.absent);
+
+  const candidates: CandidateInput[] = presentStudents.map((student) => ({
     studentId: student.id,
     examNo: student.examNo,
     name: student.name,
@@ -646,19 +899,34 @@ export async function calculateExamResults(examSessionId: string) {
 
   const calculated = calculateResults(candidates, subjects, rule);
 
+  // snapshot ของคนขาดสอบ: สถานะ ABSENT ไม่มีอันดับ/คะแนน (rank 0) เพื่อให้เช็คแล้วเห็น "ไม่ได้เข้าสอบ"
+  const absentSnapshots = absentStudents.map((student) => ({
+    examSessionId,
+    studentId: student.id,
+    rank: 0,
+    totalScore: 0,
+    status: "ABSENT" as const,
+    reason: "ไม่ได้เข้าสอบ",
+    scoreBreakdown: {} as Prisma.InputJsonValue,
+    tieBreakValues: {} as Prisma.InputJsonValue,
+  }));
+
   await prisma.$transaction([
     prisma.resultSnapshot.deleteMany({ where: { examSessionId } }),
     prisma.resultSnapshot.createMany({
-      data: calculated.map((result) => ({
-        examSessionId,
-        studentId: result.studentId,
-        rank: result.rank,
-        totalScore: result.totalScore,
-        status: result.status,
-        reason: result.reason,
-        scoreBreakdown: result.scoreBreakdown,
-        tieBreakValues: result.tieBreakValues,
-      })),
+      data: [
+        ...calculated.map((result) => ({
+          examSessionId,
+          studentId: result.studentId,
+          rank: result.rank,
+          totalScore: result.totalScore,
+          status: result.status,
+          reason: result.reason,
+          scoreBreakdown: result.scoreBreakdown,
+          tieBreakValues: result.tieBreakValues,
+        })),
+        ...absentSnapshots,
+      ],
     }),
   ]);
   peerSnapshotMemoryCache.delete(examSessionId);
@@ -672,10 +940,9 @@ export async function publishExam(
   announcement?: { passTitle?: string | null; passInstructions?: string | null },
 ) {
   const prisma = getPrisma();
-  const snapshotCount = await prisma.resultSnapshot.count({ where: { examSessionId } });
-  if (snapshotCount === 0) {
-    await calculateExamResults(examSessionId);
-  }
+  // คำนวณใหม่ทุกครั้งก่อนประกาศ → ผลที่ประกาศสะท้อนคะแนนล่าสุดเสมอ
+  // (เดิมคำนวณเฉพาะตอนยังไม่มี snapshot → ถ้าแก้คะแนนหลังเคยคำนวณ จะประกาศอันดับเก่า)
+  await calculateExamResults(examSessionId);
 
   const publishedAt = new Date();
   await prisma.$transaction([
@@ -726,6 +993,34 @@ export async function deleteExamPublishedResults(examSessionId: string) {
   peerSnapshotMemoryCache.delete(examSessionId);
   clearActivePublishedExamCache();
   return { deleted: deleted.count };
+}
+
+// ลบรอบสอบทั้งรอบ (cascade: วิชา/ห้อง/นักเรียน/คะแนน/ผล/การผูก LINE หายตามทั้งหมด)
+export async function deleteExamSession(examSessionId: string) {
+  const prisma = getPrisma();
+  const settings = await prisma.schoolSettings.findUnique({ where: { id: "main" }, select: { activeExamSessionId: true } });
+  await prisma.$transaction(async (tx) => {
+    // ถ้าเป็นรอบสอบที่ตั้งเป็น active อยู่ → ปลดออกก่อน กัน activeExamSessionId ค้างชี้รอบที่ลบ
+    if (settings?.activeExamSessionId === examSessionId) {
+      await tx.schoolSettings.update({ where: { id: "main" }, data: { activeExamSessionId: null } });
+    }
+    await tx.examSession.delete({ where: { id: examSessionId } });
+  });
+  peerSnapshotMemoryCache.delete(examSessionId);
+  clearActivePublishedExamCache();
+  clearSchoolSettingsCache();
+  return { ok: true as const };
+}
+
+// ลบนักเรียนรายคน (cascade: คะแนน/ผล/การผูก LINE ของคนนั้นหายตาม)
+// อันดับคนอื่นจะ stale จนกว่าจะกด "คำนวณ"/"ประกาศผล" ใหม่ (publish คำนวณใหม่ให้เสมอ)
+export async function deleteStudent(studentId: string) {
+  const prisma = getPrisma();
+  const student = await prisma.student.findUnique({ where: { id: studentId }, select: { examSessionId: true } });
+  if (!student) return { ok: false as const, error: "ไม่พบนักเรียน" };
+  await prisma.student.delete({ where: { id: studentId } });
+  peerSnapshotMemoryCache.delete(student.examSessionId);
+  return { ok: true as const, examSessionId: student.examSessionId };
 }
 
 function average(values: number[]) {
@@ -835,9 +1130,11 @@ function buildPublicResultPayloads(
   snapshots: PublicResultSnapshotInput[],
 ) {
   const subjectNameById = new Map(exam.subjects.map((subject) => [subject.id, subject.name]));
-  const levelStats = buildGroupStats(snapshots, exam.subjects);
+  // สถิติ (ค่าเฉลี่ย/อันดับ/จำนวน) คิดจากคนที่เข้าสอบเท่านั้น — คนขาดสอบไม่นับ
+  const rankedSnapshots = snapshots.filter((snapshot) => snapshot.status !== "ABSENT");
+  const levelStats = buildGroupStats(rankedSnapshots, exam.subjects);
   const snapshotsByRoom = new Map<string, PublicResultSnapshotInput[]>();
-  for (const snapshot of snapshots) {
+  for (const snapshot of rankedSnapshots) {
     snapshotsByRoom.set(snapshot.student.room, [...(snapshotsByRoom.get(snapshot.student.room) ?? []), snapshot]);
   }
   const roomStats = new Map(
@@ -849,6 +1146,30 @@ function buildPublicResultPayloads(
 
   return new Map(
     snapshots.map((snapshot) => {
+      // คนขาดสอบ: payload ขั้นต่ำ (สถานะ ABSENT, ไม่มีคะแนน/อันดับ/สถิติ) → หน้าเว็บ/LINE โชว์แค่ "ไม่ได้เข้าสอบ"
+      if (snapshot.status === "ABSENT") {
+        const absentPayload: PublicStudentResult = {
+          school: publicSchoolFromSettings(settings),
+          exam: {
+            id: exam.id,
+            name: exam.name,
+            classLevel: exam.classLevel,
+            selectionMode: exam.selectionMode,
+            publishedAt: exam.publishedAt ? exam.publishedAt.toISOString() : null,
+            passTitle: exam.passTitle,
+            passInstructions: exam.passInstructions,
+          },
+          student: {
+            examNo: snapshot.student.examNo,
+            name: snapshot.student.name,
+            classLevel: snapshot.student.classLevel,
+            room: snapshot.student.room,
+          },
+          result: { rank: 0, totalScore: 0, status: "ABSENT", reason: "ไม่ได้เข้าสอบ", scoreBreakdown: {} },
+          statistics: { total: { score: 0, maxScore: 0, roomAverage: 0, levelAverage: 0, roomRank: 0, levelRank: 0, roomCount: 0, levelCount: 0 }, subjects: [] },
+        };
+        return [snapshot.studentId, absentPayload];
+      }
       const room = roomStats.get(snapshot.student.room) ?? levelStats;
       const rawBreakdown = snapshot.scoreBreakdown as Record<string, number>;
       const payload: PublicStudentResult = {
@@ -883,6 +1204,7 @@ function buildPublicResultPayloads(
         statistics: {
           total: {
             score: snapshot.totalScore,
+            maxScore: exam.subjects.reduce((sum, subject) => sum + Number(subject.maxScore ?? 0), 0),
             roomAverage: room.totalAverage,
             levelAverage: levelStats.totalAverage,
             roomRank: room.totalRanks.get(snapshot.studentId) ?? room.count,
@@ -897,6 +1219,7 @@ function buildPublicResultPayloads(
               id: subject.id,
               name: subject.name,
               score: Number(rawBreakdown[subject.id] ?? 0),
+              maxScore: Number(subject.maxScore ?? 0),
               roomAverage: roomSubject?.average ?? 0,
               levelAverage: levelSubject?.average ?? 0,
               roomRank: roomSubject?.ranks.get(snapshot.studentId) ?? room.count,
@@ -1447,7 +1770,11 @@ export async function getLineBoundResult(input: { lineUserId: string }) {
     return { ok: false as const, error: "ผูกบัญชีแล้ว แต่รอบสอบยังไม่ได้ประกาศผล" };
   }
 
-  const published = await findPublishedStudentResultSession({
+  // ใช้ผลลัพธ์ที่ผ่าน Next.js cache ตัวเดียวกับฝั่งเว็บ (revalidate 300 + tag)
+  // เดิม LINE เรียก findPublishedStudentResultSession ตรง ๆ = ข้าม cache ทำ DB query ทุกครั้ง
+  // dynamic import กันวงจร import (cache -> repository อยู่แล้ว)
+  const { getCachedPublishedStudentResultSession } = await import("@/lib/public-student-result-cache");
+  const published = await getCachedPublishedStudentResultSession({
     examNo: binding.student.examNo,
     studentId: binding.studentId,
     examSessionId: binding.examSessionId,
