@@ -1,10 +1,8 @@
-// ปลุก Neon compute (free tier scale-to-zero) ด้วย SELECT 1 — ลด cold start ของ query แรก
-// ใช้คู่กับ external pinger (UptimeRobot/cron-job.org) ยิงทุก ~5 นาทีเฉพาะช่วงที่อยากให้ DB ตื่น
-// (อย่ายิง 24/7 บน Neon free — compute .25 CU ตลอดเวลา = ~180 CU-hrs/เดือน เกินโควตาฟรี 100)
-// รัน region เดียวกับ DB (สิงคโปร์)
+// ตรวจการเชื่อมต่อ Neon ด้วย SELECT 1 สำหรับปุ่มเตรียมระบบในหน้าแอดมิน
+// รัน region เดียวกับ DB ใหม่ (US East) เพื่อลด network latency
 // route handler นี้อ่าน searchParams (request.url) จึงเป็น dynamic อยู่แล้ว + ตอบ no-store
 // (cacheComponents เลิกใช้ `export const dynamic` แล้ว)
-export const preferredRegion = "sin1";
+export const preferredRegion = "iad1";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
