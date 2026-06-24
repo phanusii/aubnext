@@ -26,6 +26,7 @@ const statusText = {
   PASSED: "ผ่านการคัดเลือก",
   FAILED: "ไม่ผ่านการคัดเลือก",
   REVIEW: "รอตรวจสอบ",
+  ABSENT: "ไม่ได้เข้าสอบ",
 };
 
 // คอนเฟตตีร่วงในหัวการ์ด (เฉพาะคนที่ผ่าน) — CSS ล้วน เบา ไม่กระตุกบนมือถือ
@@ -92,6 +93,41 @@ export function ResultContent({ result }: { result: StudentResult }) {
   const passInstructions = result.exam.passInstructions?.trim() || "กรุณาติดตามรายละเอียดและขั้นตอนถัดไปจากประกาศของโรงเรียน";
 
   const celebrate = result.result.status === "PASSED";
+
+  // คนขาดสอบ: แสดงแค่หัวการ์ด + แถบ "ไม่ได้เข้าสอบ" (ไม่มีคะแนน/อันดับ/สถิติ)
+  if (result.result.status === "ABSENT") {
+    return (
+      <article className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-[0_18px_55px_rgba(15,23,42,0.10)]">
+        <header className="bg-[linear-gradient(135deg,#cbd5e1_0%,#e2e8f0_100%)] p-4 md:p-6">
+          <div className="flex gap-3 md:gap-4">
+            {result.school.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={result.school.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-2 ring-white/60 md:size-20" />
+            ) : (
+              <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/60 text-slate-500 ring-2 ring-white/60 md:size-20">
+                <School size={34} />
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-lg font-semibold leading-tight text-slate-800 md:text-2xl">{result.school.schoolName}</p>
+              <h1 className="mt-1 text-base font-semibold leading-snug text-slate-700 md:text-2xl">{result.exam.name}</h1>
+              <p className="mt-2 text-xs text-slate-600 md:text-sm">ระดับชั้น {result.exam.classLevel}</p>
+            </div>
+          </div>
+        </header>
+        <div className="p-6 text-center md:p-8">
+          <p className="text-sm font-medium text-[var(--text-muted)]">ผู้เข้าสอบ</p>
+          <h2 className="mt-1 text-2xl font-semibold leading-tight text-slate-900 md:text-3xl">{result.student.name}</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            รหัส {result.student.examNo} · {result.student.classLevel}/{result.student.room}
+          </p>
+          <div className="mx-auto mt-6 inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-6 py-3.5 text-lg font-bold text-slate-600 ring-1 ring-slate-200">
+            ไม่ได้เข้าสอบ
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   // คะแนนเต็มรายวิชา/รวม (จาก statistics ถ้ามี) → แสดง "/เต็ม" แบบจาง ไม่เพิ่มความสูง
   const maxByName = new Map<string, number>();

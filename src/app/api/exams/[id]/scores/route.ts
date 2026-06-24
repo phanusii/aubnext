@@ -22,6 +22,8 @@ const schema = z.object({
       studentId: z.string().min(1),
       // ค่า null = ลบคะแนน (ยังไม่กรอก)
       scores: z.record(z.string(), z.number().nullable()),
+      // true/false = ติ๊ก/ยกเลิก "ไม่ได้เข้าสอบ"
+      absent: z.boolean().optional(),
     }),
   ),
 });

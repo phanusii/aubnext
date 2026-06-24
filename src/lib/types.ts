@@ -1,5 +1,5 @@
 export type SelectionMode = "PER_ROOM" | "WHOLE_LEVEL";
-export type ResultStatus = "PASSED" | "FAILED" | "REVIEW";
+export type ResultStatus = "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
 
 export type SubjectInput = {
   id: string;

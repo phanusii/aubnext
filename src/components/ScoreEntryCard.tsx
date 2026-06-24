@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Save, Trash2 } from "lucide-react";
 
 type Subject = { id: string; name: string; maxScore: number | null };
-type Student = { id: string; examNo: string; name: string; room: string; scores: Record<string, number> };
+type Student = { id: string; examNo: string; name: string; room: string; absent: boolean; scores: Record<string, number> };
 type Sheet = { subjects: Subject[]; students: Student[] };
 
 // แก้คะแนนเก็บเป็น string ต่อ (studentId -> subjectId -> ค่าที่พิมพ์)
@@ -26,6 +26,15 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // overlay การติ๊ก "ไม่ได้เข้าสอบ" ที่ยังไม่บันทึก (studentId -> absent)
+  const [absentEdits, setAbsentEdits] = useState<Record<string, boolean>>({});
+
+  function isAbsent(student: Student) {
+    return absentEdits[student.id] ?? student.absent;
+  }
+  function toggleAbsent(student: Student) {
+    setAbsentEdits((current) => ({ ...current, [student.id]: !isAbsent(student) }));
+  }
 
   async function deleteStudentRow(student: Student) {
     if (!window.confirm(`ลบนักเรียน "${student.name}" (${student.examNo}) ออกจากรอบสอบ?\nคะแนนและผลของคนนี้จะถูกลบด้วย — กู้คืนไม่ได้`)) return;
@@ -72,8 +81,9 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
   }, [sheet, room]);
 
   const filledCount = useMemo(
-    () => (sheet ? visibleStudents.filter((student) => isFilled(student, sheet.subjects, edits)).length : 0),
-    [sheet, visibleStudents, edits],
+    () => (sheet ? visibleStudents.filter((student) => isAbsent(student) || isFilled(student, sheet.subjects, edits)).length : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sheet, visibleStudents, edits, absentEdits],
   );
 
   function cellValue(student: Student, subjectId: string) {
@@ -96,17 +106,20 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
   }
 
   async function save() {
-    if (Object.keys(edits).length === 0) {
+    if (Object.keys(edits).length === 0 && Object.keys(absentEdits).length === 0) {
       setMessage("ยังไม่มีการแก้ไข");
       return;
     }
     setSaving(true);
     setMessage("");
-    const updates = Object.entries(edits).map(([studentId, scores]) => ({
+    // รวม studentId จากทั้งคะแนนที่แก้ + การติ๊กขาดสอบ
+    const studentIds = new Set([...Object.keys(edits), ...Object.keys(absentEdits)]);
+    const updates = [...studentIds].map((studentId) => ({
       studentId,
       scores: Object.fromEntries(
-        Object.entries(scores).map(([subjectId, raw]) => [subjectId, raw.trim() === "" ? null : Number(raw)]),
+        Object.entries(edits[studentId] ?? {}).map(([subjectId, raw]) => [subjectId, raw.trim() === "" ? null : Number(raw)]),
       ),
+      ...(studentId in absentEdits ? { absent: absentEdits[studentId] } : {}),
     }));
     try {
       const response = await fetch(`/api/exams/${examId}/scores`, {
@@ -126,17 +139,19 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
           ...current,
           students: current.students.map((student) => {
             const studentEdits = edits[student.id];
-            if (!studentEdits) return student;
+            const absentChanged = student.id in absentEdits;
+            if (!studentEdits && !absentChanged) return student;
             const scores = { ...student.scores };
-            for (const [subjectId, raw] of Object.entries(studentEdits)) {
+            for (const [subjectId, raw] of Object.entries(studentEdits ?? {})) {
               if (raw.trim() === "") delete scores[subjectId];
               else scores[subjectId] = Number(raw);
             }
-            return { ...student, scores };
+            return { ...student, scores, absent: absentChanged ? absentEdits[student.id] : student.absent };
           }),
         };
       });
       setEdits({});
+      setAbsentEdits({});
       setMessage("บันทึกคะแนนแล้ว");
       onSaved?.();
     } finally {
@@ -209,6 +224,7 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                 รวม
                 {totalMax != null && <span className="block text-[10px] font-normal opacity-60">เต็ม {totalMax}</span>}
               </th>
+              <th className="px-2 py-2 text-center font-medium">ขาดสอบ</th>
               <th className="px-2 py-2 font-medium" />
             </tr>
           </thead>
@@ -224,9 +240,10 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                       inputMode="decimal"
                       min={0}
                       max={subject.maxScore ?? undefined}
-                      value={cellValue(student, subject.id)}
+                      disabled={isAbsent(student)}
+                      value={isAbsent(student) ? "" : cellValue(student, subject.id)}
                       onChange={(event) => setCell(student.id, subject.id, event.target.value)}
-                      className={`w-16 rounded-lg border px-2 py-1 text-center font-semibold outline-none focus:ring-2 ${
+                      className={`w-16 rounded-lg border px-2 py-1 text-center font-semibold outline-none focus:ring-2 disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-50 disabled:text-slate-300 ${
                         index % 2 === 0 ? "border-sky-100 bg-sky-50/50 text-sky-700 focus:ring-sky-200" : "border-pink-100 bg-pink-50/50 text-pink-700 focus:ring-pink-200"
                       }`}
                       placeholder="–"
@@ -234,8 +251,23 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                   </td>
                 ))}
                 <td className="px-3 py-1.5 text-center font-semibold text-slate-900">
-                  {rowTotal(student) || "–"}
-                  {totalMax != null && rowTotal(student) > 0 && <span className="text-xs font-normal opacity-50">/{totalMax}</span>}
+                  {isAbsent(student) ? (
+                    <span className="text-xs font-medium text-slate-400">ไม่ได้เข้าสอบ</span>
+                  ) : (
+                    <>
+                      {rowTotal(student) || "–"}
+                      {totalMax != null && rowTotal(student) > 0 && <span className="text-xs font-normal opacity-50">/{totalMax}</span>}
+                    </>
+                  )}
+                </td>
+                <td className="px-2 py-1.5 text-center">
+                  <input
+                    type="checkbox"
+                    aria-label={`ไม่ได้เข้าสอบ ${student.name}`}
+                    checked={isAbsent(student)}
+                    onChange={() => toggleAbsent(student)}
+                    className="size-4 cursor-pointer accent-slate-500"
+                  />
                 </td>
                 <td className="px-2 py-1.5 text-center">
                   <button
@@ -251,7 +283,7 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
               </tr>
             ))}
             {visibleStudents.length === 0 && (
-              <tr><td colSpan={sheet.subjects.length + 4} className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน</td></tr>
+              <tr><td colSpan={sheet.subjects.length + 5} className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน</td></tr>
             )}
           </tbody>
         </table>

@@ -59,7 +59,7 @@ type CalculatedResult = {
   name: string;
   rank: number;
   totalScore: number;
-  status: "PASSED" | "FAILED" | "REVIEW";
+  status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
   reason: string;
   room: string;
   scoreBreakdown: Record<string, number>;
@@ -575,12 +575,13 @@ export function AdminConsole() {
         return;
       }
       const subjects = data.subjects as Array<{ id: string }>;
-      const students = data.students as Array<{ examNo: string; name: string; room: string; scores: Record<string, number> }>;
+      const students = data.students as Array<{ examNo: string; name: string; room: string; absent?: boolean; scores: Record<string, number> }>;
       if (students.length === 0) {
         setMessage("ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน");
         return;
       }
-      const incomplete = students.filter((student) => subjects.some((subject) => student.scores[subject.id] == null));
+      // คนขาดสอบไม่ต้องกรอกคะแนน → ข้ามจากการเช็กครบ
+      const incomplete = students.filter((student) => !student.absent && subjects.some((subject) => student.scores[subject.id] == null));
       if (incomplete.length > 0) {
         const names = incomplete.slice(0, 12).map((student) => `• ${student.examNo} ${student.name} (ห้อง ${student.room})`).join("\n");
         const more = incomplete.length > 12 ? `\n…และอีก ${incomplete.length - 12} คน` : "";
@@ -1830,6 +1831,7 @@ function formatScore(value: number | undefined) {
 function statusLabel(status: CalculatedResult["status"]) {
   if (status === "PASSED") return "ผ่าน";
   if (status === "REVIEW") return "รอตรวจ";
+  if (status === "ABSENT") return "ไม่ได้เข้าสอบ";
   return "ไม่ผ่าน";
 }
 
