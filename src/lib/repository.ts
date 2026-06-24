@@ -31,7 +31,7 @@ export type PublicStudentResult = {
   result: {
     rank: number;
     totalScore: number;
-    status: "PASSED" | "FAILED" | "REVIEW";
+    status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
     reason: string;
     scoreBreakdown: Record<string, number>;
   };
@@ -104,7 +104,7 @@ type ResultStudent = {
     examSessionId: string;
     rank: number;
     totalScore: number;
-    status: "PASSED" | "FAILED" | "REVIEW";
+    status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
     reason: string;
     scoreBreakdown: unknown;
   }>;
@@ -124,7 +124,7 @@ type PublicResultSnapshotInput = {
   studentId: string;
   rank: number;
   totalScore: number;
-  status: "PASSED" | "FAILED" | "REVIEW";
+  status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
   reason: string;
   scoreBreakdown: unknown;
   student: {
@@ -617,7 +617,7 @@ export async function getExamScoreSheet(examSessionId: string) {
       subjects: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true, maxScore: true } },
       students: {
         orderBy: [{ room: "asc" }, { examNo: "asc" }],
-        select: { id: true, examNo: true, name: true, room: true, scores: { select: { subjectId: true, value: true } } },
+        select: { id: true, examNo: true, name: true, room: true, absent: true, scores: { select: { subjectId: true, value: true } } },
       },
     },
   });
@@ -631,6 +631,7 @@ export async function getExamScoreSheet(examSessionId: string) {
       examNo: student.examNo,
       name: student.name,
       room: student.room,
+      absent: student.absent,
       scores: Object.fromEntries(student.scores.map((score) => [score.subjectId, score.value])) as Record<string, number>,
     })),
   };
@@ -639,7 +640,7 @@ export async function getExamScoreSheet(examSessionId: string) {
 // บันทึกคะแนนที่กรอก/แก้: ค่า null หรือ "" = ลบคะแนนวิชานั้นของคนนั้น (ยังไม่กรอก)
 export async function saveExamScores(input: {
   examSessionId: string;
-  updates: Array<{ studentId: string; scores: Record<string, number | null> }>;
+  updates: Array<{ studentId: string; scores: Record<string, number | null>; absent?: boolean }>;
 }) {
   const prisma = getPrisma();
   const subjects = await prisma.subject.findMany({ where: { examSessionId: input.examSessionId }, select: { id: true, name: true, maxScore: true } });
@@ -649,10 +650,18 @@ export async function saveExamScores(input: {
   const validStudentIds = new Set(validStudents.map((student) => student.id));
 
   const errors: string[] = [];
-  const ops: Array<ReturnType<typeof prisma.score.upsert> | ReturnType<typeof prisma.score.deleteMany>> = [];
+  const ops: Array<
+    | ReturnType<typeof prisma.score.upsert>
+    | ReturnType<typeof prisma.score.deleteMany>
+    | ReturnType<typeof prisma.student.update>
+  > = [];
 
   for (const update of input.updates) {
     if (!validStudentIds.has(update.studentId)) continue;
+    // ติ๊ก/ยกเลิก "ไม่ได้เข้าสอบ"
+    if (typeof update.absent === "boolean") {
+      ops.push(prisma.student.update({ where: { id: update.studentId }, data: { absent: update.absent } }));
+    }
     for (const [subjectId, rawValue] of Object.entries(update.scores)) {
       const subject = subjectById.get(subjectId);
       if (!subject) continue;
@@ -745,7 +754,11 @@ export async function calculateExamResults(examSessionId: string) {
     tieBreakOrder: subject.tieBreakOrder,
   }));
 
-  const candidates: CandidateInput[] = exam.students.map((student) => ({
+  // คนขาดสอบ (absent) ไม่นับในการจัดอันดับ/โควตา/ค่าเฉลี่ย → แยกออกก่อน
+  const presentStudents = exam.students.filter((student) => !student.absent);
+  const absentStudents = exam.students.filter((student) => student.absent);
+
+  const candidates: CandidateInput[] = presentStudents.map((student) => ({
     studentId: student.id,
     examNo: student.examNo,
     name: student.name,
@@ -766,19 +779,34 @@ export async function calculateExamResults(examSessionId: string) {
 
   const calculated = calculateResults(candidates, subjects, rule);
 
+  // snapshot ของคนขาดสอบ: สถานะ ABSENT ไม่มีอันดับ/คะแนน (rank 0) เพื่อให้เช็คแล้วเห็น "ไม่ได้เข้าสอบ"
+  const absentSnapshots = absentStudents.map((student) => ({
+    examSessionId,
+    studentId: student.id,
+    rank: 0,
+    totalScore: 0,
+    status: "ABSENT" as const,
+    reason: "ไม่ได้เข้าสอบ",
+    scoreBreakdown: {} as Prisma.InputJsonValue,
+    tieBreakValues: {} as Prisma.InputJsonValue,
+  }));
+
   await prisma.$transaction([
     prisma.resultSnapshot.deleteMany({ where: { examSessionId } }),
     prisma.resultSnapshot.createMany({
-      data: calculated.map((result) => ({
-        examSessionId,
-        studentId: result.studentId,
-        rank: result.rank,
-        totalScore: result.totalScore,
-        status: result.status,
-        reason: result.reason,
-        scoreBreakdown: result.scoreBreakdown,
-        tieBreakValues: result.tieBreakValues,
-      })),
+      data: [
+        ...calculated.map((result) => ({
+          examSessionId,
+          studentId: result.studentId,
+          rank: result.rank,
+          totalScore: result.totalScore,
+          status: result.status,
+          reason: result.reason,
+          scoreBreakdown: result.scoreBreakdown,
+          tieBreakValues: result.tieBreakValues,
+        })),
+        ...absentSnapshots,
+      ],
     }),
   ]);
   peerSnapshotMemoryCache.delete(examSessionId);
@@ -982,9 +1010,11 @@ function buildPublicResultPayloads(
   snapshots: PublicResultSnapshotInput[],
 ) {
   const subjectNameById = new Map(exam.subjects.map((subject) => [subject.id, subject.name]));
-  const levelStats = buildGroupStats(snapshots, exam.subjects);
+  // สถิติ (ค่าเฉลี่ย/อันดับ/จำนวน) คิดจากคนที่เข้าสอบเท่านั้น — คนขาดสอบไม่นับ
+  const rankedSnapshots = snapshots.filter((snapshot) => snapshot.status !== "ABSENT");
+  const levelStats = buildGroupStats(rankedSnapshots, exam.subjects);
   const snapshotsByRoom = new Map<string, PublicResultSnapshotInput[]>();
-  for (const snapshot of snapshots) {
+  for (const snapshot of rankedSnapshots) {
     snapshotsByRoom.set(snapshot.student.room, [...(snapshotsByRoom.get(snapshot.student.room) ?? []), snapshot]);
   }
   const roomStats = new Map(
@@ -996,6 +1026,30 @@ function buildPublicResultPayloads(
 
   return new Map(
     snapshots.map((snapshot) => {
+      // คนขาดสอบ: payload ขั้นต่ำ (สถานะ ABSENT, ไม่มีคะแนน/อันดับ/สถิติ) → หน้าเว็บ/LINE โชว์แค่ "ไม่ได้เข้าสอบ"
+      if (snapshot.status === "ABSENT") {
+        const absentPayload: PublicStudentResult = {
+          school: publicSchoolFromSettings(settings),
+          exam: {
+            id: exam.id,
+            name: exam.name,
+            classLevel: exam.classLevel,
+            selectionMode: exam.selectionMode,
+            publishedAt: exam.publishedAt ? exam.publishedAt.toISOString() : null,
+            passTitle: exam.passTitle,
+            passInstructions: exam.passInstructions,
+          },
+          student: {
+            examNo: snapshot.student.examNo,
+            name: snapshot.student.name,
+            classLevel: snapshot.student.classLevel,
+            room: snapshot.student.room,
+          },
+          result: { rank: 0, totalScore: 0, status: "ABSENT", reason: "ไม่ได้เข้าสอบ", scoreBreakdown: {} },
+          statistics: { total: { score: 0, maxScore: 0, roomAverage: 0, levelAverage: 0, roomRank: 0, levelRank: 0, roomCount: 0, levelCount: 0 }, subjects: [] },
+        };
+        return [snapshot.studentId, absentPayload];
+      }
       const room = roomStats.get(snapshot.student.room) ?? levelStats;
       const rawBreakdown = snapshot.scoreBreakdown as Record<string, number>;
       const payload: PublicStudentResult = {

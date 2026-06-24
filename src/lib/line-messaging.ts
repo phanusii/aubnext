@@ -16,7 +16,7 @@ type LineStudentResult = {
   result: {
     rank: number;
     totalScore: number;
-    status: "PASSED" | "FAILED" | "REVIEW";
+    status: "PASSED" | "FAILED" | "REVIEW" | "ABSENT";
     scoreBreakdown: Record<string, number>;
   };
   statistics?: {
@@ -175,6 +175,39 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   const webResultUrl = webLookup
     ? `${baseUrl()}/line/result-web?token=${encodeURIComponent(signLineResultWebToken(webLookup))}`
     : `${baseUrl()}/check-result`;
+
+  // คนขาดสอบ: การ์ดย่อ แสดงแค่ชื่อ + แถบ "ไม่ได้เข้าสอบ"
+  if (result.result.status === "ABSENT") {
+    return {
+      type: "flex",
+      altText: `${result.student.name} — ไม่ได้เข้าสอบ`,
+      contents: {
+        type: "bubble",
+        body: {
+          type: "box",
+          layout: "vertical",
+          spacing: "sm",
+          paddingAll: "16px",
+          contents: [
+            { type: "text", text: result.school.schoolName, size: "sm", color: "#0369a1", weight: "bold", wrap: true },
+            { type: "text", text: result.exam.name, size: "sm", color: "#64748b", wrap: true },
+            { type: "separator", margin: "sm" },
+            { type: "text", text: result.student.name, size: "lg", color: "#0f172a", weight: "bold", wrap: true, margin: "sm" },
+            { type: "text", text: `รหัส ${result.student.examNo} · ${result.student.classLevel}/${result.student.room}`, size: "xs", color: "#64748b" },
+            {
+              type: "box",
+              layout: "vertical",
+              backgroundColor: "#f1f5f9",
+              cornerRadius: "12px",
+              paddingAll: "14px",
+              margin: "md",
+              contents: [{ type: "text", text: "ไม่ได้เข้าสอบ", size: "md", weight: "bold", color: "#64748b", align: "center" }],
+            },
+          ],
+        },
+      },
+    };
+  }
   // ไล่สีพื้น (LINE รองรับ linearGradient บน box) — โทนชมพู+ฟ้า
   const gradient = (startColor: string, endColor: string, centerColor?: string) => ({
     type: "linearGradient",

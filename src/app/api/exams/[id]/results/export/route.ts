@@ -15,6 +15,7 @@ function formatScore(value: unknown) {
 function statusLabel(status: string) {
   if (status === "PASSED") return "ผ่าน";
   if (status === "REVIEW") return "รอตรวจ";
+  if (status === "ABSENT") return "ไม่ได้เข้าสอบ";
   return "ไม่ผ่าน";
 }
 
@@ -94,6 +95,7 @@ function thinBorder(): Partial<ExcelJS.Borders> {
 function statusFont(status: string) {
   if (status === "PASSED") return { name: EXPORT_FONT, size: 11, bold: true, color: { argb: "FF15803D" } };
   if (status === "FAILED") return { name: EXPORT_FONT, size: 11, color: { argb: "FFB91C1C" } };
+  if (status === "ABSENT") return { name: EXPORT_FONT, size: 11, color: { argb: "FF94A3B8" } };
   return { name: EXPORT_FONT, size: 11, color: { argb: "FFB45309" } };
 }
 
