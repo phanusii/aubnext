@@ -7,6 +7,8 @@ import { defineConfig } from "prisma/config";
 // migrate/CLI ใช้ url นี้ (คนละตัวกับ runtime client) — เลือก NON_POOLING ก่อน
 // เพราะ DDL/migration ผ่าน PgBouncer (pooled) มีปัญหา advisory lock; ต่อตรง (non-pooled) ปลอดภัยกว่า
 const url =
+  // APP_DATABASE_URL_UNPOOLED = ตั้งเอง (override ปลายทาง migrate/DDL โดยไม่ผ่าน integration)
+  process.env.APP_DATABASE_URL_UNPOOLED ||
   process.env.POSTGRES_URL_NON_POOLING ||
   process.env.DATABASE_URL ||
   process.env.POSTGRES_PRISMA_URL ||
