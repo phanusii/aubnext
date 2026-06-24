@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Loader2, Trash2 } from "lucide-react";
 
 type Subject = { id: string; name: string; maxScore: number | null };
 type Student = { id: string; examNo: string; name: string; room: string; absent: boolean; scores: Record<string, number> };
@@ -18,7 +18,19 @@ function isFilled(student: Student, subjects: Subject[], edits: Edits) {
   });
 }
 
-export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: () => void }) {
+// สร้าง payload อัปเดตจากค่าที่แก้ค้างอยู่ (คะแนน + ติ๊กขาดสอบ)
+function buildUpdates(edits: Edits, absentEdits: Record<string, boolean>) {
+  const studentIds = new Set([...Object.keys(edits), ...Object.keys(absentEdits)]);
+  return [...studentIds].map((studentId) => ({
+    studentId,
+    scores: Object.fromEntries(
+      Object.entries(edits[studentId] ?? {}).map(([subjectId, raw]) => [subjectId, raw.trim() === "" ? null : Number(raw)]),
+    ),
+    ...(studentId in absentEdits ? { absent: absentEdits[studentId] } : {}),
+  }));
+}
+
+export function ScoreEntryCard({ examId, classLevel, onSaved }: { examId: string; classLevel: string; onSaved?: () => void }) {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [edits, setEdits] = useState<Edits>({});
   const [room, setRoom] = useState("ALL");
@@ -28,6 +40,11 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // overlay การติ๊ก "ไม่ได้เข้าสอบ" ที่ยังไม่บันทึก (studentId -> absent)
   const [absentEdits, setAbsentEdits] = useState<Record<string, boolean>>({});
+  // เก็บค่าที่แก้ค้างล่าสุดไว้ใน ref เพื่อให้ auto-save/flush อ่านค่าปัจจุบันเสมอ
+  const pendingRef = useRef<{ edits: Edits; absentEdits: Record<string, boolean> }>({ edits, absentEdits });
+  useEffect(() => {
+    pendingRef.current = { edits, absentEdits };
+  }, [edits, absentEdits]);
 
   function isAbsent(student: Student) {
     return absentEdits[student.id] ?? student.absent;
@@ -105,59 +122,89 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
     setEdits((current) => ({ ...current, [studentId]: { ...current[studentId], [subjectId]: value } }));
   }
 
-  async function save() {
-    if (Object.keys(edits).length === 0 && Object.keys(absentEdits).length === 0) {
-      setMessage("ยังไม่มีการแก้ไข");
-      return;
-    }
+  const performSave = useCallback(async () => {
+    const { edits: e, absentEdits: a } = pendingRef.current;
+    if (Object.keys(e).length === 0 && Object.keys(a).length === 0) return;
     setSaving(true);
     setMessage("");
-    // รวม studentId จากทั้งคะแนนที่แก้ + การติ๊กขาดสอบ
-    const studentIds = new Set([...Object.keys(edits), ...Object.keys(absentEdits)]);
-    const updates = [...studentIds].map((studentId) => ({
-      studentId,
-      scores: Object.fromEntries(
-        Object.entries(edits[studentId] ?? {}).map(([subjectId, raw]) => [subjectId, raw.trim() === "" ? null : Number(raw)]),
-      ),
-      ...(studentId in absentEdits ? { absent: absentEdits[studentId] } : {}),
-    }));
     try {
       const response = await fetch(`/api/exams/${examId}/scores`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ updates }),
+        body: JSON.stringify({ updates: buildUpdates(e, a) }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setMessage(data?.error ?? "บันทึกไม่สำเร็จ");
         return;
       }
-      // อัปเดต sheet ในมือให้ตรง แล้วล้าง edits
+      // ใส่ค่าที่บันทึกแล้วลง sheet
       setSheet((current) => {
         if (!current) return current;
         return {
           ...current,
           students: current.students.map((student) => {
-            const studentEdits = edits[student.id];
-            const absentChanged = student.id in absentEdits;
+            const studentEdits = e[student.id];
+            const absentChanged = student.id in a;
             if (!studentEdits && !absentChanged) return student;
             const scores = { ...student.scores };
             for (const [subjectId, raw] of Object.entries(studentEdits ?? {})) {
               if (raw.trim() === "") delete scores[subjectId];
               else scores[subjectId] = Number(raw);
             }
-            return { ...student, scores, absent: absentChanged ? absentEdits[student.id] : student.absent };
+            return { ...student, scores, absent: absentChanged ? a[student.id] : student.absent };
           }),
         };
       });
-      setEdits({});
-      setAbsentEdits({});
-      setMessage("บันทึกคะแนนแล้ว");
+      // ล้างเฉพาะค่าที่บันทึกไปแล้ว — คงค่าที่พิมพ์เพิ่มระหว่างกำลังบันทึก
+      setEdits((current) => {
+        const next: Edits = { ...current };
+        for (const sid of Object.keys(e)) {
+          const row = next[sid];
+          if (!row) continue;
+          const remaining = { ...row };
+          for (const [subId, val] of Object.entries(e[sid])) {
+            if (remaining[subId] === val) delete remaining[subId];
+          }
+          if (Object.keys(remaining).length === 0) delete next[sid];
+          else next[sid] = remaining;
+        }
+        return next;
+      });
+      setAbsentEdits((current) => {
+        const next = { ...current };
+        for (const [sid, val] of Object.entries(a)) {
+          if (next[sid] === val) delete next[sid];
+        }
+        return next;
+      });
       onSaved?.();
     } finally {
       setSaving(false);
     }
-  }
+  }, [examId, onSaved]);
+
+  // บันทึกอัตโนมัติแบบหน่วงเวลา ~0.9 วิ หลังหยุดพิมพ์/ติ๊ก
+  useEffect(() => {
+    const hasPending = Object.keys(edits).length > 0 || Object.keys(absentEdits).length > 0;
+    if (!hasPending || saving) return;
+    const timer = setTimeout(() => void performSave(), 900);
+    return () => clearTimeout(timer);
+  }, [edits, absentEdits, saving, performSave]);
+
+  // กันข้อมูลหายตอนสลับแท็บ/ปิดหน้า: ส่งค่าที่ค้างแบบ keepalive ให้ส่งจบแม้ component ถูก unmount
+  useEffect(() => {
+    return () => {
+      const { edits: e, absentEdits: a } = pendingRef.current;
+      if (Object.keys(e).length === 0 && Object.keys(a).length === 0) return;
+      fetch(`/api/exams/${examId}/scores`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates: buildUpdates(e, a) }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+  }, [examId]);
 
   if (loading) {
     return (
@@ -178,6 +225,8 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
     ? sheet.subjects.reduce((sum, subject) => sum + (subject.maxScore ?? 0), 0)
     : null;
 
+  const hasPending = Object.keys(edits).length > 0 || Object.keys(absentEdits).length > 0;
+
   return (
     <div className="overflow-hidden rounded-[1.25rem] border border-sky-100 bg-white shadow-[0_8px_28px_rgba(14,165,233,0.07)]">
       <div className="flex flex-wrap items-center justify-between gap-3 bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] px-4 py-3">
@@ -194,15 +243,21 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
               <option key={roomName} value={roomName}>ห้อง {roomName}</option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[linear-gradient(135deg,#f472b6,#38bdf8)] px-3.5 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-            บันทึก
-          </button>
+          <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600">
+            {saving ? (
+              <>
+                <Loader2 size={14} className="animate-spin text-sky-600" /> กำลังบันทึก…
+              </>
+            ) : hasPending ? (
+              <>
+                <span className="size-2 rounded-full bg-amber-400" /> รอบันทึกอัตโนมัติ
+              </>
+            ) : (
+              <>
+                <Check size={14} className="text-emerald-500" /> บันทึกอัตโนมัติ
+              </>
+            )}
+          </span>
         </div>
       </div>
 
@@ -214,15 +269,16 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
             <tr className="bg-[#fbfdff] text-left text-xs text-[var(--text-muted)]">
               <th className="px-3 py-2 font-medium">รหัส</th>
               <th className="px-3 py-2 font-medium">ชื่อ</th>
+              <th className="px-3 py-2 font-medium">ห้อง</th>
               {sheet.subjects.map((subject, index) => (
                 <th key={subject.id} className={`px-2 py-2 text-center font-medium ${index % 2 === 0 ? "text-sky-700" : "text-pink-700"}`}>
                   {subject.name}
-                  {subject.maxScore != null && <span className="block text-[10px] font-normal opacity-60">เต็ม {subject.maxScore}</span>}
+                  {subject.maxScore != null && <span className="font-normal opacity-60"> ({subject.maxScore})</span>}
                 </th>
               ))}
               <th className="px-3 py-2 text-center font-medium">
                 รวม
-                {totalMax != null && <span className="block text-[10px] font-normal opacity-60">เต็ม {totalMax}</span>}
+                {totalMax != null && <span className="font-normal opacity-60"> ({totalMax})</span>}
               </th>
               <th className="px-2 py-2 text-center font-medium">ขาดสอบ</th>
               <th className="px-2 py-2 font-medium" />
@@ -233,6 +289,7 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
               <tr key={student.id} className="border-t border-sky-50">
                 <td className="whitespace-nowrap px-3 py-1.5 text-slate-600">{student.examNo}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-slate-700">{student.name}</td>
+                <td className="whitespace-nowrap px-3 py-1.5 text-slate-600">{classLevel}/{student.room}</td>
                 {sheet.subjects.map((subject, index) => (
                   <td key={subject.id} className="px-1.5 py-1">
                     <input
@@ -254,10 +311,7 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
                   {isAbsent(student) ? (
                     <span className="text-xs font-medium text-slate-400">ไม่ได้เข้าสอบ</span>
                   ) : (
-                    <>
-                      {rowTotal(student) || "–"}
-                      {totalMax != null && rowTotal(student) > 0 && <span className="text-xs font-normal opacity-50">/{totalMax}</span>}
-                    </>
+                    rowTotal(student) || "–"
                   )}
                 </td>
                 <td className="px-2 py-1.5 text-center">
@@ -283,7 +337,7 @@ export function ScoreEntryCard({ examId, onSaved }: { examId: string; onSaved?: 
               </tr>
             ))}
             {visibleStudents.length === 0 && (
-              <tr><td colSpan={sheet.subjects.length + 5} className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน</td></tr>
+              <tr><td colSpan={sheet.subjects.length + 6} className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">ยังไม่มีนักเรียน — นำเข้ารายชื่อก่อน</td></tr>
             )}
           </tbody>
         </table>

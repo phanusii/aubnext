@@ -7,6 +7,7 @@ import {
   BookOpen,
   Calculator,
   Check,
+  ChevronDown,
   ClipboardList,
   Copy,
   Download,
@@ -141,6 +142,7 @@ export function AdminConsole() {
   const [newSelectionMode, setNewSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
   const [newWholeQuota, setNewWholeQuota] = useState(10);
   const [roomCount, setRoomCount] = useState(3);
+  const [createExamOpen, setCreateExamOpen] = useState(false);
   const [editExamOpen, setEditExamOpen] = useState(false);
   const [editExamName, setEditExamName] = useState("");
   const [editClassLevel, setEditClassLevel] = useState("");
@@ -470,6 +472,7 @@ export function AdminConsole() {
     }
 
     setMessage("สร้างรอบสอบแล้ว กรุณาสร้างวิชาและนำเข้ารายชื่อทีละห้อง");
+    setCreateExamOpen(false);
     await loadExams(data.exam.id);
   }
 
@@ -1018,7 +1021,7 @@ export function AdminConsole() {
                   <select className="app-input" value={settings.activeExamSessionId} onChange={(event) => setSettings({ ...settings, activeExamSessionId: event.target.value })}>
                     <option value="">ใช้รอบสอบที่ประกาศล่าสุด</option>
                     {exams.map((exam) => (
-                      <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
+                      <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)} · {exam.roomQuotas.length} ห้อง</option>
                     ))}
                   </select>
                 </Field>
@@ -1107,46 +1110,59 @@ export function AdminConsole() {
         {activeTab === "exam" && (
           <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
             <Panel icon={<Plus size={18} />} title="สร้างรอบสอบ">
-              <Field label="ชื่อรอบสอบ">
-                <input className="app-input" value={newExamName} onChange={(event) => setNewExamName(event.target.value)} />
-              </Field>
-              <Field label="ชั้นเรียน">
-                <input className="app-input" value={newClassLevel} onChange={(event) => setNewClassLevel(event.target.value)} />
-              </Field>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {[
-                  ["PER_ROOM", "รายห้อง"],
-                  ["WHOLE_LEVEL", "ทั้งชั้น"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setNewSelectionMode(value as "PER_ROOM" | "WHOLE_LEVEL")}
-                    className={cx("app-segment", newSelectionMode === value && "app-segment-active")}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {newSelectionMode === "WHOLE_LEVEL" && (
-                <Field label="จำนวนผู้ผ่านทั้งชั้น">
-                  <input className="app-input" type="number" min={0} value={newWholeQuota} onFocus={selectNumberInput} onChange={(event) => setNewWholeQuota(Number(event.target.value))} />
-                </Field>
-              )}
-              <Field label="จำนวนห้องในชั้น">
-                <input className="app-input" type="number" min={1} value={roomCount} onFocus={selectNumberInput} onChange={(event) => setRoomCount(Number(event.target.value))} />
-              </Field>
-              <button type="button" onClick={createExam} disabled={busy} className="app-button-primary mt-4">
-                <Plus size={16} />
-                สร้างรอบสอบ
+              <button
+                type="button"
+                onClick={() => setCreateExamOpen((current) => !current)}
+                aria-expanded={createExamOpen || exams.length === 0}
+                className="flex w-full items-center justify-between rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-left text-sm font-semibold text-[var(--text-main)]"
+              >
+                <span>{createExamOpen || exams.length === 0 ? "ซ่อนแบบฟอร์มสร้างรอบสอบ" : "+ สร้างรอบสอบใหม่"}</span>
+                <ChevronDown size={18} className={cx("shrink-0 transition-transform", (createExamOpen || exams.length === 0) && "rotate-180")} />
               </button>
+              {(createExamOpen || exams.length === 0) && (
+                <div className="mt-4">
+                  <Field label="ชื่อรอบสอบ">
+                    <input className="app-input" value={newExamName} onChange={(event) => setNewExamName(event.target.value)} />
+                  </Field>
+                  <Field label="ชั้นเรียน">
+                    <input className="app-input" value={newClassLevel} onChange={(event) => setNewClassLevel(event.target.value)} placeholder="เช่น ป.6" />
+                  </Field>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {[
+                      ["PER_ROOM", "รายห้อง"],
+                      ["WHOLE_LEVEL", "ทั้งชั้น"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setNewSelectionMode(value as "PER_ROOM" | "WHOLE_LEVEL")}
+                        className={cx("app-segment", newSelectionMode === value && "app-segment-active")}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {newSelectionMode === "WHOLE_LEVEL" && (
+                    <Field label="จำนวนผู้ผ่านทั้งชั้น">
+                      <input className="app-input" type="number" min={0} value={newWholeQuota} onFocus={selectNumberInput} onChange={(event) => setNewWholeQuota(Number(event.target.value))} />
+                    </Field>
+                  )}
+                  <Field label="จำนวนห้องในชั้น">
+                    <input className="app-input" type="number" min={1} value={roomCount} onFocus={selectNumberInput} onChange={(event) => setRoomCount(Number(event.target.value))} />
+                  </Field>
+                  <button type="button" onClick={createExam} disabled={busy} className="app-button-primary mt-4">
+                    <Plus size={16} />
+                    สร้างรอบสอบ
+                  </button>
+                </div>
+              )}
             </Panel>
 
             <Panel icon={<Megaphone size={18} />} title="รอบสอบและการประกาศผล">
               <select className="app-input" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
                 <option value="">เลือกรอบสอบ</option>
                 {exams.map((exam) => (
-                  <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
+                  <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)} · {exam.roomQuotas.length} ห้อง</option>
                 ))}
               </select>
               {selectedExam && (
@@ -1436,7 +1452,7 @@ export function AdminConsole() {
             <p className="mb-3 text-sm text-[var(--text-muted)]">
               กรอก/แก้คะแนนแต่ละวิชาได้โดยตรง (สำหรับนำเข้ารายชื่อก่อนแล้วค่อยกรอกคะแนน) · เว้นว่าง = ยังไม่กรอก · กดบันทึกเมื่อแก้เสร็จ
             </p>
-            <ScoreEntryCard key={selectedExam.id} examId={selectedExam.id} />
+            <ScoreEntryCard key={selectedExam.id} examId={selectedExam.id} classLevel={selectedExam.classLevel} />
           </Panel>
         )}
 
@@ -1583,7 +1599,7 @@ export function AdminConsole() {
             {resultsLoading ? (
               <EmptyState text="กำลังโหลดผลคะแนน" />
             ) : visibleResults.length > 0 ? (
-              <ResultTable results={visibleResults} subjects={subjects} />
+              <ResultTable results={visibleResults} subjects={subjects} classLevel={selectedExam.classLevel} />
             ) : (
               <EmptyState text="นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล" />
             )}
@@ -1954,15 +1970,28 @@ function statusLabel(status: CalculatedResult["status"]) {
   return "ไม่ผ่าน";
 }
 
-function ResultTable({ results, subjects }: { results: CalculatedResult[]; subjects: Subject[] }) {
+function ResultTable({ results, subjects, classLevel }: { results: CalculatedResult[]; subjects: Subject[]; classLevel: string }) {
   const scoreSubjects = subjects.filter((subject) => subject.id);
+  // คะแนนเต็มรวม (แสดงในวงเล็บที่หัวคอลัมน์ "คะแนนรวม")
+  const totalMax = scoreSubjects.every((subject) => subject.maxScore != null)
+    ? scoreSubjects.reduce((sum, subject) => sum + (subject.maxScore ?? 0), 0)
+    : null;
 
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--border-soft)]">
       <table className="min-w-full text-left text-sm">
         <thead className="bg-[var(--blue-wash)] text-[var(--text-muted)]">
           <tr>
-            {["อันดับ", "รหัสนักเรียน", "ชื่อ", "ห้อง", ...scoreSubjects.map((subject) => subject.name), "คะแนนรวม", "สถานะ", "เหตุผล"].map((header) => (
+            {[
+              "อันดับ",
+              "รหัสนักเรียน",
+              "ชื่อ",
+              "ห้อง",
+              ...scoreSubjects.map((subject) => (subject.maxScore != null ? `${subject.name} (${subject.maxScore})` : subject.name)),
+              totalMax != null ? `คะแนนรวม (${totalMax})` : "คะแนนรวม",
+              "สถานะ",
+              "เหตุผล",
+            ].map((header) => (
               <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
             ))}
           </tr>
@@ -1973,7 +2002,7 @@ function ResultTable({ results, subjects }: { results: CalculatedResult[]; subje
               <td className="px-3 py-2 font-semibold">{result.rank}</td>
               <td className="px-3 py-2">{result.examNo}</td>
               <td className="px-3 py-2">{result.name}</td>
-              <td className="px-3 py-2">{result.room}</td>
+              <td className="whitespace-nowrap px-3 py-2">{classLevel}/{result.room}</td>
               {scoreSubjects.map((subject) => (
                 <td key={subject.id} className="px-3 py-2">{formatScore(result.scoreBreakdown[subject.id!])}</td>
               ))}

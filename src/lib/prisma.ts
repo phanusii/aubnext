@@ -10,6 +10,9 @@ function databaseUrl() {
   // - ถ้าไม่มี ค่อย fallback DATABASE_URL (กรณีตั้งเอง เช่น Supabase/Neon ที่ใส่ pooled url ตรงนี้)
   // - NON_POOLING ใช้เป็นทางสุดท้าย (เหมาะกับ migration มากกว่า — ดู prisma.config.ts)
   return (
+    // APP_DATABASE_URL = ตั้งเอง (ไม่ผ่าน Vercel/Neon integration ที่ล็อก env เป็น Sensitive)
+    // ใช้ override ปลายทาง DB ได้ เช่น ย้าย DB ไป region อื่น โดยไม่ต้อง disconnect integration
+    process.env.APP_DATABASE_URL ||
     process.env.POSTGRES_PRISMA_URL ||
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
