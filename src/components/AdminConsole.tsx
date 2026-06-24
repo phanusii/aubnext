@@ -229,6 +229,13 @@ export function AdminConsole() {
     }));
   }, []);
 
+  // แถบแจ้งเตือนแสดงสักครู่แล้วหายเอง (~4.5 วิ)
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(""), 4500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   useEffect(() => {
     fetch("/api/settings")
       .then((response) => response.json())
