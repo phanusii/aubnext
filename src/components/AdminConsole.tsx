@@ -6,6 +6,7 @@ import {
   BadgeCheck,
   BookOpen,
   Calculator,
+  ChevronDown,
   ClipboardList,
   Download,
   ImageUp,
@@ -13,6 +14,7 @@ import {
   ListChecks,
   LogIn,
   Megaphone,
+  Pencil,
   Plus,
   Save,
   School,
@@ -25,6 +27,7 @@ import {
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
+import type { PreparedRoomImportTable } from "@/lib/room-import-table";
 import { AppFooter } from "@/components/AppFooter";
 
 type RoomQuota = { id?: string; room: string; quota: number };
@@ -134,6 +137,11 @@ export function AdminConsole() {
   const [newSelectionMode, setNewSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
   const [newWholeQuota, setNewWholeQuota] = useState(10);
   const [roomCount, setRoomCount] = useState(3);
+  const [createExamOpen, setCreateExamOpen] = useState(false);
+  const [editExamName, setEditExamName] = useState("");
+  const [editClassLevel, setEditClassLevel] = useState("");
+  const [editSelectionMode, setEditSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
+  const [editWholeQuota, setEditWholeQuota] = useState(0);
   const [passTitle, setPassTitle] = useState("");
   const [passInstructions, setPassInstructions] = useState("");
   const [rooms, setRooms] = useState<RoomQuota[]>([]);
@@ -160,6 +168,10 @@ export function AdminConsole() {
   );
   const pasteValidation = useMemo(
     () => validateImportPreview(pasteText, subjects),
+    [pasteText, subjects],
+  );
+  const pastePreview = useMemo(
+    () => pasteText.trim() ? prepareRoomImportTable(pasteText, subjects) : null,
     [pasteText, subjects],
   );
 
@@ -293,6 +305,10 @@ export function AdminConsole() {
           : [emptySubject(0)],
       );
       setImportRoom(selectedExam.roomQuotas[0]?.room ?? "");
+      setEditExamName(selectedExam.name);
+      setEditClassLevel(selectedExam.classLevel);
+      setEditSelectionMode(selectedExam.selectionMode);
+      setEditWholeQuota(Number(selectedExam.wholeLevelQuota ?? 0));
       setPassTitle(selectedExam.passTitle ?? "");
       setPassInstructions(selectedExam.passInstructions ?? "");
       setCalculatedResults([]);
@@ -449,7 +465,54 @@ export function AdminConsole() {
     }
 
     setMessage("สร้างรอบสอบแล้ว กรุณาสร้างวิชาและนำเข้ารายชื่อทีละห้อง");
+    setCreateExamOpen(false);
     await loadExams(data.exam.id);
+  }
+
+  async function saveExamDetails() {
+    if (!selectedExam) return;
+    setBusy(true);
+    const response = await fetch(`/api/exams/${selectedExam.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editExamName,
+        classLevel: editClassLevel,
+        selectionMode: editSelectionMode,
+        wholeLevelQuota: editSelectionMode === "WHOLE_LEVEL" ? editWholeQuota : null,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+
+    if (!response.ok) {
+      setMessage(data.error ?? "แก้ไขรอบสอบไม่สำเร็จ");
+      return;
+    }
+
+    setCalculatedResults([]);
+    setResultsLoadedExamId("");
+    setPublicResultCacheHealth(null);
+    setMessage(
+      data.rankingRuleChanged
+        ? "บันทึกรอบสอบแล้ว เนื่องจากกติกาคัดเลือกเปลี่ยน ระบบล้างผลเดิม กรุณาคำนวณและประกาศผลใหม่"
+        : "บันทึกข้อมูลรอบสอบแล้ว",
+    );
+    await loadExams(selectedExam.id);
+  }
+
+  async function savePassAnnouncement() {
+    if (!selectedExam) return;
+    setBusy(true);
+    const response = await fetch(`/api/exams/${selectedExam.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ passTitle, passInstructions }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+    setMessage(response.ok ? "บันทึกข้อความแจ้งผู้ผ่านสำหรับรอบสอบนี้แล้ว" : data.error ?? "บันทึกข้อความไม่สำเร็จ");
+    if (response.ok) await loadExams(selectedExam.id);
   }
 
   async function saveRooms() {
@@ -462,8 +525,21 @@ export function AdminConsole() {
     });
     const data = await response.json().catch(() => ({}));
     setBusy(false);
-    setMessage(response.ok ? "บันทึกห้องและโควตาแล้ว" : data.error ?? "บันทึกห้องไม่สำเร็จ");
-    await loadExams();
+    if (!response.ok) {
+      setMessage(data.error ?? "บันทึกห้องไม่สำเร็จ");
+      return;
+    }
+    if (data.rankingRuleChanged) {
+      setCalculatedResults([]);
+      setResultsLoadedExamId("");
+      setPublicResultCacheHealth(null);
+    }
+    setMessage(
+      data.rankingRuleChanged
+        ? "บันทึกห้องและโควตาแล้ว ระบบล้างผลเดิม กรุณาคำนวณและประกาศผลใหม่"
+        : "บันทึกห้องและโควตาแล้ว",
+    );
+    await loadExams(selectedExam.id);
   }
 
   async function saveSubjects() {
@@ -493,16 +569,6 @@ export function AdminConsole() {
       setMessage(pasteValidation?.errors.join(" / ") || "กรุณาตรวจข้อมูลรหัสนักเรียน ชื่อ และคะแนนก่อนนำเข้า");
       return;
     }
-
-    const confirmed = window.confirm(
-      [
-        `ตรวจข้อมูลแล้ว ${pasteValidation.rowCount} คน`,
-        `วิชาที่พบ ${pasteValidation.subjectCount} วิชา`,
-        `คะแนนถูกต้อง ${pasteValidation.scoreCellCount} ช่อง`,
-        `ยืนยันนำเข้าห้อง ${importRoom} หรือไม่`,
-      ].join("\n"),
-    );
-    if (!confirmed) return;
 
     const { rows } = prepareRoomImportTable(pasteText, subjects);
     setBusy(true);
@@ -913,39 +979,52 @@ export function AdminConsole() {
         {activeTab === "exam" && (
           <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
             <Panel icon={<Plus size={18} />} title="สร้างรอบสอบ">
-              <Field label="ชื่อรอบสอบ">
-                <input className="app-input" value={newExamName} onChange={(event) => setNewExamName(event.target.value)} />
-              </Field>
-              <Field label="ชั้นเรียน">
-                <input className="app-input" value={newClassLevel} onChange={(event) => setNewClassLevel(event.target.value)} />
-              </Field>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {[
-                  ["PER_ROOM", "รายห้อง"],
-                  ["WHOLE_LEVEL", "ทั้งชั้น"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setNewSelectionMode(value as "PER_ROOM" | "WHOLE_LEVEL")}
-                    className={cx("app-segment", newSelectionMode === value && "app-segment-active")}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {newSelectionMode === "WHOLE_LEVEL" && (
-                <Field label="จำนวนผู้ผ่านทั้งชั้น">
-                  <input className="app-input" type="number" min={0} value={newWholeQuota} onFocus={selectNumberInput} onChange={(event) => setNewWholeQuota(Number(event.target.value))} />
-                </Field>
-              )}
-              <Field label="จำนวนห้องในชั้น">
-                <input className="app-input" type="number" min={1} value={roomCount} onFocus={selectNumberInput} onChange={(event) => setRoomCount(Number(event.target.value))} />
-              </Field>
-              <button type="button" onClick={createExam} disabled={busy} className="app-button-primary mt-4">
-                <Plus size={16} />
-                สร้างรอบสอบ
+              <button
+                type="button"
+                onClick={() => setCreateExamOpen((current) => !current)}
+                className="flex w-full items-center justify-between rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] px-4 py-3 text-left font-semibold text-[var(--text-main)]"
+                aria-expanded={createExamOpen}
+              >
+                <span>{createExamOpen ? "ซ่อนแบบฟอร์มสร้างรอบสอบ" : "เปิดแบบฟอร์มสร้างรอบสอบใหม่"}</span>
+                <ChevronDown size={18} className={cx("transition-transform", createExamOpen && "rotate-180")} />
               </button>
+              {createExamOpen && (
+                <div className="mt-4">
+                  <Field label="ชื่อรอบสอบ">
+                    <input className="app-input" value={newExamName} onChange={(event) => setNewExamName(event.target.value)} />
+                  </Field>
+                  <Field label="ชั้นเรียน">
+                    <input className="app-input" value={newClassLevel} onChange={(event) => setNewClassLevel(event.target.value)} placeholder="เช่น ป.6" />
+                  </Field>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {[
+                      ["PER_ROOM", "รายห้อง"],
+                      ["WHOLE_LEVEL", "ทั้งชั้น"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setNewSelectionMode(value as "PER_ROOM" | "WHOLE_LEVEL")}
+                        className={cx("app-segment", newSelectionMode === value && "app-segment-active")}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {newSelectionMode === "WHOLE_LEVEL" && (
+                    <Field label="จำนวนผู้ผ่านทั้งชั้น">
+                      <input className="app-input" type="number" min={0} value={newWholeQuota} onFocus={selectNumberInput} onChange={(event) => setNewWholeQuota(Number(event.target.value))} />
+                    </Field>
+                  )}
+                  <Field label="จำนวนห้องในชั้น">
+                    <input className="app-input" type="number" min={1} value={roomCount} onFocus={selectNumberInput} onChange={(event) => setRoomCount(Number(event.target.value))} />
+                  </Field>
+                  <button type="button" onClick={createExam} disabled={busy} className="app-button-primary mt-4">
+                    <Plus size={16} />
+                    สร้างรอบสอบ
+                  </button>
+                </div>
+              )}
             </Panel>
 
             <Panel icon={<Megaphone size={18} />} title="รอบสอบและการประกาศผล">
@@ -953,7 +1032,9 @@ export function AdminConsole() {
                 <select className="app-input" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
                   <option value="">เลือกรอบสอบ</option>
                   {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)}</option>
+                    <option key={exam.id} value={exam.id}>
+                      {formatExamOptionLabel(exam)} / {exam.roomQuotas.length} ห้อง
+                    </option>
                   ))}
                 </select>
                 <button type="button" onClick={() => openExamActionDialog("calculate")} disabled={busy || !selectedExam} className="app-button-secondary">
@@ -967,37 +1048,68 @@ export function AdminConsole() {
               </div>
               {selectedExam ? (
                 <>
-                  <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <div className="mt-4 grid gap-3 md:grid-cols-5">
                     <Metric label="ชั้นเรียน" value={selectedExam.classLevel} />
                     <Metric label="รูปแบบ" value={selectedExam.selectionMode === "PER_ROOM" ? "รายห้อง" : "ทั้งชั้น"} />
+                    <Metric label="ห้องเรียน" value={`${selectedExam.roomQuotas.length} ห้อง`} />
                     <Metric label="นักเรียน" value={`${selectedExam._count?.students ?? 0} คน`} />
                     <Metric label="สถานะ" value={selectedExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"} />
                   </div>
                   <div className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[#fbfdff] p-4">
                     <div className="mb-3 flex items-center gap-2 font-semibold">
-                      <BadgeCheck size={18} />
-                      ข้อความแจ้งผู้ผ่านการคัดเลือก
+                      <Pencil size={18} />
+                      แก้ไขรอบสอบที่เลือก
                     </div>
                     <div className="grid gap-3">
-                      <Field label="ผ่านเข้ารอบอะไร">
+                      <Field label="ชื่อรอบสอบ">
                         <input
                           className="app-input"
-                          value={passTitle}
-                          onChange={(event) => setPassTitle(event.target.value)}
-                          placeholder="เช่น ผ่านเข้ารอบค่ายวิทยาศาสตร์และคณิตศาสตร์"
+                          value={editExamName}
+                          onChange={(event) => setEditExamName(event.target.value)}
                         />
                       </Field>
-                      <Field label="ต้องดำเนินการอย่างไร">
-                        <textarea
-                          className="app-input min-h-28"
-                          value={passInstructions}
-                          onChange={(event) => setPassInstructions(event.target.value)}
-                          placeholder="เช่น ให้รายงานตัววันที่ 10 มิถุนายน เวลา 08.30 น. พร้อมสำเนาบัตรนักเรียน"
+                      <Field label="ชั้นเรียน">
+                        <input
+                          className="app-input"
+                          value={editClassLevel}
+                          onChange={(event) => setEditClassLevel(event.target.value)}
+                          placeholder="เช่น ป.6"
                         />
                       </Field>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          ["PER_ROOM", "คัดเลือกรายห้อง"],
+                          ["WHOLE_LEVEL", "คัดเลือกทั้งชั้น"],
+                        ].map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setEditSelectionMode(value as "PER_ROOM" | "WHOLE_LEVEL")}
+                            className={cx("app-segment", editSelectionMode === value && "app-segment-active")}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {editSelectionMode === "WHOLE_LEVEL" && (
+                        <Field label="จำนวนผู้ผ่านทั้งชั้น">
+                          <input
+                            className="app-input"
+                            type="number"
+                            min={0}
+                            value={editWholeQuota}
+                            onFocus={selectNumberInput}
+                            onChange={(event) => setEditWholeQuota(Number(event.target.value))}
+                          />
+                        </Field>
+                      )}
                       <p className="text-xs leading-5 text-[var(--text-muted)]">
-                        ข้อความนี้จะแสดงเฉพาะนักเรียนที่มีสถานะผ่านการคัดเลือก หลังจากกดประกาศผล
+                        หากเปลี่ยนรูปแบบคัดเลือกหรือจำนวนผู้ผ่าน ระบบจะล้างผลคำนวณเดิมและให้คำนวณใหม่ เพื่อป้องกันอันดับผิด
                       </p>
+                      <button type="button" onClick={saveExamDetails} disabled={busy} className="app-button-primary">
+                        <Save size={16} />
+                        บันทึกการแก้ไขรอบสอบ
+                      </button>
                     </div>
                   </div>
                 </>
@@ -1055,6 +1167,37 @@ export function AdminConsole() {
                 <Save size={16} />
                 บันทึกห้อง
               </button>
+              <div className="mt-5 border-t border-[var(--border-soft)] pt-5">
+                <div className="mb-3 flex items-center gap-2 font-semibold text-[var(--text-main)]">
+                  <BadgeCheck size={18} />
+                  ข้อความแจ้งผู้ผ่านของรอบสอบนี้
+                </div>
+                <div className="grid gap-3">
+                  <Field label="ผ่านเข้ารอบอะไร">
+                    <input
+                      className="app-input"
+                      value={passTitle}
+                      onChange={(event) => setPassTitle(event.target.value)}
+                      placeholder="เช่น ผ่านเข้ารอบค่ายวิทยาศาสตร์และคณิตศาสตร์"
+                    />
+                  </Field>
+                  <Field label="ต้องดำเนินการอย่างไร">
+                    <textarea
+                      className="app-input min-h-28"
+                      value={passInstructions}
+                      onChange={(event) => setPassInstructions(event.target.value)}
+                      placeholder="เช่น ให้รายงานตัววันที่ 10 มิถุนายน เวลา 08.30 น. พร้อมสำเนาบัตรนักเรียน"
+                    />
+                  </Field>
+                  <p className="text-xs leading-5 text-[var(--text-muted)]">
+                    บันทึกแยกตามรอบสอบ และจะแสดงเฉพาะนักเรียนที่ผ่านการคัดเลือกหลังประกาศผล
+                  </p>
+                  <button type="button" className="app-button-secondary" onClick={savePassAnnouncement} disabled={busy}>
+                    <Save size={16} />
+                    บันทึกข้อความแจ้งผู้ผ่าน
+                  </button>
+                </div>
+              </div>
             </Panel>
 
             <Panel icon={<BookOpen size={18} />} title="วิชาสอบและคะแนนเต็ม">
@@ -1099,7 +1242,9 @@ export function AdminConsole() {
               <Field label="เลือกห้อง">
                 <select className="app-input" value={importRoom} onChange={(event) => setImportRoom(event.target.value)}>
                   {rooms.map((room) => (
-                    <option key={room.room} value={room.room}>{room.room}</option>
+                    <option key={room.room} value={room.room}>
+                      {formatClassRoom(selectedExam.classLevel, room.room)}
+                    </option>
                   ))}
                 </select>
               </Field>
@@ -1120,10 +1265,18 @@ export function AdminConsole() {
                   : pasteValidation.errors.slice(0, 4).join(" / ")}
               </div>
             )}
+            {pastePreview && pastePreview.rows.length > 0 && (
+              <ImportPreviewTable
+                preview={pastePreview}
+                subjects={subjects}
+                classLevel={selectedExam.classLevel}
+                room={importRoom}
+              />
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className="app-button-primary" onClick={importPastedRows} disabled={busy || !pasteText.trim()}>
+              <button type="button" className="app-button-primary" onClick={importPastedRows} disabled={busy || !pasteValidation?.isReady}>
                 <ClipboardList size={16} />
-                นำเข้าจากข้อมูลที่วาง
+                ยืนยันนำเข้าข้อมูลตัวอย่างนี้
               </button>
               <label className="app-button-secondary cursor-pointer">
                 <UploadCloud size={16} />
@@ -1151,7 +1304,7 @@ export function AdminConsole() {
                   onClick={() => setResultRoomFilter(room)}
                   className={cx("min-w-max rounded-lg px-4 py-2 text-sm font-semibold text-[var(--text-muted)]", resultRoomFilter === room && "bg-white text-[var(--primary-blue-strong)] shadow-sm")}
                 >
-                  ห้อง {room}
+                  {formatClassRoom(selectedExam.classLevel, room)}
                 </button>
               ))}
             </div>
@@ -1252,7 +1405,7 @@ export function AdminConsole() {
             {resultsLoading ? (
               <EmptyState text="กำลังโหลดผลคะแนน" />
             ) : visibleResults.length > 0 ? (
-              <ResultTable results={visibleResults} subjects={subjects} />
+              <ResultTable results={visibleResults} subjects={subjects} classLevel={selectedExam.classLevel} />
             ) : (
               <EmptyState text="นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล" />
             )}
@@ -1605,13 +1758,100 @@ function formatScore(value: number | undefined) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+function formatClassRoom(classLevel: string, room: string) {
+  const trimmedRoom = room.trim();
+  if (!trimmedRoom) return classLevel;
+  if (trimmedRoom.includes("/")) return trimmedRoom;
+  return `${classLevel.replace(/\/+$/, "")}/${trimmedRoom}`;
+}
+
 function statusLabel(status: CalculatedResult["status"]) {
   if (status === "PASSED") return "ผ่าน";
   if (status === "REVIEW") return "รอตรวจ";
   return "ไม่ผ่าน";
 }
 
-function ResultTable({ results, subjects }: { results: CalculatedResult[]; subjects: Subject[] }) {
+function formatResultReason(reason: string, subjects: Subject[]) {
+  return reason.replace(
+    /คะแนนรวมเท่ากัน ใช้วิชา (.+?) ตามลำดับ tie-break/g,
+    (_match, subjectName: string) => {
+      const subject = subjects.find((item) => item.name === subjectName);
+      const order = subject?.tieBreakOrder ?? 1;
+      return `คะแนนรวมเท่ากับนักเรียนคนอื่น ระบบจึงเปรียบเทียบวิชา ${subjectName} ตามลำดับตัดสินที่ ${order} และใช้คะแนนวิชานี้จัดลำดับ`;
+    },
+  );
+}
+
+function ImportPreviewTable({
+  preview,
+  subjects,
+  classLevel,
+  room,
+}: {
+  preview: PreparedRoomImportTable;
+  subjects: Subject[];
+  classLevel: string;
+  room: string;
+}) {
+  const activeSubjects = subjects.filter((subject) => subject.name.trim());
+  const studentIdColumn = findColumn(preview.headers, ["student_id", "รหัสนักเรียน", "exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ"]);
+  const studentNameColumn = findColumn(preview.headers, ["student_name", "ชื่อนักเรียน", "ชื่อ-สกุล", "ชื่อ", "name"]);
+  const visibleRows = preview.rows.slice(0, 10);
+
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 className="font-semibold text-[var(--text-main)]">ตัวอย่างก่อนนำเข้า</h3>
+          <p className="text-xs text-[var(--text-muted)]">แสดง {visibleRows.length} จาก {preview.rows.length} คน</p>
+        </div>
+        <span className="text-xs font-semibold text-[var(--primary-blue-strong)]">
+          ห้อง {formatClassRoom(classLevel, room)}
+        </span>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-[var(--border-soft)]">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-[var(--blue-wash)] text-[var(--text-muted)]">
+            <tr>
+              <th className="whitespace-nowrap px-3 py-2 font-medium">รหัสนักเรียน</th>
+              <th className="whitespace-nowrap px-3 py-2 font-medium">ชื่อ</th>
+              <th className="whitespace-nowrap px-3 py-2 font-medium">ห้อง</th>
+              {activeSubjects.map((subject) => (
+                <th key={subject.id ?? subject.name} className="whitespace-nowrap px-3 py-2 font-medium">
+                  {subject.name} ({formatScore(subject.maxScore)})
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.map((row, index) => (
+              <tr key={`${String(studentIdColumn ? row[studentIdColumn] : "")}-${index}`} className="border-t border-[var(--border-soft)]">
+                <td className="whitespace-nowrap px-3 py-2">{studentIdColumn ? String(row[studentIdColumn] ?? "") : "-"}</td>
+                <td className="min-w-48 px-3 py-2">{studentNameColumn ? String(row[studentNameColumn] ?? "") : "-"}</td>
+                <td className="whitespace-nowrap px-3 py-2">{formatClassRoom(classLevel, room)}</td>
+                {activeSubjects.map((subject) => (
+                  <td key={subject.id ?? subject.name} className="px-3 py-2">
+                    {String(row[subject.name] ?? "") || "-"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ResultTable({
+  results,
+  subjects,
+  classLevel,
+}: {
+  results: CalculatedResult[];
+  subjects: Subject[];
+  classLevel: string;
+}) {
   const scoreSubjects = subjects.filter((subject) => subject.id);
 
   return (
@@ -1619,7 +1859,7 @@ function ResultTable({ results, subjects }: { results: CalculatedResult[]; subje
       <table className="min-w-full text-left text-sm">
         <thead className="bg-[var(--blue-wash)] text-[var(--text-muted)]">
           <tr>
-            {["อันดับ", "รหัสนักเรียน", "ชื่อ", "ห้อง", ...scoreSubjects.map((subject) => subject.name), "คะแนนรวม", "สถานะ", "เหตุผล"].map((header) => (
+            {["อันดับ", "รหัสนักเรียน", "ชื่อ", "ห้อง", ...scoreSubjects.map((subject) => `${subject.name} (${formatScore(subject.maxScore)})`), "คะแนนรวม", "สถานะ", "เหตุผล"].map((header) => (
               <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
             ))}
           </tr>
@@ -1630,7 +1870,7 @@ function ResultTable({ results, subjects }: { results: CalculatedResult[]; subje
               <td className="px-3 py-2 font-semibold">{result.rank}</td>
               <td className="px-3 py-2">{result.examNo}</td>
               <td className="px-3 py-2">{result.name}</td>
-              <td className="px-3 py-2">{result.room}</td>
+              <td className="whitespace-nowrap px-3 py-2">{formatClassRoom(classLevel, result.room)}</td>
               {scoreSubjects.map((subject) => (
                 <td key={subject.id} className="px-3 py-2">{formatScore(result.scoreBreakdown[subject.id!])}</td>
               ))}
@@ -1640,7 +1880,7 @@ function ResultTable({ results, subjects }: { results: CalculatedResult[]; subje
                   {statusLabel(result.status)}
                 </span>
               </td>
-              <td className="min-w-72 px-3 py-2 text-[var(--text-muted)]">{result.reason}</td>
+              <td className="min-w-80 px-3 py-2 text-[var(--text-muted)]">{formatResultReason(result.reason, scoreSubjects)}</td>
             </tr>
           ))}
         </tbody>
