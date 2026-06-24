@@ -180,6 +180,11 @@ export function AdminConsole() {
     () => validateImportPreview(pasteText, subjects, importMode === "withScores"),
     [pasteText, subjects, importMode],
   );
+  // ตัวอย่างตารางที่ parse จากข้อมูลที่วาง — ให้ครูดูก่อนกดยืนยันนำเข้า
+  const pastePreview = useMemo(
+    () => (pasteText.trim() ? prepareRoomImportTable(pasteText, subjects, importMode === "withScores") : null),
+    [pasteText, subjects, importMode],
+  );
 
   const loadExams = useCallback(async (preferredExamId?: string) => {
     const response = await fetch("/api/exams");
@@ -565,16 +570,6 @@ export function AdminConsole() {
       setMessage(pasteValidation?.errors.join(" / ") || "กรุณาตรวจข้อมูลรหัสนักเรียน ชื่อ และคะแนนก่อนนำเข้า");
       return;
     }
-
-    const confirmed = window.confirm(
-      [
-        `ตรวจข้อมูลแล้ว ${pasteValidation.rowCount} คน`,
-        `วิชาที่พบ ${pasteValidation.subjectCount} วิชา`,
-        `คะแนนถูกต้อง ${pasteValidation.scoreCellCount} ช่อง`,
-        `ยืนยันนำเข้าห้อง ${importRoom} หรือไม่`,
-      ].join("\n"),
-    );
-    if (!confirmed) return;
 
     const { rows } = prepareRoomImportTable(pasteText, subjects, importMode === "withScores");
     setBusy(true);
@@ -1433,10 +1428,42 @@ export function AdminConsole() {
                   : pasteValidation.errors.slice(0, 4).join(" / ")}
               </div>
             )}
+            {pastePreview && pastePreview.rows.length > 0 && (
+              <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border-soft)]">
+                <div className="bg-[var(--blue-wash)] px-4 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                  ตัวอย่างก่อนนำเข้า — {pastePreview.rows.length} แถว {pastePreview.hasHeader ? "(มีหัวตาราง)" : "(ไม่มีหัวตาราง — อ่านตามลำดับคอลัมน์)"}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-[#fbfdff] text-xs text-[var(--text-muted)]">
+                      <tr>
+                        {pastePreview.headers.map((header) => (
+                          <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">
+                            {header === "student_id" ? "รหัสนักเรียน" : header === "student_name" ? "ชื่อ" : header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pastePreview.rows.slice(0, 8).map((row, index) => (
+                        <tr key={index} className="border-t border-[var(--border-soft)]">
+                          {pastePreview.headers.map((header) => (
+                            <td key={header} className="whitespace-nowrap px-3 py-1.5">{String(row[header] ?? "")}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {pastePreview.rows.length > 8 && (
+                  <div className="px-4 py-2 text-xs text-[var(--text-muted)]">…และอีก {pastePreview.rows.length - 8} แถว</div>
+                )}
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" className="app-button-primary" onClick={importPastedRows} disabled={busy || !pasteText.trim()}>
                 <ClipboardList size={16} />
-                นำเข้าจากข้อมูลที่วาง
+                ยืนยันนำเข้าตามตัวอย่าง
               </button>
               <label className="app-button-secondary cursor-pointer">
                 <UploadCloud size={16} />
