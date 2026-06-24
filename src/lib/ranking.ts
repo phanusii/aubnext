@@ -64,6 +64,7 @@ function rankGroup(
     const decidingSubjectId = sameTotalCandidates
       .flatMap((other) => tieBreakSubjectIds.find((subjectId) => scoreFor(candidate, subjectId) !== scoreFor(other, subjectId)) ?? [])
       .at(0);
+    const decidingSubjectOrder = decidingSubjectId ? tieBreakSubjectIds.indexOf(decidingSubjectId) + 1 : 0;
 
     return {
       ...candidate,
@@ -73,7 +74,7 @@ function rankGroup(
         tieBreakSubjectIds.map((subjectId) => [subjectId, scoreFor(candidate, subjectId)]),
       ),
       tieBreakReason: decidingSubjectId
-        ? `คะแนนรวมเท่ากัน ใช้วิชา ${subjectNameById.get(decidingSubjectId) ?? decidingSubjectId} ตามลำดับ tie-break`
+        ? `คะแนนรวมเท่ากับนักเรียนคนอื่น ระบบจึงเปรียบเทียบวิชา ${subjectNameById.get(decidingSubjectId) ?? decidingSubjectId} ตามลำดับตัดสินที่ ${decidingSubjectOrder} และใช้คะแนนวิชานี้จัดลำดับ`
         : null,
     };
   });
