@@ -1,4 +1,4 @@
-import { createHmac, createHash, timingSafeEqual } from "crypto";
+import { createHmac, createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 
 const cookieName = "exam_admin";
 const studentResultCookie = "student_result_lookup";
@@ -20,6 +20,41 @@ function authSecret() {
 
 export function verifierHash(value: string) {
   return createHash("sha256").update(value.trim()).digest("hex");
+}
+
+// แฮชรหัสผ่าน admin ด้วย scrypt (built-in Node) — มี salt + ช้าโดยตั้งใจ กัน brute-force/rainbow table
+// ใช้เฉพาะรหัสผ่าน admin (ล็อกอินนาน ๆ ครั้ง) ไม่กระทบเส้นทางนักเรียน ที่ยังใช้ verifierHash (examNo ไม่ใช่ความลับ)
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const SCRYPT_KEYLEN = 32;
+
+export function hashPassword(password: string) {
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, SCRYPT_KEYLEN, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("hex")}$${derived.toString("hex")}`;
+}
+
+export function verifyPassword(password: string, stored: string) {
+  if (!stored) return false;
+  try {
+    if (stored.startsWith("scrypt$")) {
+      const [, n, r, p, saltHex, hashHex] = stored.split("$");
+      const expected = Buffer.from(hashHex, "hex");
+      const derived = scryptSync(password, Buffer.from(saltHex, "hex"), expected.length, {
+        N: Number(n),
+        r: Number(r),
+        p: Number(p),
+      });
+      return derived.length === expected.length && timingSafeEqual(derived, expected);
+    }
+    // legacy: sha256 hex (ไม่มี salt) — รองรับรหัสเดิมที่ยังไม่ได้ตั้งใหม่ ให้ล็อกอินได้ไม่สะดุด
+    const legacy = Buffer.from(verifierHash(password));
+    const expected = Buffer.from(stored);
+    return legacy.length === expected.length && timingSafeEqual(legacy, expected);
+  } catch {
+    return false;
+  }
 }
 
 export function signAdminCookie() {

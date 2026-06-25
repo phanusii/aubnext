@@ -1,6 +1,6 @@
 import { getPrisma } from "@/lib/prisma";
 import { calculateResults } from "@/lib/ranking";
-import { verifierHash } from "@/lib/security";
+import { hashPassword, verifierHash } from "@/lib/security";
 import type { LineResultWebLookup } from "@/lib/security";
 import type { Prisma } from "@prisma/client";
 import type { ImportedStudentRow } from "@/lib/excel";
@@ -256,7 +256,7 @@ export async function getAdminCredentials() {
   const settings = await getSchoolSettings();
   return {
     email: (settings.adminEmail || process.env.ADMIN_EMAIL || "admin@example.com").trim().toLowerCase(),
-    passwordHash: settings.adminPasswordHash || verifierHash(process.env.ADMIN_PASSWORD || "admin1234"),
+    passwordHash: settings.adminPasswordHash || hashPassword(process.env.ADMIN_PASSWORD || "admin1234"),
   };
 }
 

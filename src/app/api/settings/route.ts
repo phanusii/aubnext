@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getCachedPublicResultSettings, publicSettingsCacheTag } from "@/lib/public-settings-cache";
 import { publicStudentResultCacheTag } from "@/lib/public-student-result-cache";
 import { upsertSchoolSettings } from "@/lib/repository";
-import { verifierHash } from "@/lib/security";
+import { hashPassword } from "@/lib/security";
 
 const schema = z.object({
   schoolName: z.string().min(1),
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       activeExamSessionId: parsed.data.activeExamSessionId,
       schoolContact: parsed.data.schoolContact,
       adminEmail: parsed.data.adminEmail?.trim().toLowerCase(),
-      ...(adminPassword ? { adminPasswordHash: verifierHash(adminPassword) } : {}),
+      ...(adminPassword ? { adminPasswordHash: hashPassword(adminPassword) } : {}),
     });
     revalidateTag(publicSettingsCacheTag, { expire: 0 });
     revalidateTag(publicStudentResultCacheTag, { expire: 0 });
