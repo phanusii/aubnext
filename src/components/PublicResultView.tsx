@@ -130,8 +130,15 @@ export function ResultContent({ result }: { result: StudentResult }) {
     if (subject.name && typeof subject.maxScore === "number" && subject.maxScore > 0) maxByName.set(subject.name, subject.maxScore);
   }
   const totalMax = result.statistics.total.maxScore;
+  // "/เต็ม" — ให้อ่านง่ายขึ้น: น้ำหนักกลาง + จางพอประมาณ (เดิม font-normal/opacity-60 บางจางเกินไป)
+  // เว้นช่องว่างบาง ๆ หน้าเครื่องหมาย / ให้ตัวเลขไม่ติดกัน ดูเป็นระเบียบ
   const maxSuffix = (max?: number, size = "text-sm") =>
-    max && max > 0 ? <span className={`${size} font-normal opacity-60`}>/{formatScore(max)}</span> : null;
+    max && max > 0 ? <span className={`${size} font-medium opacity-70`}>{" "}/{formatScore(max)}</span> : null;
+
+  // อันดับ X/Y ใช้สไตล์เดียวกับคะแนน: ตัวเลขเด่น ส่วน "/ทั้งหมด" จางลงนิด ให้ทุกตัวเลขเป็นระเบียบแบบเดียวกัน
+  const rankValue = (rank: number, count: number) => (
+    <>{rank}<span className="text-base font-medium opacity-60"> /{count}</span></>
+  );
 
   const total = result.statistics.total;
   const totalCmpMax = Math.max(total.score, total.roomAverage, total.levelAverage, 1);
@@ -186,11 +193,11 @@ export function ResultContent({ result }: { result: StudentResult }) {
             <div className="col-span-2 rounded-[1.35rem] bg-gradient-to-br from-pink-100 to-pink-50 p-4 shadow-[0_8px_24px_rgba(244,114,182,0.10)] sm:col-span-1">
               <div className="text-xs font-semibold text-pink-700/80 md:text-sm">🏆 คะแนนรวม</div>
               <div className="mt-1 text-[2rem] font-bold leading-none text-pink-700 md:text-[2.4rem]">
-                {formatScore(result.result.totalScore)}{maxSuffix(totalMax, "text-lg")}
+                {formatScore(result.result.totalScore)}{maxSuffix(totalMax, "text-xl")}
               </div>
             </div>
-            <Metric emoji="🥇" label="อันดับในห้อง" value={`${total.roomRank}/${total.roomCount}`} tone="sky" />
-            <Metric emoji="🎖" label="อันดับในชั้น" value={`${total.levelRank}/${total.levelCount}`} tone="violet" />
+            <Metric emoji="🥇" label="อันดับในห้อง" value={rankValue(total.roomRank, total.roomCount)} tone="sky" />
+            <Metric emoji="🎖" label="อันดับในชั้น" value={rankValue(total.levelRank, total.levelCount)} tone="violet" />
           </div>
 
           {celebrate && (
