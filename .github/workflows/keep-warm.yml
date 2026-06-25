@@ -1,0 +1,23 @@
+# keep-warm
+name: keep-warm
+on:
+  schedule:
+    - cron: "*/5 8-13 * * *"
+  workflow_dispatch: {}
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping
+        env:
+          URL: ${{ secrets.KEEP_WARM_URL }}
+          SECRET: ${{ secrets.KEEP_WARM_SECRET }}
+        run: |
+          [ -z "$URL" ] && exit 0
+          target="$URL?key=$SECRET"
+          code=$(curl -s -o /tmp/body -w "%{http_code}" --max-time 30 "$target")
+          echo "HTTP $code"
+          cat /tmp/body
