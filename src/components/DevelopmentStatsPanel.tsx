@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronUp, GraduationCap, LineChart, Medal, Target, TrendingUp } from "lucide-react";
+import { ChevronDown, ChevronUp, GraduationCap, Medal, Target, TrendingUp } from "lucide-react";
 import type { PublicStudentResult } from "@/lib/repository";
 import {
   pointsToNextBand,
@@ -14,7 +14,6 @@ import {
 } from "@/lib/score-bands";
 
 type SubjectStats = PublicStudentResult["statistics"]["subjects"][number];
-type InsightLevel = "strength" | "above" | "near" | "improve";
 type DevelopmentTier = "single" | "top" | "lead" | "strong" | "good" | "steady" | "focus" | "foundation";
 
 type SubjectInsight = SubjectStats & {
@@ -32,19 +31,6 @@ function cx(...values: Array<string | false | null | undefined>) {
 function formatScore(value: number) {
   if (!Number.isFinite(value)) return "-";
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}
-
-function rankText(rank: number, count: number) {
-  if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 0 || rank <= 0) return "ยังไม่มีข้อมูลกลุ่ม";
-  if (count === 1) return "มีข้อมูล 1 คน";
-  return `อันดับ ${rank} จาก ${count} คน`;
-}
-
-function deltaText(value: number) {
-  if (!Number.isFinite(value)) return "-";
-  const score = formatScore(Math.abs(value));
-  if (Math.abs(value) < 0.005) return "เท่าค่าเฉลี่ย";
-  return value > 0 ? `สูงกว่าเฉลี่ย ${score} คะแนน` : `ต่ำกว่าเฉลี่ย ${score} คะแนน`;
 }
 
 function nextGoalText(deltaLevel: number) {
@@ -80,35 +66,6 @@ function textSeed(...values: Array<number | string>) {
 
 function pickText(options: string[], seed: number) {
   return options[Math.abs(seed) % options.length] ?? options[0] ?? "";
-}
-
-function rankBand(rank: number, count: number): InsightLevel {
-  if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 1 || rank <= 0) return "near";
-  if (rank <= Math.max(1, Math.ceil(count / 4))) return "strength";
-  if (rank <= Math.max(1, Math.ceil(count / 2))) return "above";
-  if (rank <= Math.max(1, Math.ceil((count * 3) / 4))) return "near";
-  return "improve";
-}
-
-function groupLabel(level: InsightLevel) {
-  if (level === "strength") return "กลุ่มนำ";
-  if (level === "above") return "กลุ่มดี";
-  if (level === "near") return "ใกล้ค่าเฉลี่ย";
-  return "ควรเสริม";
-}
-
-function comparisonGroupText(level: InsightLevel, rank: number, count: number) {
-  if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 0 || rank <= 0) return "ยังไม่มีข้อมูลกลุ่ม";
-  if (count === 1) return "มีข้อมูล 1 คน";
-  return groupLabel(level);
-}
-
-function rankContextText(level: InsightLevel, rank: number, count: number, context: "ห้อง" | "ทั้งชั้น") {
-  if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 1 || rank <= 0) return "ยังเปรียบเทียบกลุ่มไม่ได้";
-  if (level === "strength") return `อยู่กลุ่มนำของ${context}`;
-  if (level === "above") return `อยู่กลุ่มดีของ${context}`;
-  if (level === "near") return `อยู่ช่วงกลางของ${context}`;
-  return `ยังมีพื้นที่ให้ขยับอันดับใน${context}`;
 }
 
 const totalMessageByTier: Record<DevelopmentTier, string[]> = {
@@ -212,16 +169,6 @@ function totalMessage(deltaLevel: number, levelRank: number, levelCount: number)
   return pickText(totalMessageByTier[tier], textSeed(deltaLevel, levelRank, levelCount));
 }
 
-function barWidth(rank: number, count: number) {
-  if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 1 || rank <= 0) return 100;
-  return Math.max(6, Math.min(100, ((count - rank + 1) / count) * 100));
-}
-
-function scoreBarWidth(value: number, max: number) {
-  if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) return 0;
-  return Math.max(4, Math.min(100, (value / max) * 100));
-}
-
 function buildSubjectInsights(subjects: SubjectStats[], seedKey: string): SubjectInsight[] {
   return subjects.map((subject) => {
     const deltaLevel = subject.score - subject.levelAverage;
@@ -252,9 +199,7 @@ function buildSubjectInsights(subjects: SubjectStats[], seedKey: string): Subjec
 export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult }) {
   const [isOpen, setIsOpen] = useState(false);
   const { total, subjects } = result.statistics;
-  const totalDeltaRoom = total.score - total.roomAverage;
   const totalDeltaLevel = total.score - total.levelAverage;
-  const totalLevel = rankBand(total.levelRank, total.levelCount);
   const totalBand = scoreBand(total.score, total.maxScore);
   const subjectInsights = useMemo(
     () => buildSubjectInsights(subjects, result.student.examNo),
@@ -296,10 +241,10 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
           </span>
           <span className="min-w-0">
             <span className="block text-base font-semibold leading-tight text-slate-950">
-              {isOpen ? "ซ่อนสถิติเพื่อการพัฒนา" : "ดูสถิติเพื่อการพัฒนา"}
+              {isOpen ? "ซ่อนคำแนะนำเพื่อการพัฒนา" : "ดูคำแนะนำเพื่อการพัฒนา"}
             </span>
             <span className="mt-1 block text-sm leading-5 text-[var(--text-muted)]">
-              อ่านจุดแข็ง วิชาที่ควรเริ่มก่อน และเป้าหมายถัดไปแบบเข้าใจง่าย
+              เป้าหมายถัดไป จุดแข็งที่ควรรักษา และวิชาที่ควรเริ่มเสริมก่อน
             </span>
           </span>
         </span>
@@ -310,30 +255,17 @@ export function DevelopmentStatsPanel({ result }: { result: PublicStudentResult 
 
       {isOpen && (
         <div id={panelId} className="mt-4 space-y-4">
-          <OverviewSection
-            score={total.score}
-            roomAverage={total.roomAverage}
-            levelAverage={total.levelAverage}
-            deltaRoom={totalDeltaRoom}
-            deltaLevel={totalDeltaLevel}
-            roomRank={total.roomRank}
-            roomCount={total.roomCount}
-            levelRank={total.levelRank}
-            levelCount={total.levelCount}
-            totalLevel={totalLevel}
-            totalBand={totalBand}
-          />
+          {/* สรุปสั้น: ช่วงคะแนน + ข้อความให้กำลังใจตามผลรวม (ไม่ซ้ำตัวเลข/อันดับที่แสดงด้านบนแล้ว) */}
+          <div className="rounded-[1.5rem] border border-sky-100 bg-white p-4 shadow-[0_12px_30px_rgba(14,165,233,0.07)]">
+            <div className="flex flex-wrap items-center gap-2">
+              <Target size={18} className="text-sky-700" />
+              <h3 className="text-lg font-semibold leading-tight text-slate-950">ภาพรวมเพื่อการพัฒนา</h3>
+              {totalBand && <ScoreBandChip band={totalBand} prefix="ช่วงคะแนนรวม" />}
+            </div>
+            <p className="mt-3 rounded-2xl bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-800">{rankMessage}</p>
+          </div>
 
-          <ComparisonAndRankSection
-            score={total.score}
-            roomAverage={total.roomAverage}
-            levelAverage={total.levelAverage}
-            roomRank={total.roomRank}
-            roomCount={total.roomCount}
-            levelRank={total.levelRank}
-            levelCount={total.levelCount}
-          />
-
+          {/* คำแนะนำเฉพาะตัว 3 ข้อ */}
           <DevelopmentFocusSection
             goalValue={goalValue}
             goalDescription={goalDescription}
@@ -359,197 +291,6 @@ function ScoreBandChip({ band, prefix }: { band: ScoreBand; prefix?: string }) {
       {prefix && <span className="opacity-70">{prefix}</span>}
       {band.label} · {band.rangeLabel}
     </span>
-  );
-}
-
-function OverviewSection({
-  score,
-  roomAverage,
-  levelAverage,
-  deltaRoom,
-  deltaLevel,
-  roomRank,
-  roomCount,
-  levelRank,
-  levelCount,
-  totalLevel,
-  totalBand,
-}: {
-  score: number;
-  roomAverage: number;
-  levelAverage: number;
-  deltaRoom: number;
-  deltaLevel: number;
-  roomRank: number;
-  roomCount: number;
-  levelRank: number;
-  levelCount: number;
-  totalLevel: InsightLevel;
-  totalBand: ScoreBand | null;
-}) {
-  return (
-    <div className="rounded-[1.5rem] border border-sky-100 bg-white p-4 shadow-[0_12px_30px_rgba(14,165,233,0.07)]">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Target size={18} className="text-sky-700" />
-        <h3 className="text-lg font-semibold leading-tight text-slate-950">ภาพรวมเพื่อการพัฒนา</h3>
-        {totalBand && <ScoreBandChip band={totalBand} prefix="ช่วงคะแนนรวม" />}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <InsightCard label="คะแนนรวม" value={formatScore(score)} subValue={nextGoalText(deltaLevel)} tone="sky" />
-        <InsightCard
-          label="กลุ่มระดับ"
-          value={comparisonGroupText(totalLevel, levelRank, levelCount)}
-          subValue="ดูจากอันดับและค่าเฉลี่ยทั้งชั้น"
-          tone={totalLevel === "improve" ? "amber" : "emerald"}
-        />
-        <InsightCard
-          label="อันดับในห้อง"
-          value={rankText(roomRank, roomCount)}
-          subValue={rankContextText(rankBand(roomRank, roomCount), roomRank, roomCount, "ห้อง")}
-          tone="pink"
-        />
-        <InsightCard
-          label="อันดับทั้งชั้น"
-          value={rankText(levelRank, levelCount)}
-          subValue={rankContextText(totalLevel, levelRank, levelCount, "ทั้งชั้น")}
-          tone="sky"
-        />
-        <InsightCard
-          label="เทียบเฉลี่ยห้อง"
-          value={deltaText(deltaRoom)}
-          subValue={`เฉลี่ยห้อง ${formatScore(roomAverage)}`}
-          tone={deltaRoom >= 0 ? "emerald" : "amber"}
-        />
-        <InsightCard
-          label="เทียบเฉลี่ยชั้น"
-          value={deltaText(deltaLevel)}
-          subValue={`เฉลี่ยชั้น ${formatScore(levelAverage)}`}
-          tone={deltaLevel >= 0 ? "emerald" : "amber"}
-        />
-      </div>
-      <p className="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-800">
-        {totalMessage(deltaLevel, levelRank, levelCount)}
-      </p>
-    </div>
-  );
-}
-
-function InsightCard({
-  label,
-  value,
-  subValue,
-  tone,
-}: {
-  label: string;
-  value: string;
-  subValue?: string;
-  tone: "sky" | "pink" | "emerald" | "amber";
-}) {
-  const toneClass = {
-    sky: "bg-sky-50 text-sky-700 ring-sky-100",
-    pink: "bg-pink-50 text-pink-700 ring-pink-100",
-    emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-    amber: "bg-amber-50 text-amber-700 ring-amber-100",
-  }[tone];
-
-  return (
-    <div className="min-h-28 rounded-2xl border border-sky-100 bg-[#fbfdff] p-3.5">
-      <p className="text-xs font-semibold text-[var(--text-muted)]">{label}</p>
-      <p className={cx("mt-2 inline-flex rounded-full px-2.5 py-1 text-base font-semibold ring-1", toneClass)}>{value}</p>
-      {subValue && <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">{subValue}</p>}
-    </div>
-  );
-}
-
-function ComparisonAndRankSection({
-  score,
-  roomAverage,
-  levelAverage,
-  roomRank,
-  roomCount,
-  levelRank,
-  levelCount,
-}: {
-  score: number;
-  roomAverage: number;
-  levelAverage: number;
-  roomRank: number;
-  roomCount: number;
-  levelRank: number;
-  levelCount: number;
-}) {
-  const maxScore = Math.max(score, roomAverage, levelAverage, 1);
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-      <div className="rounded-[1.5rem] border border-sky-100 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-        <div className="mb-4 flex items-center gap-2">
-          <BarChart3 size={18} className="text-sky-700" />
-          <h3 className="text-base font-semibold text-slate-950">คะแนนเทียบค่าเฉลี่ย</h3>
-        </div>
-        <div className="space-y-3">
-          <ComparisonBar label="นักเรียน" value={score} max={maxScore} barClass="bg-sky-500" textClass="text-sky-700" />
-          <ComparisonBar label="เฉลี่ยห้อง" value={roomAverage} max={maxScore} barClass="bg-pink-400" textClass="text-pink-700" />
-          <ComparisonBar label="เฉลี่ยทั้งชั้น" value={levelAverage} max={maxScore} barClass="bg-slate-300" textClass="text-slate-700" />
-        </div>
-      </div>
-
-      <div className="rounded-[1.5rem] border border-sky-100 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-        <div className="mb-4 flex items-center gap-2">
-          <LineChart size={18} className="text-pink-600" />
-          <h3 className="text-base font-semibold text-slate-950">ตำแหน่งในกลุ่ม</h3>
-        </div>
-        <div className="space-y-4">
-          <DevelopmentRankBar label="ในห้อง" rank={roomRank} count={roomCount} />
-          <DevelopmentRankBar label="ทั้งชั้น" rank={levelRank} count={levelCount} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ComparisonBar({
-  label,
-  value,
-  max,
-  barClass,
-  textClass,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  barClass: string;
-  textClass: string;
-}) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-        <span className="font-medium text-slate-700">{label}</span>
-        <span className={cx("font-semibold", textClass)}>{formatScore(value)}</span>
-      </div>
-      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-        <div className={cx("h-full rounded-full", barClass)} style={{ width: `${scoreBarWidth(value, max)}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function DevelopmentRankBar({ label, rank, count }: { label: string; rank: number; count: number }) {
-  const level = rankBand(rank, count);
-  const context = label === "ในห้อง" ? "ห้อง" : "ทั้งชั้น";
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-        <span className="font-medium text-slate-700">อันดับ{label}</span>
-        <span className="font-semibold text-slate-950">{rankText(rank, count)}</span>
-      </div>
-      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#f9a8d4)]" style={{ width: `${barWidth(rank, count)}%` }} />
-      </div>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">
-        {rankContextText(level, rank, count, context)}
-      </p>
-    </div>
   );
 }
 
