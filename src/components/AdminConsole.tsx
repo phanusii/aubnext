@@ -1095,6 +1095,17 @@ export function AdminConsole() {
                     ลิงก์ติดต่อโรงเรียน
                   </a>
                 </div>
+                <div className="mt-5 rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
+                  <h3 className="text-base font-semibold text-[var(--text-main)]">สำรองข้อมูล</h3>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    ดาวน์โหลดข้อมูลทั้งหมด (นักเรียน คะแนน ผลประกาศ ตั้งค่า) เป็นไฟล์ JSON เก็บไว้เอง
+                    แนะนำให้กดเก็บไว้ทุกครั้งหลังประกาศผล เผื่อข้อมูลเสียหายจะได้กู้คืนได้
+                  </p>
+                  <a href="/api/admin/backup" className="app-button-secondary mt-3 w-full sm:w-auto">
+                    <Download size={16} />
+                    ดาวน์โหลดไฟล์สำรองข้อมูล
+                  </a>
+                </div>
               </div>
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
                 {settings.logoUrl ? (
