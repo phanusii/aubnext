@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { BarChart3, ChevronLeft, School, Trophy } from "lucide-react";
+import { BarChart3, ChevronLeft, School } from "lucide-react";
 import type { PublicStudentResult } from "@/lib/repository";
 
 // แผง "ภาพรวมเพื่อการพัฒนา" ใหญ่ (~560 บรรทัด) และพับเก็บ default + อยู่ใต้ fold
@@ -57,11 +57,6 @@ function formatScore(value: number) {
 function percent(value: number, max: number) {
   if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) return 0;
   return Math.max(4, Math.min(100, (value / max) * 100));
-}
-
-function rankPercent(rank: number, count: number) {
-  if (!Number.isFinite(rank) || !Number.isFinite(count) || count <= 1) return 100;
-  return Math.max(5, Math.min(100, ((count - rank + 1) / count) * 100));
 }
 
 function formatPublishedAt(value: string | Date | null) {
@@ -138,12 +133,13 @@ export function ResultContent({ result }: { result: StudentResult }) {
   const maxSuffix = (max?: number, size = "text-sm") =>
     max && max > 0 ? <span className={`${size} font-normal opacity-60`}>/{formatScore(max)}</span> : null;
 
+  const total = result.statistics.total;
+  const totalCmpMax = Math.max(total.score, total.roomAverage, total.levelAverage, 1);
+
   return (
     <article className="overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/95 shadow-[0_24px_70px_rgba(219,39,119,0.16)]">
       <style>{confettiCss}</style>
       <header className="relative overflow-hidden bg-[linear-gradient(135deg,#38bdf8_0%,#a78bfa_52%,#f472b6_100%)] p-4 md:p-6">
-        <div className="pointer-events-none absolute right-3 top-2 text-lg opacity-90">✨</div>
-        <div className="pointer-events-none absolute right-12 bottom-2 text-sm opacity-80">⭐️</div>
         {celebrate && (
           <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
             {CONFETTI.map((c, i) => (
@@ -161,7 +157,7 @@ export function ResultContent({ result }: { result: StudentResult }) {
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-lg font-semibold leading-tight text-white md:text-2xl">🌸 {result.school.schoolName}</p>
+            <p className="text-lg font-semibold leading-tight text-white md:text-2xl">{result.school.schoolName}</p>
             <h1 className="mt-1 text-base font-semibold leading-snug text-white/95 md:text-2xl">{result.exam.name}</h1>
             <p className="mt-2 text-xs text-white/85 md:text-sm">
               ระดับชั้น {result.exam.classLevel}
@@ -171,23 +167,44 @@ export function ResultContent({ result }: { result: StudentResult }) {
         </div>
       </header>
 
-      <div className="p-3 md:p-6">
-        <div className="rounded-[1.5rem] bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-4 ring-1 ring-white/70 shadow-[0_10px_30px_rgba(14,165,233,0.08)]">
-          <span className={`inline-flex w-fit items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm bg-gradient-to-r ${celebrate ? "from-emerald-400 to-green-500" : result.result.status === "REVIEW" ? "from-amber-400 to-amber-500" : "from-slate-400 to-slate-500"}`}>
+      <div className="space-y-5 p-3 md:p-6">
+        {/* ── บล็อก 1: สรุปผล (สถานะ + ชื่อ + คะแนนรวมเด่น + อันดับ) ── */}
+        <section className="rounded-[1.5rem] bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-4 ring-1 ring-white/70 shadow-[0_10px_30px_rgba(14,165,233,0.08)] md:p-5">
+          <span className={`inline-flex w-fit items-center gap-1 rounded-full px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm bg-gradient-to-r ${celebrate ? "from-emerald-400 to-green-500" : result.result.status === "REVIEW" ? "from-amber-400 to-amber-500" : "from-slate-400 to-slate-500"}`}>
             {celebrate ? "🎉 " : ""}{statusText[result.result.status]}
           </span>
-          <div className="mt-2.5">
+          <div className="mt-3">
             <p className="text-xs font-medium text-[var(--text-muted)]">ผู้เข้าสอบ</p>
-            <h2 className="mt-1 text-2xl font-semibold leading-tight md:text-3xl">{result.student.name}</h2>
-            <p className="mt-1.5 text-sm text-[var(--text-muted)]">
-              รหัส {result.student.examNo} · {result.student.classLevel}/{result.student.room}
+            <h2 className="mt-0.5 text-2xl font-semibold leading-tight md:text-3xl">{result.student.name}</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              รหัส {result.student.examNo} · ห้อง {result.student.classLevel}/{result.student.room}
             </p>
           </div>
-        </div>
 
-        <section className="mt-4">
-          <SectionTitle title="คะแนนรายวิชา" emoji="📊" />
-          <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {/* คะแนนรวม — ตัวเลขเด่นที่สุด */}
+            <div className="col-span-2 rounded-[1.35rem] bg-gradient-to-br from-pink-100 to-pink-50 p-4 shadow-[0_8px_24px_rgba(244,114,182,0.10)] sm:col-span-1">
+              <div className="text-xs font-semibold text-pink-700/80 md:text-sm">🏆 คะแนนรวม</div>
+              <div className="mt-1 text-[2rem] font-bold leading-none text-pink-700 md:text-[2.4rem]">
+                {formatScore(result.result.totalScore)}{maxSuffix(totalMax, "text-lg")}
+              </div>
+            </div>
+            <Metric emoji="🥇" label="อันดับในห้อง" value={`${total.roomRank}/${total.roomCount}`} tone="sky" />
+            <Metric emoji="🎖" label="อันดับในชั้น" value={`${total.levelRank}/${total.levelCount}`} tone="violet" />
+          </div>
+
+          {celebrate && (
+            <div className="mt-3 overflow-hidden rounded-[1.35rem] bg-[linear-gradient(135deg,#dcfce7,#d1fae5)] px-4 py-3.5 ring-1 ring-emerald-100">
+              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">🎉 {passTitle}</div>
+              <p className="mt-1.5 whitespace-pre-line text-sm leading-6 text-emerald-900/80">{passInstructions}</p>
+            </div>
+          )}
+        </section>
+
+        {/* ── บล็อก 2: คะแนนแต่ละวิชา ── */}
+        <section>
+          <SectionTitle title="คะแนนแต่ละวิชา" emoji="📘" />
+          <div className="grid grid-cols-2 gap-2.5">
             {Object.entries(result.result.scoreBreakdown).map(([subject, score], idx) => {
               const sky = idx % 2 === 0;
               return (
@@ -200,40 +217,23 @@ export function ResultContent({ result }: { result: StudentResult }) {
           </div>
         </section>
 
-        <div className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-          <Metric emoji="🏆" label="คะแนนรวม" value={<>{formatScore(result.result.totalScore)}{maxSuffix(totalMax, "text-base")}</>} tone="pink" />
-          <Metric emoji="🥇" label="อันดับในห้อง" value={`${result.statistics.total.roomRank}/${result.statistics.total.roomCount}`} tone="sky" />
-          <Metric emoji="🎖" label="อันดับในชั้น" value={`${result.statistics.total.levelRank}/${result.statistics.total.levelCount}`} tone="violet" />
-          <Metric emoji={celebrate ? "✓" : "•"} label="สถานะ" value={statusText[result.result.status]} tone={celebrate ? "emerald" : "slate"} />
-        </div>
-
-        {celebrate && (
-          <section className="mt-4 overflow-hidden rounded-[1.35rem] bg-[linear-gradient(135deg,#dcfce7,#d1fae5)] px-4 py-3.5 ring-1 ring-emerald-100">
-            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
-              🎉 {passTitle}
+        {/* ── บล็อก 3: เทียบกับเพื่อน ๆ (คะแนนรวม + รายวิชา รวมเป็นหัวข้อเดียว) ── */}
+        <section>
+          <SectionTitle title="เทียบกับเพื่อน ๆ" icon={<BarChart3 size={18} />} />
+          <p className="-mt-1 mb-2.5 text-xs text-[var(--text-muted)]">
+            แถบยิ่งยาว = คะแนนยิ่งสูง ดูว่าคะแนนของเราเทียบกับค่าเฉลี่ยห้องและทั้งชั้นเป็นอย่างไร
+          </p>
+          <div className="space-y-3">
+            <div className="rounded-[1.35rem] border border-sky-100 bg-[linear-gradient(135deg,#ffffff,#f0f9ff)] p-4 shadow-[0_10px_30px_rgba(14,165,233,0.08)]">
+              <p className="mb-3 text-sm font-semibold text-sky-900">คะแนนรวม</p>
+              <div className="space-y-2.5">
+                <ChartBar label="ของเรา" value={total.score} max={totalCmpMax} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" highlight />
+                <ChartBar label="เฉลี่ยห้อง" value={total.roomAverage} max={totalCmpMax} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
+                <ChartBar label="เฉลี่ยทั้งชั้น" value={total.levelAverage} max={totalCmpMax} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
+              </div>
             </div>
-            <p className="mt-1.5 whitespace-pre-line text-sm leading-6 text-emerald-900/80">
-              {passInstructions}
-            </p>
-          </section>
-        )}
-
-        <section className="mt-5">
-          <SectionTitle title="สถิติเปรียบเทียบคะแนนรวม" icon={<BarChart3 size={18} />} />
-          <TotalComparisonChart
-            score={result.statistics.total.score}
-            roomAverage={result.statistics.total.roomAverage}
-            levelAverage={result.statistics.total.levelAverage}
-            roomRank={result.statistics.total.roomRank}
-            levelRank={result.statistics.total.levelRank}
-            roomCount={result.statistics.total.roomCount}
-            levelCount={result.statistics.total.levelCount}
-          />
-        </section>
-
-        <section className="mt-5">
-          <SectionTitle title="สถิติเปรียบเทียบคะแนนรายวิชา" icon={<BarChart3 size={18} />} />
-          <SubjectComparisonCharts subjects={result.statistics.subjects} />
+            <SubjectComparisonCharts subjects={result.statistics.subjects} />
+          </div>
         </section>
 
         <DevelopmentStatsPanel result={result} />
@@ -308,90 +308,28 @@ function SectionTitle({ title, icon, emoji }: { title: string; icon?: ReactNode;
   );
 }
 
-function TotalComparisonChart({
-  score,
-  roomAverage,
-  levelAverage,
-  roomRank,
-  levelRank,
-  roomCount,
-  levelCount,
-}: {
-  score: number;
-  roomAverage: number;
-  levelAverage: number;
-  roomRank: number;
-  levelRank: number;
-  roomCount: number;
-  levelCount: number;
-}) {
-  const maxScore = Math.max(score, roomAverage, levelAverage, 1);
-  return (
-    <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-      <div className="rounded-[1.35rem] border border-sky-100 bg-[linear-gradient(135deg,#ffffff,#f0f9ff)] p-4 shadow-[0_10px_30px_rgba(14,165,233,0.08)]">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-sky-900">คะแนนรวมเทียบค่าเฉลี่ย</p>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">เทียบคะแนนนักเรียนกับค่าเฉลี่ยห้องและทั้งชั้น</p>
-          </div>
-          <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm ring-1 ring-sky-100">
-            <p className="text-xs text-sky-700">คะแนนรวม</p>
-            <p className="text-2xl font-semibold text-slate-950">{formatScore(score)}</p>
-          </div>
-        </div>
-        <div className="space-y-3">
-          <ChartBar label="นักเรียน" value={score} max={maxScore} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" />
-          <ChartBar label="เฉลี่ยห้อง" value={roomAverage} max={maxScore} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
-          <ChartBar label="เฉลี่ยทั้งชั้น" value={levelAverage} max={maxScore} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
-        </div>
-      </div>
-
-      <div className="rounded-[1.35rem] border border-sky-100 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
-        <div className="mb-3 flex items-center gap-2">
-          <Trophy size={18} className="text-pink-500" />
-          <p className="text-sm font-semibold text-slate-900">อันดับคะแนนรวม</p>
-        </div>
-        <div className="space-y-3">
-          <RankBar label="อันดับในห้อง" rank={roomRank} count={roomCount} />
-          <RankBar label="อันดับทั้งชั้น" rank={levelRank} count={levelCount} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SubjectComparisonCharts({
   subjects,
 }: {
   subjects: StudentResult["statistics"]["subjects"];
 }) {
   return (
-    <div className="grid gap-3">
+    <div className="space-y-3">
       {subjects.map((subject) => {
         const maxScore = Math.max(subject.score, subject.roomAverage, subject.levelAverage, 1);
         return (
           <article key={subject.id} className="rounded-[1.35rem] border border-sky-100 bg-white p-3.5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h4 className="text-base font-semibold text-slate-950">{subject.name}</h4>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">เทียบค่าเฉลี่ยและอันดับรายวิชา</p>
-              </div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-base font-semibold text-slate-950">{subject.name}</h4>
               <div className="flex gap-2 text-xs">
                 <span className="rounded-full bg-sky-50 px-3 py-1 font-semibold text-sky-700">ห้อง {subject.roomRank}/{subject.roomCount}</span>
                 <span className="rounded-full bg-pink-50 px-3 py-1 font-semibold text-pink-700">ชั้น {subject.levelRank}/{subject.levelCount}</span>
               </div>
             </div>
-
-            <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-              <div className="space-y-3">
-                <ChartBar label="นักเรียน" value={subject.score} max={maxScore} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" />
-                <ChartBar label="เฉลี่ยห้อง" value={subject.roomAverage} max={maxScore} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
-                <ChartBar label="เฉลี่ยทั้งชั้น" value={subject.levelAverage} max={maxScore} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
-              </div>
-              <div className="space-y-3 rounded-2xl bg-[#f8fbff] p-3">
-                <RankBar label="อันดับห้อง" rank={subject.roomRank} count={subject.roomCount} compact />
-                <RankBar label="อันดับทั้งชั้น" rank={subject.levelRank} count={subject.levelCount} compact />
-              </div>
+            <div className="space-y-2.5">
+              <ChartBar label="ของเรา" value={subject.score} max={maxScore} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" highlight />
+              <ChartBar label="เฉลี่ยห้อง" value={subject.roomAverage} max={maxScore} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
+              <ChartBar label="เฉลี่ยทั้งชั้น" value={subject.levelAverage} max={maxScore} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
             </div>
           </article>
         );
@@ -406,39 +344,24 @@ function ChartBar({
   max,
   colorClass,
   valueClass,
+  highlight = false,
 }: {
   label: string;
   value: number;
   max: number;
   colorClass: string;
   valueClass: string;
+  highlight?: boolean;
 }) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-        <span className="font-medium text-slate-700">{label}</span>
+        <span className={highlight ? "font-semibold text-slate-900" : "font-medium text-slate-600"}>{label}</span>
         <span className={`font-semibold ${valueClass}`}>{formatScore(value)}</span>
       </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 md:h-3">
+      <div className={`overflow-hidden rounded-full bg-slate-100 ${highlight ? "h-3 md:h-3.5" : "h-2.5"}`}>
         <div className={`h-full rounded-full ${colorClass}`} style={{ width: `${percent(value, max)}%` }} />
       </div>
-    </div>
-  );
-}
-
-function RankBar({ label, rank, count, compact = false }: { label: string; rank: number; count: number; compact?: boolean }) {
-  const width = rankPercent(rank, count);
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-        <span className="font-medium text-slate-700">{label}</span>
-        <span className="font-semibold text-slate-950">{rank}/{count}</span>
-      </div>
-      <div className={`${compact ? "h-2.5" : "h-3"} overflow-hidden rounded-full bg-slate-100`}>
-        <div className="h-full rounded-full bg-[linear-gradient(90deg,#f9a8d4,#38bdf8)]" style={{ width: `${width}%` }} />
-      </div>
-      {/* แสดงคำอธิบายเฉพาะแบบเต็ม (คะแนนรวม) — แบบ compact รายวิชาตัดออกเพื่อลดความยาวหน้า */}
-      {!compact && <p className="mt-1 text-xs text-[var(--text-muted)]">แถบยิ่งยาว หมายถึงอันดับยิ่งอยู่ด้านบน</p>}
     </div>
   );
 }
