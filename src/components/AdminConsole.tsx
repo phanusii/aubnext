@@ -14,6 +14,7 @@ import {
   ImageUp,
   Link2,
   ListChecks,
+  LogOut,
   LogIn,
   Megaphone,
   Pencil,
@@ -367,6 +368,19 @@ export function AdminConsole() {
     setMessage("เข้าสู่ระบบแล้ว");
     await loadAdminSettings();
     await loadExams();
+  }
+
+  async function logout() {
+    setBusy(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ถ้าเรียกไม่สำเร็จก็ยังออกจากระบบฝั่งหน้าจอได้ (cookie หมดอายุเองอยู่แล้ว)
+    }
+    setBusy(false);
+    setIsLoggedIn(false);
+    setPassword("");
+    setMessage("ออกจากระบบแล้ว");
   }
 
   async function saveSettings() {
@@ -1105,6 +1119,17 @@ export function AdminConsole() {
                     <Download size={16} />
                     ดาวน์โหลดไฟล์สำรองข้อมูล
                   </a>
+                </div>
+                <div className="mt-5 border-t border-[var(--border-soft)] pt-4">
+                  <button
+                    type="button"
+                    onClick={logout}
+                    disabled={busy}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 sm:w-auto"
+                  >
+                    <LogOut size={16} />
+                    ออกจากระบบ
+                  </button>
                 </div>
               </div>
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
