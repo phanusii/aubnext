@@ -1,5 +1,5 @@
-// รัน function ใน region เดียวกับ Postgres (สิงคโปร์) — ลด round-trip ต่อ query ของเว็บเช็คผล
-export const preferredRegion = "sin1";
+// รัน function ใน region เดียวกับ DB (US East) — ลด round-trip ต่อ query ของเว็บเช็คผล
+export const preferredRegion = "iad1";
 
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";

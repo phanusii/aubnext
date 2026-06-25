@@ -10,8 +10,8 @@ import {
   studentResultCookieName,
 } from "@/lib/security";
 
-// preferredRegion = sin1 มีผลตอน resolver รันจริง (อ่าน cookie + lookup ผล) ให้ query ไม่ข้าม region
-export const preferredRegion = "sin1";
+// preferredRegion = iad1 มีผลตอน resolver รันจริง (อ่าน cookie + lookup ผล) ให้ query ไม่ข้าม region
+export const preferredRegion = "iad1";
 
 // โครงโหลด = static shell ที่ serve จาก CDN ทันที ระหว่างที่ resolver กำลังอ่าน cookie + ผลคะแนน stream เข้ามา
 function ResultLoadingShell() {

@@ -4,9 +4,9 @@ import { CheckResultForm } from "@/components/CheckResultForm";
 import { PublicBrandingCard, PublicBrandingCardSkeleton } from "@/components/PublicBrandingCard";
 import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 
-// preferredRegion = sin1 มีผลเฉพาะตอน function รันจริง (revalidate / cache miss) ให้ query ไม่ข้าม region
+// preferredRegion = iad1 มีผลเฉพาะตอน function รันจริง (revalidate / cache miss) ให้ query ไม่ข้าม region
 // ฟอร์ม + หัวข้อ + footer เป็น static shell (prerender + serve จาก CDN) ส่วนการ์ด settings stream เข้ามาทีหลัง
-export const preferredRegion = "sin1";
+export const preferredRegion = "iad1";
 
 async function SettingsHeader() {
   // เป็น dynamic hole: render ตอน request (เลยไม่ต้องแตะ DB ตอน build) แต่ตัว data อ่านจาก use cache
