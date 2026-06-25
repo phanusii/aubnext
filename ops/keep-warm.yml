@@ -1,0 +1,59 @@
+# ⚙️ วิธีเปิดใช้: ย้ายไฟล์นี้ไปที่ .github/workflows/keep-warm.yml
+#    (AI push เข้า .github/workflows ไม่ได้เพราะ token ไม่มี workflow scope จึงวางที่ ops/ ก่อน)
+#    เปิดใช้: หน้าเว็บ GitHub → Add file → Create new file → ตั้งชื่อ
+#    ".github/workflows/keep-warm.yml" → วางเนื้อหานี้ทั้งหมด → Commit
+#    หรือในเครื่อง: `gh auth refresh -s workflow` แล้ว `git mv ops/keep-warm.yml .github/workflows/`
+#
+# ปลุก Neon DB ให้ตื่นล่วงหน้า เฉพาะช่วงที่นักเรียนเช็คผลจริง (กัน cold start คนแรก ~1-2 วิ)
+#
+# ⚠️ ทำไมไม่ปิงทั้งวัน: Neon free compute quota แชร์กับ project อื่นในบัญชีเดียวกัน (homework-app)
+#    ถ้าปิงตลอด 24 ชม. DB จะไม่หลับเลย → เผาโควตาจนอาจโดน suspend ทั้งสอง app
+#    จึงจำกัดเฉพาะหน้าต่างเวลาเย็น (ปรับ cron ด้านล่างให้ตรงช่วงประกาศผลของคุณได้)
+#
+# การตั้งค่า (ทำครั้งเดียว):
+#   1. ตั้ง env KEEP_WARM_SECRET ใน Vercel (Settings → Environment Variables) แล้ว redeploy
+#   2. ตั้ง GitHub repo secret 2 ตัว (Settings → Secrets → Actions):
+#        KEEP_WARM_URL    = https://<โดเมน production ของคุณ>/api/keep-warm
+#        KEEP_WARM_SECRET = ค่าเดียวกับที่ตั้งใน Vercel
+#   ถ้ายังไม่ตั้ง secret workflow จะข้าม (ไม่ทำอะไร) ไม่พัง
+#
+# หมายเหตุ: GitHub Actions cron ขั้นต่ำ 5 นาที และบางครั้งดีเลย์ไม่ตรงเป๊ะ — โอเคสำหรับ keep-warm
+#           (อย่างมากคือนาน ๆ ครั้งเจอ cold start สั้น ๆ)
+
+name: keep-warm
+
+on:
+  # UTC! ไทย = UTC+7 → ช่วงนี้ = 15:00–20:59 ไทย (เลิกเรียน–ค่ำ) ปรับได้ตามต้องการ
+  schedule:
+    - cron: "*/5 8-13 * * *"
+  workflow_dispatch: {} # กดรันเองได้ใน Actions ตอนจะประกาศนอกเวลา
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping keep-warm endpoint
+        env:
+          URL: ${{ secrets.KEEP_WARM_URL }}
+          SECRET: ${{ secrets.KEEP_WARM_SECRET }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "KEEP_WARM_URL ยังไม่ได้ตั้ง — ข้าม"
+            exit 0
+          fi
+          target="$URL"
+          if [ -n "$SECRET" ]; then
+            case "$URL" in
+              *\?*) target="$URL&key=$SECRET" ;;
+              *)    target="$URL?key=$SECRET" ;;
+            esac
+          fi
+          code=$(curl -s -o /tmp/body -w "%{http_code}" --max-time 30 "$target")
+          echo "HTTP $code"
+          cat /tmp/body || true
+          # 200 = ตื่นแล้ว, อย่าทำให้ job แดงถ้าแค่ DB ตื่นช้า/503 ชั่วคราว
+          [ "$code" = "200" ] || echo "::warning::keep-warm ตอบ $code (DB อาจกำลังตื่น)"
