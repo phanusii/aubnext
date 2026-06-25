@@ -76,7 +76,7 @@ export function CheckResultForm({ header }: { header: ReactNode }) {
                 className="app-input mt-2 h-14 rounded-2xl border-sky-100 bg-white text-center text-2xl font-semibold tracking-wide shadow-inner focus:border-sky-300"
                 inputMode="numeric"
                 autoComplete="off"
-                placeholder="เช่น 21410"
+                placeholder="เช่น 12345"
               />
             </label>
             <button type="submit" disabled={busy || isPending || !examNo.trim()} className="app-button-primary h-14 w-full rounded-2xl px-6 text-base">
