@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { getExamScoreSheet, saveExamScores } from "@/lib/repository";
 
-export const preferredRegion = "sin1";
+export const preferredRegion = "iad1";
 
 // โหลดตารางกรอกคะแนน (วิชา + นักเรียน + คะแนนที่กรอกไว้)
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {

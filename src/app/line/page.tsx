@@ -4,8 +4,8 @@ import { Loader2 } from "lucide-react";
 import { LinePortal } from "@/components/LinePortal";
 import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 
-// preferredRegion = sin1 มีผลตอน fetch settings จริง (revalidate / cache miss) ให้ query ไม่ข้าม region
-export const preferredRegion = "sin1";
+// preferredRegion = iad1 มีผลตอน fetch settings จริง (revalidate / cache miss) ให้ query ไม่ข้าม region
+export const preferredRegion = "iad1";
 
 async function LinePortalWithSettings() {
   // dynamic hole: render ตอน request (ไม่แตะ DB ตอน build) แต่ data อ่านจาก use cache

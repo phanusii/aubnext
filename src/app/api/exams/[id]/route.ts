@@ -1,4 +1,4 @@
-export const preferredRegion = "sin1";
+export const preferredRegion = "iad1";
 
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
