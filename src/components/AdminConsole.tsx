@@ -90,6 +90,7 @@ const resultStatusOptions: Array<{ value: ResultStatusFilter; label: string }> =
   { value: "PASSED", label: "ผ่านเกณฑ์" },
   { value: "REVIEW", label: "รอตรวจ" },
   { value: "FAILED", label: "ไม่ผ่าน" },
+  { value: "ABSENT", label: "ไม่ได้เข้าสอบ" },
 ];
 
 const resultSortOptions: Array<{ value: ResultSort; label: string }> = [
@@ -873,7 +874,8 @@ export function AdminConsole() {
     const passed = visibleResults.filter((result) => result.status === "PASSED").length;
     const review = visibleResults.filter((result) => result.status === "REVIEW").length;
     const failed = visibleResults.filter((result) => result.status === "FAILED").length;
-    return { passed, review, failed, total: visibleResults.length };
+    const absent = visibleResults.filter((result) => result.status === "ABSENT").length;
+    return { passed, review, failed, absent, total: visibleResults.length };
   }, [visibleResults]);
   const resultExportSummary = useMemo(() => {
     const passed = calculatedResults.filter((result) => result.status === "PASSED").length;
@@ -1537,11 +1539,12 @@ export function AdminConsole() {
               ))}
             </div>
 
-            <div className="mb-4 grid gap-3 md:grid-cols-4">
+            <div className="mb-4 grid gap-3 md:grid-cols-5">
               <Metric label="ที่แสดง" value={`${visibleResultSummary.total} คน`} />
               <Metric label="ผ่านเกณฑ์" value={`${visibleResultSummary.passed} คน`} />
               <Metric label="รอตรวจ" value={`${visibleResultSummary.review} คน`} />
               <Metric label="ไม่ผ่าน" value={`${visibleResultSummary.failed} คน`} />
+              <Metric label="ไม่ได้เข้าสอบ" value={`${visibleResultSummary.absent} คน`} />
             </div>
 
             <div className={cx(
