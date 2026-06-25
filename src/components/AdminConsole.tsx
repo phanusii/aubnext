@@ -168,6 +168,7 @@ export function AdminConsole() {
   const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
   const [resultSort, setResultSort] = useState<ResultSort>("rank");
+  const [excelOpen, setExcelOpen] = useState(false);
   const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
   // ลิงก์เพิ่มเพื่อนบัญชี LINE OA (ให้นักเรียนกดเพิ่มเพื่อนก่อนเช็คผล) — ตั้งทับได้ด้วย NEXT_PUBLIC_LINE_ADD_FRIEND_URL
   const lineAddFriendUrl = process.env.NEXT_PUBLIC_LINE_ADD_FRIEND_URL || "https://lin.ee/OXREHbG";
@@ -1629,13 +1630,16 @@ export function AdminConsole() {
             </div>
 
             <div className="mb-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setExcelOpen((current) => !current)}
+                  aria-expanded={excelOpen}
+                  className="flex min-w-0 items-center gap-2 text-left"
+                >
                   <h3 className="font-semibold text-[var(--text-main)]">ดาวน์โหลด Excel</h3>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    เลือกกลุ่มข้อมูล แล้วดาวน์โหลดได้ทั้งแบบแยกชีตตามห้อง หรือแบบชีตเดียวรวมทุกห้อง
-                  </p>
-                </div>
+                  <ChevronDown size={18} className={cx("shrink-0 text-[var(--text-muted)] transition-transform", excelOpen && "rotate-180")} />
+                </button>
                 <button
                   type="button"
                   onClick={deletePublishedResults}
@@ -1647,6 +1651,7 @@ export function AdminConsole() {
                 </button>
               </div>
 
+              {excelOpen && (
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
                 <ExcelExportGroup
                   title="ทั้งหมด"
@@ -1667,6 +1672,7 @@ export function AdminConsole() {
                   singleUrl={resultExportUrl("failed", "single")}
                 />
               </div>
+              )}
             </div>
 
             {resultsLoading ? (
@@ -1853,26 +1859,16 @@ function FilterControlGroup({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--border-soft)] bg-white p-3 shadow-[0_8px_24px_rgba(14,165,233,0.04)]">
-      <div className="mb-2 text-xs font-semibold text-[var(--text-muted)]">{label}</div>
-      <div className="grid gap-2 sm:grid-cols-2">
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]">{label}</span>
+      <select className="app-input" value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={cx(
-              "min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition",
-              value === option.value
-                ? "border-sky-200 bg-sky-50 text-[var(--primary-blue-strong)] shadow-sm"
-                : "border-[var(--border-soft)] bg-[#fbfdff] text-[var(--text-muted)] hover:border-sky-100 hover:bg-sky-50/60",
-            )}
-          >
+          <option key={option.value} value={option.value}>
             {option.label}
-          </button>
+          </option>
         ))}
-      </div>
-    </div>
+      </select>
+    </label>
   );
 }
 
