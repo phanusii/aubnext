@@ -31,7 +31,9 @@ async function getCachedPublishedStudentResultSessionByExamNo(examNo: string) {
   "use cache";
   // args (examNo) เป็น cache key อัตโนมัติ — ไม่ต้องระบุ keyParts เองอีกต่อไป
   cacheTag(publicStudentResultCacheTag, publicSettingsCacheTag);
-  cacheLife({ stale: 300, revalidate: 300, expire: 86400 });
+  // ผลคะแนนไม่เปลี่ยนจนกว่าจะประกาศ/แก้ไขใหม่ (ซึ่ง revalidateTag ล้าง cache ทันทีอยู่แล้ว)
+  // → cache นาน 1 ชม. ได้อย่างปลอดภัย ลดการ revalidate ที่ไม่จำเป็น และกัน Neon โดน query ซ้ำตอนคนแห่เช็ค
+  cacheLife({ stale: 3600, revalidate: 3600, expire: 86400 });
   return findPublishedStudentResultSession({ examNo });
 }
 
@@ -42,7 +44,9 @@ async function getCachedPublishedStudentResultSessionByLookup(
 ) {
   "use cache";
   cacheTag(publicStudentResultCacheTag, publicSettingsCacheTag);
-  cacheLife({ stale: 300, revalidate: 300, expire: 86400 });
+  // ผลคะแนนไม่เปลี่ยนจนกว่าจะประกาศ/แก้ไขใหม่ (ซึ่ง revalidateTag ล้าง cache ทันทีอยู่แล้ว)
+  // → cache นาน 1 ชม. ได้อย่างปลอดภัย ลดการ revalidate ที่ไม่จำเป็น และกัน Neon โดน query ซ้ำตอนคนแห่เช็ค
+  cacheLife({ stale: 3600, revalidate: 3600, expire: 86400 });
   return findPublishedStudentResultSession({
     examNo,
     studentId: studentId || undefined,
