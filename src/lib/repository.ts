@@ -325,6 +325,8 @@ export async function updateExamSession(input: {
   classLevel?: string;
   selectionMode?: "PER_ROOM" | "WHOLE_LEVEL";
   wholeLevelQuota?: number | null;
+  passTitle?: string | null;
+  passInstructions?: string | null;
 }) {
   const prisma = getPrisma();
   const current = await prisma.examSession.findUnique({
@@ -368,6 +370,8 @@ export async function updateExamSession(input: {
         ...(input.selectionMode || input.wholeLevelQuota !== undefined
           ? { wholeLevelQuota: nextWholeLevelQuota }
           : {}),
+        ...(input.passTitle !== undefined ? { passTitle: input.passTitle?.trim() || null } : {}),
+        ...(input.passInstructions !== undefined ? { passInstructions: input.passInstructions?.trim() || null } : {}),
         ...(rankingRuleChanged ? { status: "DRAFT" as const, publishedAt: null } : {}),
       },
     });
