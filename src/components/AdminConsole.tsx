@@ -515,6 +515,8 @@ export function AdminConsole() {
         classLevel: editClassLevel,
         selectionMode: editSelectionMode,
         wholeLevelQuota: editSelectionMode === "WHOLE_LEVEL" ? editWholeQuota : null,
+        passTitle,
+        passInstructions,
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -1284,39 +1286,41 @@ export function AdminConsole() {
                       <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
                         เปลี่ยนรูปแบบคัดเลือกหรือจำนวนผู้ผ่านทั้งชั้น ระบบจะล้างผลที่คำนวณไว้ ต้องคำนวณและประกาศผลใหม่
                       </p>
-                      <button type="button" onClick={saveExamDetails} disabled={busy} className="app-button-primary mt-3">
+
+                      <div className="mt-4 border-t border-sky-100 pt-4">
+                        <div className="mb-3 flex items-center gap-2 font-semibold">
+                          <BadgeCheck size={18} />
+                          ข้อความแจ้งผู้ผ่านการคัดเลือก
+                        </div>
+                        <div className="grid gap-3">
+                          <Field label="ผ่านเข้ารอบอะไร">
+                            <input
+                              className="app-input"
+                              value={passTitle}
+                              onChange={(event) => setPassTitle(event.target.value)}
+                              placeholder="เช่น ผ่านเข้ารอบค่ายวิทยาศาสตร์และคณิตศาสตร์"
+                            />
+                          </Field>
+                          <Field label="ต้องดำเนินการอย่างไร">
+                            <textarea
+                              className="app-input min-h-28"
+                              value={passInstructions}
+                              onChange={(event) => setPassInstructions(event.target.value)}
+                              placeholder="เช่น ให้รายงานตัววันที่ 10 มิถุนายน เวลา 08.30 น. พร้อมสำเนาบัตรนักเรียน"
+                            />
+                          </Field>
+                          <p className="text-xs leading-5 text-[var(--text-muted)]">
+                            แสดงเฉพาะนักเรียนที่ผ่านการคัดเลือก · กด “บันทึกการแก้ไข” แล้วข้อความจะอัปเดตให้นักเรียนทันที (ถ้าประกาศผลรอบนี้แล้ว)
+                          </p>
+                        </div>
+                      </div>
+
+                      <button type="button" onClick={saveExamDetails} disabled={busy} className="app-button-primary mt-4">
                         <Save size={16} />
                         บันทึกการแก้ไข
                       </button>
                     </div>
                   )}
-                  <div className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[#fbfdff] p-4">
-                    <div className="mb-3 flex items-center gap-2 font-semibold">
-                      <BadgeCheck size={18} />
-                      ข้อความแจ้งผู้ผ่านการคัดเลือก
-                    </div>
-                    <div className="grid gap-3">
-                      <Field label="ผ่านเข้ารอบอะไร">
-                        <input
-                          className="app-input"
-                          value={passTitle}
-                          onChange={(event) => setPassTitle(event.target.value)}
-                          placeholder="เช่น ผ่านเข้ารอบค่ายวิทยาศาสตร์และคณิตศาสตร์"
-                        />
-                      </Field>
-                      <Field label="ต้องดำเนินการอย่างไร">
-                        <textarea
-                          className="app-input min-h-28"
-                          value={passInstructions}
-                          onChange={(event) => setPassInstructions(event.target.value)}
-                          placeholder="เช่น ให้รายงานตัววันที่ 10 มิถุนายน เวลา 08.30 น. พร้อมสำเนาบัตรนักเรียน"
-                        />
-                      </Field>
-                      <p className="text-xs leading-5 text-[var(--text-muted)]">
-                        ข้อความนี้จะแสดงเฉพาะนักเรียนที่มีสถานะผ่านการคัดเลือก หลังจากกดประกาศผล
-                      </p>
-                    </div>
-                  </div>
                 </>
               ) : (
                 <EmptyState text="ยังไม่มีรอบสอบ เลือกสร้างรอบสอบใหม่ก่อนตั้งห้อง วิชา และนำเข้าคะแนน" />

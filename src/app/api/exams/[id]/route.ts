@@ -13,6 +13,8 @@ const updateSchema = z.object({
   classLevel: z.string().min(1).optional(),
   selectionMode: z.enum(["PER_ROOM", "WHOLE_LEVEL"]).optional(),
   wholeLevelQuota: z.number().int().nonnegative().optional().nullable(),
+  passTitle: z.string().max(300).optional().nullable(),
+  passInstructions: z.string().max(3_000).optional().nullable(),
 });
 
 // แก้ไขข้อมูลรอบสอบ (ชื่อ/ชั้น/รูปแบบคัดเลือก/โควตารวม)
