@@ -34,9 +34,10 @@ export function getLineRichMenuPayload() {
         action: { type: "postback", label: "ดูผลคะแนน", data: "action=check_result" },
       },
       {
-        // postback → webhook รู้ lineUserId ทันที ตอบการ์ดปุ่มเปิดเว็บ (เร็วกว่าเปิด LIFF แล้วค่อยหา profile)
+        // LIFF → แตะเดียวเปิดหน้าเว็บผลคะแนนทันที (รู้ตัวนักเรียนเองไม่ต้องกรอกรหัส ไม่มีการ์ดคั่น)
+        // เร่งความเร็วด้วย fast-path จำ lineUserId (เริ่มโหลดผลทันทีตอน mount ไม่รอ LIFF init)
         bounds: { x: 55, y: 975, width: 1160, height: 455 },
-        action: { type: "postback", label: "เช็คผลผ่านเว็บ", data: "action=result_web" },
+        action: { type: "uri", label: "เช็คผลผ่านเว็บ", uri: getLineLiffUrl({ next: "result" }) },
       },
       {
         bounds: { x: 1260, y: 975, width: 1185, height: 455 },
