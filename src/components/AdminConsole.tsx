@@ -112,6 +112,41 @@ function sortHistoryRows(rows: ResultViewRow[], mode: HistorySort): ResultViewRo
   else arr.sort((a, b) => byScore(a, b) || byRoom(a, b));
   return arr;
 }
+
+// สร้าง CSV ประวัติ (UTF-8 BOM ให้ Excel อ่านภาษาไทยถูก) — ฝั่ง client ล้วน ไม่แตะ DB
+function buildHistoryCsv(rows: ResultViewRow[]): string {
+  const header = ["รหัสนักเรียน", "ชื่อ", "ห้อง", "คะแนนรวม", "อันดับ", "สถานะดู", "ช่องทาง", "จำนวนครั้ง", "เข้าดูล่าสุด"];
+  const esc = (value: string | number) => {
+    const text = String(value ?? "");
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = rows.map((row) =>
+    [
+      row.examNo,
+      row.name,
+      row.room,
+      row.totalScore ?? "",
+      row.rank ?? "",
+      row.viewed ? "เข้าดูแล้ว" : "ยังไม่เข้าดู",
+      row.viewed ? (row.channel === "line" ? "LINE" : "เว็บ") : "",
+      row.viewed ? row.viewCount : "",
+      row.viewed && row.lastViewedAt ? new Date(row.lastViewedAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : "",
+    ]
+      .map(esc)
+      .join(","),
+  );
+  return "﻿" + [header.join(","), ...lines].join("\n");
+}
+
+function downloadCsv(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
 type ResultExportStatus = "all" | "passed" | "failed";
@@ -1807,13 +1842,29 @@ export function AdminConsole() {
                     </button>
                   </div>
 
-                  <div className="mb-3 max-w-xs">
-                    <FilterControlGroup
-                      label="เรียงลำดับ"
-                      value={sortValue}
-                      options={sortOptions}
-                      onChange={(value) => (isViewedTab ? setViewedSort : setNotViewedSort)(value as HistorySort)}
-                    />
+                  <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                    <div className="max-w-xs grow">
+                      <FilterControlGroup
+                        label="เรียงลำดับ"
+                        value={sortValue}
+                        options={sortOptions}
+                        onChange={(value) => (isViewedTab ? setViewedSort : setNotViewedSort)(value as HistorySort)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadCsv(
+                          `ประวัติเข้าดูผล-${isViewedTab ? "เข้าดูแล้ว" : "ยังไม่เข้าดู"}-${selectedExam.classLevel}.csv`,
+                          buildHistoryCsv(rows),
+                        )
+                      }
+                      disabled={rows.length === 0}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
+                    >
+                      <Download size={16} />
+                      CSV
+                    </button>
                   </div>
 
                   {rows.length === 0 ? (
