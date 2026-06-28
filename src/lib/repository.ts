@@ -1,6 +1,6 @@
 import { getPrisma } from "@/lib/prisma";
 import { calculateResults } from "@/lib/ranking";
-import { hashPassword, verifierHash } from "@/lib/security";
+import { hashPassword, signLineResultWebToken, verifierHash } from "@/lib/security";
 import type { LineResultWebLookup } from "@/lib/security";
 import type { Prisma } from "@prisma/client";
 import type { ImportedStudentRow } from "@/lib/excel";
@@ -1876,6 +1876,13 @@ export async function getLineBindingStatus(input: { lineUserId: string }) {
       name: binding.examSession.name,
       status: binding.examSession.status,
     },
+    // token เปิดหน้าผลเว็บได้เลย (ใช้ได้เมื่อรอบสอบ PUBLISHED) — ไม่ต้องกรอกรหัสซ้ำ
+    resultWebToken: signLineResultWebToken({
+      lineUserId: input.lineUserId,
+      examNo: binding.student.examNo,
+      studentId: binding.studentId,
+      examSessionId: binding.examSessionId,
+    }),
   };
 }
 
