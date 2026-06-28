@@ -2,8 +2,9 @@
 export const preferredRegion = "iad1";
 
 import { NextResponse } from "next/server";
-import { buildBindPromptMessage, buildResultFlexMessage, hasLineMessagingConfig, replyLineMessage, startLineLoading, verifyLineSignature } from "@/lib/line-messaging";
+import { buildBindPromptMessage, buildResultFlexMessage, buildResultWebButtonMessage, hasLineMessagingConfig, replyLineMessage, startLineLoading, verifyLineSignature } from "@/lib/line-messaging";
 import { getLineBoundResult } from "@/lib/repository";
+import { signLineResultWebToken } from "@/lib/security";
 
 type LineWebhookEvent = {
   type: string;
@@ -32,6 +33,14 @@ function isCheckResultEvent(event: LineWebhookEvent) {
   }
 
   return false;
+}
+
+// postback "เปิดผลผ่านเว็บ" จาก rich menu (ตั้งใน LINE console: postback data = action=result_web)
+// ตอบเป็นการ์ดปุ่มเปิดเว็บ โดยไม่ต้องผ่าน LIFF → เร็วกว่า
+function isResultWebEvent(event: LineWebhookEvent) {
+  if (event.type !== "postback") return false;
+  const data = new URLSearchParams(event.postback?.data ?? "");
+  return data.get("action") === "result_web";
 }
 
 function createLineWebhookTrace() {
@@ -89,7 +98,9 @@ export async function POST(request: Request) {
 
   await Promise.all(
     events.map(async (event) => {
-      if (!isCheckResultEvent(event) || !event.replyToken) return;
+      if (!event.replyToken) return;
+      const wantsResultWeb = isResultWebEvent(event);
+      if (!isCheckResultEvent(event) && !wantsResultWeb) return;
 
       const lineUserId = event.source?.userId;
       const eventTrace = createLineWebhookTrace();
@@ -97,6 +108,22 @@ export async function POST(request: Request) {
         if (!lineUserId) {
           await replyLineMessage(event.replyToken, [buildBindPromptMessage("ไม่พบ LINE userId กรุณาเปิดจากบัญชี LINE ส่วนตัว")]);
           eventTrace.done("missing_user_id");
+          return;
+        }
+
+        // "เปิดผลผ่านเว็บ": หา binding → ตอบการ์ดปุ่มลิงก์เว็บ (ไม่ต้องผ่าน LIFF)
+        if (wantsResultWeb) {
+          const bound = await getLineBoundResult({ lineUserId });
+          eventTrace.mark("result_web_lookup", { ok: bound.ok });
+          if (!bound.ok) {
+            await replyLineMessage(event.replyToken, [buildBindPromptMessage(bound.error)]);
+            eventTrace.done("result_web_bind_prompt");
+            return;
+          }
+          const token = signLineResultWebToken(bound.lookup);
+          const url = `${new URL(request.url).origin}/line/result-web?token=${encodeURIComponent(token)}`;
+          await replyLineMessage(event.replyToken, [buildResultWebButtonMessage(url)]);
+          eventTrace.done("result_web_button");
           return;
         }
 

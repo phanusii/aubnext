@@ -171,6 +171,49 @@ export function buildBindPromptMessage(error?: string) {
   };
 }
 
+// การ์ดปุ่มเปิด "ผลคะแนนแบบเต็ม" บนเว็บ — ใช้ตอบ postback จาก rich menu โดยไม่ต้องผ่าน LIFF
+// (เร็วกว่า เพราะ webhook รู้ lineUserId อยู่แล้ว ไม่ต้องโหลด/ล็อกอิน LIFF)
+export function buildResultWebButtonMessage(resultWebUrl: string, studentName?: string) {
+  return {
+    type: "flex",
+    altText: studentName ? `เปิดผลคะแนนของ ${studentName}` : "เปิดผลคะแนนแบบเต็ม",
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "20px",
+        contents: [
+          { type: "text", text: "ผลคะแนนพร้อมแล้ว", weight: "bold", size: "lg", color: "#172033" },
+          {
+            type: "text",
+            text: studentName
+              ? `กดปุ่มด้านล่างเพื่อเปิดผลคะแนนแบบเต็มของ ${studentName}`
+              : "กดปุ่มด้านล่างเพื่อเปิดผลคะแนนแบบเต็มบนเว็บ",
+            wrap: true,
+            size: "sm",
+            color: "#667085",
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#0ea5e9",
+            action: { type: "uri", label: "เปิดผลคะแนนแบบเต็ม", uri: resultWebUrl },
+          },
+        ],
+      },
+    },
+  };
+}
+
 export function buildResultFlexMessage(result: LineStudentResult, webLookup?: LineResultWebLookup) {
   const webResultUrl = webLookup
     ? `${baseUrl()}/line/result-web?token=${encodeURIComponent(signLineResultWebToken(webLookup))}`
