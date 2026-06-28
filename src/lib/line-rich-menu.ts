@@ -34,10 +34,10 @@ export function getLineRichMenuPayload() {
         action: { type: "postback", label: "ดูผลคะแนน", data: "action=check_result" },
       },
       {
-        // LIFF → แตะเดียวเปิดหน้าเว็บผลคะแนนทันที (รู้ตัวนักเรียนเองไม่ต้องกรอกรหัส ไม่มีการ์ดคั่น)
-        // เร่งความเร็วด้วย fast-path จำ lineUserId (เริ่มโหลดผลทันทีตอน mount ไม่รอ LIFF init)
+        // ลิงก์ตรงเข้าหน้าผล (ไม่ผ่าน LIFF) — ถ้ามี cookie ระบุตัวแบบยาวจะเปิดผลทันที (เร็วสุด ไม่มีการ์ด)
+        // ครั้งแรกที่ยังไม่มี cookie หน้าเว็บจะเด้งไป LIFF ให้เองเพื่อระบุตัว แล้วครั้งต่อไปจะเร็ว
         bounds: { x: 55, y: 975, width: 1160, height: 455 },
-        action: { type: "uri", label: "เช็คผลผ่านเว็บ", uri: getLineLiffUrl({ next: "result" }) },
+        action: { type: "uri", label: "เช็คผลผ่านเว็บ", uri: `${siteUrl}/check-result/result` },
       },
       {
         bounds: { x: 1260, y: 975, width: 1185, height: 455 },

@@ -16,7 +16,10 @@ import {
 } from "@/lib/public-student-result-cache";
 import { createResultRequestTrace } from "@/lib/result-request-trace";
 import {
+  signStudentIdentityCookie,
   signStudentResultCookie,
+  studentIdentityCookieMaxAgeSeconds,
+  studentIdentityCookieName,
   studentResultCookieMaxAgeSeconds,
   studentResultCookieName,
 } from "@/lib/security";
@@ -98,6 +101,14 @@ export async function POST(request: Request) {
     httpOnly: true,
     maxAge: studentResultCookieMaxAgeSeconds(),
     path: "/check-result",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  // คุกกี้ระบุตัวแบบยาว → ครั้งหน้าเปิดหน้าผลตรง ๆ ได้ ไม่ต้องกรอกรหัสซ้ำ
+  response.cookies.set(studentIdentityCookieName(), signStudentIdentityCookie(published.lookup.examNo), {
+    httpOnly: true,
+    maxAge: studentIdentityCookieMaxAgeSeconds(),
+    path: "/",
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
   });

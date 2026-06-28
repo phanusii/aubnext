@@ -5,7 +5,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLineBoundResult } from "@/lib/repository";
 import {
+  signStudentIdentityCookie,
   signStudentResultCookie,
+  studentIdentityCookieMaxAgeSeconds,
+  studentIdentityCookieName,
   studentResultCookieMaxAgeSeconds,
   studentResultCookieName,
 } from "@/lib/security";
@@ -30,6 +33,14 @@ export async function POST(request: Request) {
     httpOnly: true,
     maxAge: studentResultCookieMaxAgeSeconds(),
     path: "/check-result",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  // คุกกี้ระบุตัวแบบยาว → ครั้งหน้ากดเมนู "เช็คผลผ่านเว็บ" เปิดผลตรง ๆ ไม่ต้องผ่าน LIFF
+  response.cookies.set(studentIdentityCookieName(), signStudentIdentityCookie(result.lookup.examNo), {
+    httpOnly: true,
+    maxAge: studentIdentityCookieMaxAgeSeconds(),
+    path: "/",
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
   });
