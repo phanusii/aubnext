@@ -1967,3 +1967,43 @@ export async function getResultViews(examSessionId: string) {
     },
   });
 }
+
+// รายงานการเข้าดูผล: รวมนักเรียน "ทั้งหมด" + คะแนน/อันดับ + สถานะการเข้าดู
+// ใช้แยกแท็บ "เข้าดูแล้ว" / "ยังไม่เข้าดู" + เรียงตามคะแนน/ห้อง/ล่าสุด ในหน้า admin
+export async function getResultViewReport(examSessionId: string) {
+  const prisma = getPrisma();
+  const [students, snapshots, views] = await Promise.all([
+    prisma.student.findMany({
+      where: { examSessionId },
+      select: { id: true, examNo: true, name: true, room: true },
+    }),
+    prisma.resultSnapshot.findMany({
+      where: { examSessionId },
+      select: { studentId: true, totalScore: true, rank: true, status: true },
+    }),
+    prisma.resultView.findMany({
+      where: { examSessionId },
+      select: { examNo: true, channel: true, viewCount: true, lastViewedAt: true },
+    }),
+  ]);
+
+  const snapByStudent = new Map(snapshots.map((snap) => [snap.studentId, snap]));
+  const viewByExamNo = new Map(views.map((view) => [view.examNo, view]));
+
+  return students.map((student) => {
+    const snap = snapByStudent.get(student.id);
+    const view = viewByExamNo.get(student.examNo);
+    return {
+      examNo: student.examNo,
+      name: student.name,
+      room: student.room,
+      totalScore: snap?.totalScore ?? null,
+      rank: snap?.rank ?? null,
+      status: snap?.status ?? null,
+      viewed: Boolean(view),
+      channel: view?.channel ?? null,
+      viewCount: view?.viewCount ?? 0,
+      lastViewedAt: view ? view.lastViewedAt.toISOString() : null,
+    };
+  });
+}

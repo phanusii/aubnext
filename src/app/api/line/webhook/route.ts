@@ -3,7 +3,7 @@ export const preferredRegion = "iad1";
 
 import { NextResponse } from "next/server";
 import { buildBindPromptMessage, buildResultFlexMessage, buildResultWebButtonMessage, hasLineMessagingConfig, replyLineMessage, startLineLoading, verifyLineSignature } from "@/lib/line-messaging";
-import { getLineBoundResult } from "@/lib/repository";
+import { getLineBoundResult, recordResultView } from "@/lib/repository";
 import { signLineResultWebToken } from "@/lib/security";
 
 type LineWebhookEvent = {
@@ -144,6 +144,8 @@ export async function POST(request: Request) {
         }
 
         await replyLineMessage(event.replyToken, [buildResultFlexMessage(result.result, result.lookup)]);
+        // บันทึกประวัติการเข้าดูผลผ่าน LINE (กดดูผลในเมนู → การ์ดในแชท) — เสริม ไม่บล็อกการตอบ
+        void recordResultView({ examNo: result.lookup.examNo, channel: "line" }).catch(() => {});
         eventTrace.done("reply_result");
       } catch (error) {
         console.error("LINE webhook reply failed", error);
