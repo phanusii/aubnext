@@ -4,6 +4,11 @@ export const preferredRegion = "iad1";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLineBoundResult } from "@/lib/repository";
+import {
+  signStudentResultCookie,
+  studentResultCookieMaxAgeSeconds,
+  studentResultCookieName,
+} from "@/lib/security";
 
 const schema = z.object({
   lineUserId: z.string().min(1),
@@ -20,5 +25,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error }, { status: 404 });
   }
 
-  return NextResponse.json(result.result);
+  const response = NextResponse.json({ ok: true, result: result.result });
+  response.cookies.set(studentResultCookieName(), signStudentResultCookie(result.lookup), {
+    httpOnly: true,
+    maxAge: studentResultCookieMaxAgeSeconds(),
+    path: "/check-result",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  return response;
 }

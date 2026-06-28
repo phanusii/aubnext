@@ -4,8 +4,16 @@ function baseUrl() {
   return "https://aubnext.vercel.app";
 }
 
-export function getLineLiffUrl() {
-  return process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : `${baseUrl()}/line`;
+export function getLineLiffUrl(params?: Record<string, string>) {
+  const url = new URL(
+    process.env.NEXT_PUBLIC_LIFF_ID
+      ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}`
+      : `${baseUrl()}/line`,
+  );
+  for (const [key, value] of Object.entries(params ?? {})) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
 }
 
 export function getLineRichMenuPayload() {
@@ -27,8 +35,7 @@ export function getLineRichMenuPayload() {
       },
       {
         bounds: { x: 55, y: 975, width: 1160, height: 455 },
-        // เปิด LIFF พร้อม ?go=web → ผูกบัญชีแล้ว+ประกาศผลแล้วจะเด้งเข้าหน้าผลเว็บเลย ไม่ต้องกรอกรหัสซ้ำ
-        action: { type: "uri", label: "เช็คผลผ่านเว็บ", uri: `${getLineLiffUrl()}?go=web` },
+        action: { type: "uri", label: "เช็คผลผ่านเว็บ", uri: getLineLiffUrl({ next: "result" }) },
       },
       {
         bounds: { x: 1260, y: 975, width: 1185, height: 455 },

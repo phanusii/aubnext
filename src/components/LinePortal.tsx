@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Link2, Loader2, Search, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
+import { type StudentResult } from "@/components/PublicResultView";
+import { cacheStudentResultForPage } from "@/components/ResultPageClient";
 
 type LineProfile = {
   userId: string;
@@ -28,13 +31,16 @@ type ActiveExamInfo = {
   classLevel: string;
   status: "DRAFT" | "PUBLISHED";
 };
+type LineResultResponse =
+  | { ok: true; result: StudentResult }
+  | { error?: string };
 
 declare global {
   interface Window {
     liff?: {
       init: (options: { liffId: string }) => Promise<void>;
       isLoggedIn: () => boolean;
-      login: () => void;
+      login: (options?: { redirectUri?: string }) => void;
       getProfile: () => Promise<LineProfile>;
       closeWindow: () => void;
     };
@@ -45,11 +51,14 @@ export function LinePortal({
   schoolName,
   logoUrl,
   activeExam,
+  directResultMode = false,
 }: {
   schoolName: string;
   logoUrl?: string | null;
   activeExam?: ActiveExamInfo | null;
+  directResultMode?: boolean;
 }) {
+  const router = useRouter();
   const [profile, setProfile] = useState<LineProfile | null>(null);
   const [examNo, setExamNo] = useState("");
   const [message, setMessage] = useState("กำลังเชื่อมต่อ LINE...");
@@ -57,6 +66,7 @@ export function LinePortal({
   const [showChangeForm, setShowChangeForm] = useState(false);
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [allowFallbackForm, setAllowFallbackForm] = useState(false);
 
   const closeLiffWindow = useCallback(() => {
     setTimeout(() => {
@@ -68,7 +78,7 @@ export function LinePortal({
     }, 700);
   }, []);
 
-  const loadBindingStatus = useCallback(async (lineUserId: string, displayName?: string) => {
+  const loadBindingStatus = useCallback(async (lineUserId: string, displayName?: string, messageOverride?: string) => {
     const response = await fetch("/api/line/binding", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -79,20 +89,40 @@ export function LinePortal({
     if (response.ok) {
       setBinding(data);
       setShowChangeForm(false);
-      setMessage(`ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว`);
-      // มาจากปุ่ม "เช็คผลผ่านเว็บ" (?go=web) + ประกาศผลแล้ว → เปิดหน้าผลเว็บเลย ไม่ต้องกรอกรหัสซ้ำ
-      const goWeb = new URLSearchParams(window.location.search).get("go") === "web";
-      if (goWeb && data.exam?.status === "PUBLISHED" && data.resultWebToken) {
-        setMessage("กำลังเปิดผลคะแนน...");
-        window.location.href = `/line/result-web?token=${encodeURIComponent(data.resultWebToken)}`;
-      }
+      setMessage(messageOverride ?? `ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว`);
       return;
     }
 
     setBinding(null);
     setShowChangeForm(true);
-    setMessage(`พร้อมเชื่อมต่อบัญชี${displayName ? `: ${displayName}` : ""}`);
+    setMessage(messageOverride ?? `พร้อมเชื่อมต่อบัญชี${displayName ? `: ${displayName}` : ""}`);
   }, []);
+
+  const openBoundResult = useCallback(async (lineUserId: string, displayName?: string) => {
+    setBusy(true);
+    setMessage("กำลังเปิดผลคะแนน...");
+    const response = await fetch("/api/line/result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lineUserId }),
+    });
+    const data = (await response.json()) as LineResultResponse;
+
+    if (response.ok && "ok" in data && data.ok) {
+      cacheStudentResultForPage(data.result);
+      setMessage("พบผลคะแนนแล้ว กำลังเปิดหน้าแสดงผล...");
+      router.replace("/check-result/result");
+      return;
+    }
+
+    setBusy(false);
+    setAllowFallbackForm(true);
+    await loadBindingStatus(
+      lineUserId,
+      displayName,
+      !("ok" in data) && data.error ? data.error : "ยังไม่พบผลคะแนนสำหรับบัญชี LINE นี้",
+    );
+  }, [loadBindingStatus, router]);
 
   useEffect(() => {
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
@@ -108,13 +138,18 @@ export function LinePortal({
       try {
         await window.liff?.init({ liffId });
         if (!window.liff?.isLoggedIn()) {
-          window.liff?.login();
+          window.liff?.login({ redirectUri: window.location.href });
           return;
         }
         const loadedProfile = await window.liff.getProfile();
         setProfile(loadedProfile);
+        if (directResultMode) {
+          await openBoundResult(loadedProfile.userId, loadedProfile.displayName);
+          return;
+        }
         await loadBindingStatus(loadedProfile.userId, loadedProfile.displayName);
       } catch {
+        setBusy(false);
         setMessage("เปิด LIFF ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
     };
@@ -122,7 +157,7 @@ export function LinePortal({
     return () => {
       script.remove();
     };
-  }, [loadBindingStatus]);
+  }, [directResultMode, loadBindingStatus, openBoundResult]);
 
   async function bindAccount() {
     if (!profile) return;
@@ -151,7 +186,14 @@ export function LinePortal({
     closeLiffWindow();
   }
 
-  const showForm = !binding || showChangeForm;
+  const shouldOpenResultDirectly = directResultMode && !allowFallbackForm;
+  const showForm = (!binding || showChangeForm) && !shouldOpenResultDirectly;
+  const title = shouldOpenResultDirectly ? "กำลังเปิดผลคะแนน" : binding && !showChangeForm ? "เชื่อมต่อบัญชี LINE" : "กรอกรหัสนักเรียน";
+  const description = shouldOpenResultDirectly
+    ? "กำลังตรวจบัญชี LINE ที่ผูกไว้เพื่อเปิดหน้าแสดงผลคะแนน"
+    : binding
+      ? "เปลี่ยนรหัสที่ผูกได้ โดยกรอกรหัสใหม่ด้านล่าง"
+      : "รอบสอบนี้ยังไม่ได้ผูกบัญชี — กรอกรหัสนักเรียนเพื่อดูผลคะแนนในแชท LINE";
 
   return (
     <main className="min-h-screen bg-[#f8fbff] text-[var(--text-main)]">
@@ -176,12 +218,8 @@ export function LinePortal({
               </div>
             </div>
           )}
-          <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">กรอกรหัสนักเรียน</h1>
-          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
-            {binding
-              ? "เปลี่ยนรหัสที่ผูกได้ โดยกรอกรหัสใหม่ด้านล่าง"
-              : "รอบสอบนี้ยังไม่ได้ผูกบัญชี — กรอกรหัสนักเรียนเพื่อดูผลคะแนนในแชท LINE"}
-          </p>
+          <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">{title}</h1>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">{description}</p>
         </div>
 
         <div className="rounded-[1.5rem] border border-[var(--border-soft)] bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">

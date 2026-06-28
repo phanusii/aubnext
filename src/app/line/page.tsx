@@ -7,7 +7,7 @@ import { getCachedPublicResultSettings } from "@/lib/public-settings-cache";
 // preferredRegion = iad1 มีผลตอน fetch settings จริง (revalidate / cache miss) ให้ query ไม่ข้าม region
 export const preferredRegion = "iad1";
 
-async function LinePortalWithSettings() {
+async function LinePortalWithSettings({ directResultMode }: { directResultMode: boolean }) {
   // dynamic hole: render ตอน request (ไม่แตะ DB ตอน build) แต่ data อ่านจาก use cache
   await connection();
   const settings = await getCachedPublicResultSettings();
@@ -22,8 +22,18 @@ async function LinePortalWithSettings() {
             status: settings.activeExam.status,
           }
         : null}
+      directResultMode={directResultMode}
     />
   );
+}
+
+async function LinePortalResolver({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  return <LinePortalWithSettings directResultMode={params.next === "result" || params.go === "web"} />;
 }
 
 // static shell ระหว่างที่ settings ของ portal stream เข้ามา
@@ -38,10 +48,14 @@ function LinePortalFallback() {
   );
 }
 
-export default function LinePage() {
+export default function LinePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   return (
     <Suspense fallback={<LinePortalFallback />}>
-      <LinePortalWithSettings />
+      <LinePortalResolver searchParams={searchParams} />
     </Suspense>
   );
 }

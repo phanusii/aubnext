@@ -1708,7 +1708,7 @@ export function AdminConsole() {
                 <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> นักเรียนเปิด LIFF จาก Rich Menu แล้วกรอกรหัสนักเรียน</p>
                 <p><span className="font-semibold text-[var(--text-main)]">2. ปิด LIFF อัตโนมัติ</span> หลังผูกสำเร็จ ระบบจะปิดหน้าต่างเพื่อกลับไปหน้าแชท LINE</p>
                 <p><span className="font-semibold text-[var(--text-main)]">3. ดูผลคะแนน</span> กดปุ่มเช็คผลใน Rich Menu แล้วบอทจะตอบการ์ดผลคะแนนในแชท</p>
-                <p><span className="font-semibold text-[var(--text-main)]">4. เช็คผลผ่านเว็บ</span> ปุ่มนี้เปิดหน้าเว็บเต็มที่ /check-result โดยตรง ไม่เปิดหน้า LIFF ย่อ</p>
+                <p><span className="font-semibold text-[var(--text-main)]">4. เช็คผลผ่านเว็บ</span> ปุ่มนี้เปิด LIFF เพื่อตรวจบัญชีที่ผูกไว้ แล้วพาไปหน้าเว็บเต็มของผลคะแนนทันที</p>
                 <p><span className="font-semibold text-[var(--text-main)]">5. ติดต่อโรงเรียน</span> ปุ่มนี้เปิดค่าที่ตั้งไว้ในช่องติดต่อโรงเรียนของแท็บตั้งค่า</p>
                 <p><span className="font-semibold text-[var(--text-main)]">Webhook</span> ตั้งค่า LINE Developers เป็น /api/line/webhook และให้ปุ่มดูผลคะแนนส่ง postback action=check_result</p>
               </div>
