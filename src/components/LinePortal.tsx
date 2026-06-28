@@ -127,7 +127,10 @@ export function LinePortal({
   useEffect(() => {
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
     if (!liffId) {
-      queueMicrotask(() => setMessage("ยังไม่ได้ตั้งค่า NEXT_PUBLIC_LIFF_ID"));
+      queueMicrotask(() => {
+        setMessage("ยังไม่ได้ตั้งค่า NEXT_PUBLIC_LIFF_ID");
+        setAllowFallbackForm(true);
+      });
       return;
     }
 
@@ -150,6 +153,7 @@ export function LinePortal({
         await loadBindingStatus(loadedProfile.userId, loadedProfile.displayName);
       } catch {
         setBusy(false);
+        setAllowFallbackForm(true);
         setMessage("เปิด LIFF ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
     };
@@ -194,6 +198,25 @@ export function LinePortal({
     : binding
       ? "เปลี่ยนรหัสที่ผูกได้ โดยกรอกรหัสใหม่ด้านล่าง"
       : "รอบสอบนี้ยังไม่ได้ผูกบัญชี — กรอกรหัสนักเรียนเพื่อดูผลคะแนนในแชท LINE";
+
+  // โหมดเปิดผลตรง (มาจากปุ่ม "เช็คผลผ่านเว็บ"): แสดงแค่ตัวโหลดสะอาด ๆ แล้วเด้งเข้าหน้าผลทันที
+  // ไม่โชว์การ์ด/ฟอร์ม/ข้อความ error ให้รก — จะแสดง portal เต็มเฉพาะตอน fallback (ยังไม่ผูก/หาผลไม่เจอ)
+  if (shouldOpenResultDirectly) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] px-6 text-center text-[var(--text-main)]">
+        <div className="flex flex-col items-center gap-4">
+          {logoUrl && (
+            <div className="grid size-16 place-items-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sky-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt={schoolName} className="size-full object-cover" />
+            </div>
+          )}
+          <Loader2 size={30} className="animate-spin text-[var(--primary-blue-strong)]" />
+          <p className="text-base font-semibold text-slate-900">กำลังเปิดผลคะแนน...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f8fbff] text-[var(--text-main)]">
