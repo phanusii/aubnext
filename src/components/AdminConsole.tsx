@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
   BookOpen,
@@ -14,8 +15,8 @@ import {
   ImageUp,
   Link2,
   ListChecks,
+  Loader2,
   LogOut,
-  LogIn,
   Megaphone,
   Pencil,
   Plus,
@@ -117,9 +118,9 @@ function selectNumberInput(event: FocusEvent<HTMLInputElement>) {
 }
 
 export function AdminConsole() {
+  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [settings, setSettings] = useState({
     schoolName: "โรงเรียนตัวอย่าง",
     logoUrl: "",
@@ -262,8 +263,15 @@ export function AdminConsole() {
         void loadAdminSettings();
         return loadExams();
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setSessionChecked(true));
   }, [loadAdminSettings, loadExams]);
+
+  // ไม่มี session (ยังไม่ล็อกอิน / ออกจากระบบ / เซสชันหมดอายุ) → กลับหน้าแรก (แท็บนักเรียน/ครู)
+  // ไม่แสดงหน้า login เดี่ยว ๆ ในหลังบ้านอีกต่อไป — จุดล็อกอินเดียวคือแท็บครูในหน้าแรก
+  useEffect(() => {
+    if (sessionChecked && !isLoggedIn) router.replace("/");
+  }, [sessionChecked, isLoggedIn, router]);
 
   useEffect(() => {
     if (!selectedExamId || !publicResultCacheHealth || publicResultCacheHealth.missing <= 0) return;
@@ -348,29 +356,6 @@ export function AdminConsole() {
     });
   }, [activeTab, loadStoredResults, resultsLoadedExamId, selectedExam]);
 
-  async function login() {
-    setBusy(true);
-    setMessage("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    setBusy(false);
-
-    if (!response.ok) {
-      setMessage("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
-      return;
-    }
-
-    setIsLoggedIn(true);
-    setEmail("");
-    setPassword("");
-    setMessage("เข้าสู่ระบบแล้ว");
-    await loadAdminSettings();
-    await loadExams();
-  }
-
   async function logout() {
     setBusy(true);
     try {
@@ -378,10 +363,8 @@ export function AdminConsole() {
     } catch {
       // ถ้าเรียกไม่สำเร็จก็ยังออกจากระบบฝั่งหน้าจอได้ (cookie หมดอายุเองอยู่แล้ว)
     }
-    setBusy(false);
     setIsLoggedIn(false);
-    setPassword("");
-    setMessage("ออกจากระบบแล้ว");
+    router.replace("/"); // กลับหน้าแรก (แท็บนักเรียน/ครู) ไม่โชว์หน้า login เดี่ยว
   }
 
   async function saveSettings() {
@@ -900,40 +883,14 @@ export function AdminConsole() {
     return { all: calculatedResults.length, passed, failed };
   }, [calculatedResults]);
 
-  if (!isLoggedIn) {
+  // ยังเช็ก session ไม่เสร็จ หรือไม่ได้ล็อกอิน (กำลังเด้งกลับหน้าแรก) → แสดงตัวโหลด ไม่โชว์ฟอร์ม login
+  if (!sessionChecked || !isLoggedIn) {
     return (
-      <main className="min-h-screen bg-[var(--app-bg)] text-[var(--text-main)]">
-        <section className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5">
-          <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-6 shadow-[var(--shadow-soft)]">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="grid size-12 place-items-center rounded-xl bg-[var(--primary-blue)] text-white">
-                <School size={23} />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold">Admin Console</h1>
-                <p className="text-sm text-[var(--text-muted)]">ระบบผู้ดูแล</p>
-              </div>
-            </div>
-            <Field label="อีเมลผู้ดูแล">
-              <input className="app-input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-            </Field>
-            <Field label="รหัสผ่านผู้ดูแล">
-              <input
-                className="app-input"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && login()}
-              />
-            </Field>
-            <button type="button" onClick={login} disabled={busy} className="app-button-primary mt-4 w-full">
-              <LogIn size={18} />
-              เข้าสู่ระบบ
-            </button>
-            {message && <p className="mt-4 text-sm text-[var(--accent-pink-strong)]">{message}</p>}
-          </div>
-          <AppFooter />
-        </section>
+      <main className="grid min-h-screen place-items-center bg-[var(--app-bg)] text-[var(--text-main)]">
+        <div className="flex items-center gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-4 text-sm font-semibold text-[var(--text-muted)] shadow-[var(--shadow-soft)]">
+          <Loader2 size={18} className="shrink-0 animate-spin" />
+          กำลังตรวจสอบสิทธิ์...
+        </div>
       </main>
     );
   }
