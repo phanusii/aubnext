@@ -1,12 +1,16 @@
 import { Suspense } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 import { ResultPageClient } from "@/components/ResultPageClient";
 import { ResultShell, type StudentResult } from "@/components/PublicResultView";
 import { getCachedPublishedStudentResultSession } from "@/lib/public-student-result-cache";
+import { getLineLiffUrl } from "@/lib/line-rich-menu";
 import {
+  readStudentIdentityCookie,
   readStudentResultCookie,
+  studentIdentityCookieName,
   studentResultCookieName,
 } from "@/lib/security";
 
@@ -37,7 +41,7 @@ function ResultLoadingShell() {
   );
 }
 
-async function ResultResolver() {
+async function ResultResolver({ lineResultToken }: { lineResultToken?: string }) {
   // อ่านผลจาก cookie ฝั่ง server (เคส refresh / เปิดลิงก์ใหม่ / คนละ tab ที่ไม่มี sessionStorage)
   // คั่นด้วย <Suspense> เพราะ cookies() เป็น dynamic API — cacheComponents บังคับให้อยู่ใต้ boundary
   // flow ผ่าน LINE token (ยังไม่มี cookie) จะได้ initialResult = null แล้วให้ client แลก token ตามเดิม
@@ -52,13 +56,39 @@ async function ResultResolver() {
     }
   }
 
+  // ไม่มีผลจาก cookie สั้น + ไม่ได้มากับ token → ลอง cookie ระบุตัวแบบยาว (examNo) เปิดผลตรง ๆ
+  // เส้นทางเมนู LINE "เช็คผลผ่านเว็บ" (ลิงก์ตรง) จะวิ่งทางนี้ — เร็ว ไม่ต้องผ่าน LIFF/การ์ด
+  if (!initialResult && !lineResultToken) {
+    const identityExamNo = readStudentIdentityCookie(cookieStore.get(studentIdentityCookieName())?.value);
+    if (identityExamNo) {
+      const session = await getCachedPublishedStudentResultSession(identityExamNo);
+      if (session && !("cacheMissing" in session)) {
+        initialResult = session.result as StudentResult;
+      }
+    }
+  }
+
+  // เปิดจาก LINE ครั้งแรก (ยังไม่มี cookie เลย) → เด้งไป LIFF เพื่อระบุตัว + ตั้ง cookie ระบุตัว
+  // ครั้งต่อ ๆ ไปจะเข้าทาง cookie ด้านบนทันที (ไม่ต้องผ่าน LIFF อีก)
+  if (!initialResult && !lineResultToken) {
+    const ua = (await headers()).get("user-agent") ?? "";
+    if (/\bLine\//i.test(ua)) {
+      redirect(getLineLiffUrl({ next: "result" }));
+    }
+  }
+
   return <ResultPageClient initialResult={initialResult} />;
 }
 
-export default function ResultPage() {
+export default async function ResultPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lineResultToken?: string }>;
+}) {
+  const { lineResultToken } = await searchParams;
   return (
     <Suspense fallback={<ResultLoadingShell />}>
-      <ResultResolver />
+      <ResultResolver lineResultToken={lineResultToken} />
     </Suspense>
   );
 }

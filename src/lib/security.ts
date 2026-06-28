@@ -3,6 +3,9 @@ import { createHmac, createHash, randomBytes, scryptSync, timingSafeEqual } from
 const cookieName = "exam_admin";
 const studentResultCookie = "student_result_lookup";
 const studentResultMaxAgeMs = 30 * 60 * 1000;
+// คุกกี้ "ระบุตัวนักเรียน" แบบยาว (เก็บแค่ examNo) — ให้ปุ่มเมนู LINE เปิดหน้าผลตรง ๆ โดยไม่ต้องผ่าน LIFF/กรอกรหัสซ้ำ
+const studentIdentityCookie = "student_identity";
+const studentIdentityMaxAgeMs = 120 * 24 * 60 * 60 * 1000;
 
 type StudentResultLookup = {
   examNo: string;
@@ -85,6 +88,44 @@ export function studentResultCookieName() {
 
 export function studentResultCookieMaxAgeSeconds() {
   return Math.floor(studentResultMaxAgeMs / 1000);
+}
+
+export function studentIdentityCookieName() {
+  return studentIdentityCookie;
+}
+
+export function studentIdentityCookieMaxAgeSeconds() {
+  return Math.floor(studentIdentityMaxAgeMs / 1000);
+}
+
+// คุกกี้ระบุตัวแบบยาว เก็บแค่ examNo (เซ็น HMAC) — ใช้เปิดหน้าผลตรงจากเมนู LINE โดยไม่ต้องระบุตัวซ้ำ
+export function signStudentIdentityCookie(examNo: string) {
+  const payload = Buffer.from(JSON.stringify({ examNo: examNo.trim(), issuedAt: Date.now() })).toString("base64url");
+  const signature = createHmac("sha256", authSecret()).update(`student-identity.${payload}`).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+export function readStudentIdentityCookie(value?: string) {
+  if (!value) return null;
+  const [payload, signature] = value.split(".");
+  if (!payload || !signature) return null;
+
+  const expected = createHmac("sha256", authSecret()).update(`student-identity.${payload}`).digest("base64url");
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) return null;
+
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      examNo?: unknown;
+      issuedAt?: unknown;
+    };
+    if (typeof decoded.examNo !== "string" || typeof decoded.issuedAt !== "number") return null;
+    if (Date.now() - decoded.issuedAt > studentIdentityMaxAgeMs) return null;
+    return decoded.examNo;
+  } catch {
+    return null;
+  }
 }
 
 export function signStudentResultCookie(lookup: string | StudentResultLookup) {
