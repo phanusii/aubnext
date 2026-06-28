@@ -3,7 +3,7 @@ export const preferredRegion = "iad1";
 
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { getResultViews } from "@/lib/repository";
+import { getResultViewReport } from "@/lib/repository";
 
 export async function GET(request: Request) {
   if (!(await requireAdmin())) {
@@ -15,6 +15,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "ไม่พบรอบสอบ" }, { status: 400 });
   }
 
-  const views = await getResultViews(examSessionId);
-  return NextResponse.json({ views });
+  const rows = await getResultViewReport(examSessionId);
+  return NextResponse.json({ rows });
 }

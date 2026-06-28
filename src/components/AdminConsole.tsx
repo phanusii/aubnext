@@ -87,12 +87,31 @@ type ResultViewRow = {
   examNo: string;
   name: string;
   room: string;
-  channel: string;
+  totalScore: number | null;
+  rank: number | null;
+  status: string | null;
+  viewed: boolean;
+  channel: string | null;
   viewCount: number;
-  firstViewedAt: string;
-  lastViewedAt: string;
+  lastViewedAt: string | null;
 };
+type HistorySubTab = "viewed" | "notViewed";
+type HistorySort = "latest" | "room" | "score" | "examNo";
 type ExamAction = "calculate" | "publish";
+
+// เรียงรายการประวัติ: ล่าสุด / แยกห้อง / ตามคะแนน / ทั้งหมด(ตามรหัส)
+function sortHistoryRows(rows: ResultViewRow[], mode: HistorySort): ResultViewRow[] {
+  const byScore = (a: ResultViewRow, b: ResultViewRow) => (b.totalScore ?? -1) - (a.totalScore ?? -1);
+  const byRoom = (a: ResultViewRow, b: ResultViewRow) => a.room.localeCompare(b.room, "th", { numeric: true });
+  const byExamNo = (a: ResultViewRow, b: ResultViewRow) => a.examNo.localeCompare(b.examNo, "th", { numeric: true });
+  const byLatest = (a: ResultViewRow, b: ResultViewRow) => (b.lastViewedAt ?? "").localeCompare(a.lastViewedAt ?? "");
+  const arr = [...rows];
+  if (mode === "latest") arr.sort((a, b) => byLatest(a, b) || byScore(a, b));
+  else if (mode === "room") arr.sort((a, b) => byRoom(a, b) || byScore(a, b));
+  else if (mode === "examNo") arr.sort(byExamNo);
+  else arr.sort((a, b) => byScore(a, b) || byRoom(a, b));
+  return arr;
+}
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
 type ResultExportStatus = "all" | "passed" | "failed";
@@ -183,7 +202,9 @@ export function AdminConsole() {
   const [resultViews, setResultViews] = useState<ResultViewRow[]>([]);
   const [viewsLoading, setViewsLoading] = useState(false);
   const [viewsLoadedExamId, setViewsLoadedExamId] = useState("");
-  const [viewsRoomFilter, setViewsRoomFilter] = useState("ALL");
+  const [historyTab, setHistoryTab] = useState<HistorySubTab>("viewed");
+  const [viewedSort, setViewedSort] = useState<HistorySort>("latest");
+  const [notViewedSort, setNotViewedSort] = useState<HistorySort>("score");
   const [excelOpen, setExcelOpen] = useState(false);
   const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
   // ลิงก์เพิ่มเพื่อนบัญชี LINE OA (ให้นักเรียนกดเพิ่มเพื่อนก่อนเช็คผล) — ตั้งทับได้ด้วย NEXT_PUBLIC_LINE_ADD_FRIEND_URL
@@ -376,7 +397,7 @@ export function AdminConsole() {
     try {
       const response = await fetch(`/api/admin/views?examSessionId=${encodeURIComponent(examSessionId)}`);
       const data = await response.json().catch(() => ({}));
-      setResultViews(response.ok && Array.isArray(data.views) ? data.views : []);
+      setResultViews(response.ok && Array.isArray(data.rows) ? data.rows : []);
       setViewsLoadedExamId(examSessionId);
     } finally {
       setViewsLoading(false);
@@ -978,8 +999,8 @@ export function AdminConsole() {
           </div>
         )}
 
-        <nav className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-2 shadow-[var(--shadow-soft)]">
-          <span className="px-2 text-xs font-semibold text-[var(--text-muted)]">ขั้นตอน</span>
+        <nav className="mb-5 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-2 shadow-[var(--shadow-soft)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="shrink-0 px-2 text-xs font-semibold text-[var(--text-muted)]">ขั้นตอน</span>
           {workflowTabs.map((tab, index) => (
             <button
               key={tab.id}
@@ -997,7 +1018,7 @@ export function AdminConsole() {
               {tab.label}
             </button>
           ))}
-          <span className="mx-1 h-6 w-px bg-sky-200" />
+          <span className="mx-1 h-6 w-px shrink-0 bg-sky-200" />
           {utilityTabs.map((tab) => (
             <button
               key={tab.id}
@@ -1742,59 +1763,94 @@ export function AdminConsole() {
             {viewsLoading ? (
               <EmptyState text="กำลังโหลดประวัติ" />
             ) : resultViews.length === 0 ? (
-              <EmptyState text="ยังไม่มีนักเรียนเข้ามาเช็คผลในรอบสอบนี้" />
-            ) : (
-              <>
-                <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                  <Metric label="เข้าดูแล้ว" value={`${resultViews.length} คน`} />
-                  <Metric label="ผ่าน LINE" value={`${resultViews.filter((view) => view.channel === "line").length} คน`} />
-                  <Metric label="ผ่านเว็บ" value={`${resultViews.filter((view) => view.channel !== "line").length} คน`} />
-                </div>
-                <div className="mb-3 max-w-xs">
-                  <FilterControlGroup
-                    label="ห้อง"
-                    value={viewsRoomFilter}
-                    options={[
-                      { value: "ALL", label: "ทุกห้อง" },
-                      ...[...new Set(resultViews.map((view) => view.room))]
-                        .sort((a, b) => a.localeCompare(b, "th"))
-                        .map((room) => ({ value: room, label: `ห้อง ${room}` })),
-                    ]}
-                    onChange={setViewsRoomFilter}
-                  />
-                </div>
-                <div className="overflow-x-auto rounded-2xl border border-[var(--border-soft)]">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-[var(--blue-wash)] text-left">
-                        <th className="px-3 py-2 font-semibold">รหัส</th>
-                        <th className="px-3 py-2 font-semibold">ชื่อ</th>
-                        <th className="px-3 py-2 font-semibold">ห้อง</th>
-                        <th className="px-3 py-2 font-semibold">ช่องทาง</th>
-                        <th className="px-3 py-2 font-semibold">ครั้ง</th>
-                        <th className="px-3 py-2 font-semibold">เข้าล่าสุด</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resultViews
-                        .filter((view) => viewsRoomFilter === "ALL" || view.room === viewsRoomFilter)
-                        .map((view) => (
-                          <tr key={view.examNo} className="border-t border-[var(--border-soft)]">
-                            <td className="px-3 py-2 font-semibold">{view.examNo}</td>
-                            <td className="px-3 py-2">{view.name}</td>
-                            <td className="whitespace-nowrap px-3 py-2">{view.room}</td>
-                            <td className="px-3 py-2">{view.channel === "line" ? "LINE" : "เว็บ"}</td>
-                            <td className="px-3 py-2">{view.viewCount}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-[var(--text-muted)]">
-                              {new Date(view.lastViewedAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
+              <EmptyState text="ยังไม่มีรายชื่อนักเรียน — นำเข้ารายชื่อและประกาศผลก่อน" />
+            ) : (() => {
+              const viewed = resultViews.filter((row) => row.viewed);
+              const notViewed = resultViews.filter((row) => !row.viewed);
+              const lineCount = viewed.filter((row) => row.channel === "line").length;
+              const isViewedTab = historyTab === "viewed";
+              const sortValue = isViewedTab ? viewedSort : notViewedSort;
+              const sortOptions = isViewedTab
+                ? [
+                    { value: "latest", label: "ล่าสุด" },
+                    { value: "room", label: "แยกห้อง" },
+                    { value: "score", label: "เรียงตามคะแนน" },
+                  ]
+                : [
+                    { value: "score", label: "เรียงตามคะแนน" },
+                    { value: "room", label: "แยกห้อง" },
+                    { value: "examNo", label: "ทั้งหมด" },
+                  ];
+              const rows = sortHistoryRows(isViewedTab ? viewed : notViewed, sortValue);
+              return (
+                <>
+                  <div className="mb-4 grid grid-cols-3 gap-2">
+                    <Metric label="เข้าดูแล้ว" value={`${viewed.length}/${resultViews.length}`} />
+                    <Metric label="ผ่าน LINE" value={`${lineCount} คน`} />
+                    <Metric label="ผ่านเว็บ" value={`${viewed.length - lineCount} คน`} />
+                  </div>
+
+                  <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-[var(--blue-wash)] p-1">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryTab("viewed")}
+                      className={cx("rounded-lg px-3 py-2 text-sm font-semibold transition", isViewedTab ? "bg-white text-sky-700 shadow-sm" : "text-[var(--text-muted)]")}
+                    >
+                      เข้าดูแล้ว ({viewed.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryTab("notViewed")}
+                      className={cx("rounded-lg px-3 py-2 text-sm font-semibold transition", !isViewedTab ? "bg-white text-pink-600 shadow-sm" : "text-[var(--text-muted)]")}
+                    >
+                      ยังไม่เข้าดู ({notViewed.length})
+                    </button>
+                  </div>
+
+                  <div className="mb-3 max-w-xs">
+                    <FilterControlGroup
+                      label="เรียงลำดับ"
+                      value={sortValue}
+                      options={sortOptions}
+                      onChange={(value) => (isViewedTab ? setViewedSort : setNotViewedSort)(value as HistorySort)}
+                    />
+                  </div>
+
+                  {rows.length === 0 ? (
+                    <EmptyState text={isViewedTab ? "ยังไม่มีใครเข้าดูผล" : "ทุกคนเข้าดูผลแล้ว 🎉"} />
+                  ) : (
+                    <div className="grid gap-2">
+                      {rows.map((row) => (
+                        <div key={row.examNo} className="flex items-start justify-between gap-3 rounded-xl border border-[var(--border-soft)] bg-white px-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">{row.name}</p>
+                            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                              รหัส {row.examNo} · {selectedExam.classLevel}/{row.room}
+                              {row.totalScore != null && ` · ${formatScore(row.totalScore)} คะแนน`}
+                              {row.rank != null && row.rank > 0 && ` · อันดับ ${row.rank}`}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            {row.viewed ? (
+                              <>
+                                <span className={cx("inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold", row.channel === "line" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700")}>
+                                  {row.channel === "line" ? "LINE" : "เว็บ"}
+                                </span>
+                                <p className="mt-1 whitespace-nowrap text-[11px] text-[var(--text-muted)]">
+                                  {row.viewCount} ครั้ง · {row.lastViewedAt ? new Date(row.lastViewedAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : "-"}
+                                </p>
+                              </>
+                            ) : (
+                              <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">ยังไม่เข้าดู</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </Panel>
         )}
         {pendingExamAction && selectedExam && (
