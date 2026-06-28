@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Copy,
   Download,
+  History,
   ImageUp,
   Link2,
   ListChecks,
@@ -80,7 +81,17 @@ type ImportValidation = {
   errors: string[];
   isReady: boolean;
 };
-type AdminTab = "settings" | "exam" | "rooms" | "import" | "scores" | "results" | "line";
+type AdminTab = "settings" | "exam" | "rooms" | "import" | "scores" | "results" | "line" | "history";
+
+type ResultViewRow = {
+  examNo: string;
+  name: string;
+  room: string;
+  channel: string;
+  viewCount: number;
+  firstViewedAt: string;
+  lastViewedAt: string;
+};
 type ExamAction = "calculate" | "publish";
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
 type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
@@ -169,6 +180,10 @@ export function AdminConsole() {
   const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
   const [resultSort, setResultSort] = useState<ResultSort>("rank");
+  const [resultViews, setResultViews] = useState<ResultViewRow[]>([]);
+  const [viewsLoading, setViewsLoading] = useState(false);
+  const [viewsLoadedExamId, setViewsLoadedExamId] = useState("");
+  const [viewsRoomFilter, setViewsRoomFilter] = useState("ALL");
   const [excelOpen, setExcelOpen] = useState(false);
   const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
   // ลิงก์เพิ่มเพื่อนบัญชี LINE OA (ให้นักเรียนกดเพิ่มเพื่อนก่อนเช็คผล) — ตั้งทับได้ด้วย NEXT_PUBLIC_LINE_ADD_FRIEND_URL
@@ -355,6 +370,25 @@ export function AdminConsole() {
       void loadStoredResults(selectedExam.id);
     });
   }, [activeTab, loadStoredResults, resultsLoadedExamId, selectedExam]);
+
+  const loadResultViews = useCallback(async (examSessionId: string) => {
+    setViewsLoading(true);
+    try {
+      const response = await fetch(`/api/admin/views?examSessionId=${encodeURIComponent(examSessionId)}`);
+      const data = await response.json().catch(() => ({}));
+      setResultViews(response.ok && Array.isArray(data.views) ? data.views : []);
+      setViewsLoadedExamId(examSessionId);
+    } finally {
+      setViewsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "history" || !selectedExam || viewsLoadedExamId === selectedExam.id) return;
+    queueMicrotask(() => {
+      void loadResultViews(selectedExam.id);
+    });
+  }, [activeTab, loadResultViews, viewsLoadedExamId, selectedExam]);
 
   async function logout() {
     setBusy(true);
@@ -904,6 +938,7 @@ export function AdminConsole() {
     { id: "results", label: "ผลคะแนน", icon: <Calculator size={16} /> },
   ];
   const utilityTabs: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
+    { id: "history", label: "ประวัติเข้าดู", icon: <History size={16} /> },
     { id: "line", label: "LINE", icon: <Link2 size={16} /> },
     { id: "settings", label: "ตั้งค่า", icon: <Settings size={16} /> },
   ];
@@ -1700,6 +1735,66 @@ export function AdminConsole() {
                 </button>
               </div>
             </div>
+          </Panel>
+        )}
+        {activeTab === "history" && selectedExam && (
+          <Panel icon={<History size={18} />} title="ประวัติการเข้าดูผลคะแนน">
+            {viewsLoading ? (
+              <EmptyState text="กำลังโหลดประวัติ" />
+            ) : resultViews.length === 0 ? (
+              <EmptyState text="ยังไม่มีนักเรียนเข้ามาเช็คผลในรอบสอบนี้" />
+            ) : (
+              <>
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <Metric label="เข้าดูแล้ว" value={`${resultViews.length} คน`} />
+                  <Metric label="ผ่าน LINE" value={`${resultViews.filter((view) => view.channel === "line").length} คน`} />
+                  <Metric label="ผ่านเว็บ" value={`${resultViews.filter((view) => view.channel !== "line").length} คน`} />
+                </div>
+                <div className="mb-3 max-w-xs">
+                  <FilterControlGroup
+                    label="ห้อง"
+                    value={viewsRoomFilter}
+                    options={[
+                      { value: "ALL", label: "ทุกห้อง" },
+                      ...[...new Set(resultViews.map((view) => view.room))]
+                        .sort((a, b) => a.localeCompare(b, "th"))
+                        .map((room) => ({ value: room, label: `ห้อง ${room}` })),
+                    ]}
+                    onChange={setViewsRoomFilter}
+                  />
+                </div>
+                <div className="overflow-x-auto rounded-2xl border border-[var(--border-soft)]">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-[var(--blue-wash)] text-left">
+                        <th className="px-3 py-2 font-semibold">รหัส</th>
+                        <th className="px-3 py-2 font-semibold">ชื่อ</th>
+                        <th className="px-3 py-2 font-semibold">ห้อง</th>
+                        <th className="px-3 py-2 font-semibold">ช่องทาง</th>
+                        <th className="px-3 py-2 font-semibold">ครั้ง</th>
+                        <th className="px-3 py-2 font-semibold">เข้าล่าสุด</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultViews
+                        .filter((view) => viewsRoomFilter === "ALL" || view.room === viewsRoomFilter)
+                        .map((view) => (
+                          <tr key={view.examNo} className="border-t border-[var(--border-soft)]">
+                            <td className="px-3 py-2 font-semibold">{view.examNo}</td>
+                            <td className="px-3 py-2">{view.name}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{view.room}</td>
+                            <td className="px-3 py-2">{view.channel === "line" ? "LINE" : "เว็บ"}</td>
+                            <td className="px-3 py-2">{view.viewCount}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-[var(--text-muted)]">
+                              {new Date(view.lastViewedAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </Panel>
         )}
         {pendingExamAction && selectedExam && (

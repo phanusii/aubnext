@@ -125,6 +125,20 @@ export function ResultPageClient({ initialResult = null }: { initialResult?: Stu
     };
   }, [initialResult]);
 
+  // บันทึกประวัติการเข้าดู (beacon เงียบ ๆ ครั้งเดียวต่อ session/นักเรียน — กันยิงซ้ำตอน refresh)
+  useEffect(() => {
+    const examNo = result?.student?.examNo;
+    if (!examNo) return;
+    try {
+      const flagKey = "result_view_logged_v1";
+      if (window.sessionStorage.getItem(flagKey) === examNo) return;
+      window.sessionStorage.setItem(flagKey, examNo);
+    } catch {
+      // sessionStorage ใช้ไม่ได้ก็ยังยิง log ได้ (อย่างมากซ้ำบ้าง ไม่เป็นไร)
+    }
+    void fetch("/api/check-result/log", { method: "POST", keepalive: true }).catch(() => {});
+  }, [result]);
+
   return (
     <ResultShell>
       {result ? (
