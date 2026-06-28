@@ -27,7 +27,8 @@ export function getLineRichMenuPayload() {
       },
       {
         bounds: { x: 55, y: 975, width: 1160, height: 455 },
-        action: { type: "uri", label: "เช็คผลผ่านเว็บ", uri: `${siteUrl}/check-result` },
+        // เปิด LIFF พร้อม ?go=web → ผูกบัญชีแล้ว+ประกาศผลแล้วจะเด้งเข้าหน้าผลเว็บเลย ไม่ต้องกรอกรหัสซ้ำ
+        action: { type: "uri", label: "เช็คผลผ่านเว็บ", uri: `${getLineLiffUrl()}?go=web` },
       },
       {
         bounds: { x: 1260, y: 975, width: 1185, height: 455 },

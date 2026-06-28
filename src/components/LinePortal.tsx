@@ -21,6 +21,7 @@ type LineBindingInfo = {
     name: string;
     status: string;
   };
+  resultWebToken?: string;
 };
 type ActiveExamInfo = {
   name: string;
@@ -79,6 +80,12 @@ export function LinePortal({
       setBinding(data);
       setShowChangeForm(false);
       setMessage(`ผูกบัญชีกับ ${data.student.name} (${data.student.examNo}) แล้ว`);
+      // มาจากปุ่ม "เช็คผลผ่านเว็บ" (?go=web) + ประกาศผลแล้ว → เปิดหน้าผลเว็บเลย ไม่ต้องกรอกรหัสซ้ำ
+      const goWeb = new URLSearchParams(window.location.search).get("go") === "web";
+      if (goWeb && data.exam?.status === "PUBLISHED" && data.resultWebToken) {
+        setMessage("กำลังเปิดผลคะแนน...");
+        window.location.href = `/line/result-web?token=${encodeURIComponent(data.resultWebToken)}`;
+      }
       return;
     }
 
@@ -197,9 +204,18 @@ export function LinePortal({
                 รหัส {binding.student.examNo} · {binding.student.classLevel}/{binding.student.room}
               </p>
               <p className="mt-3 text-xs leading-5 text-slate-500">{binding.exam.name}</p>
+              {binding.exam.status === "PUBLISHED" && binding.resultWebToken && (
+                <a
+                  href={`/line/result-web?token=${encodeURIComponent(binding.resultWebToken)}`}
+                  className="app-button-primary mt-4 w-full"
+                >
+                  <Search size={18} />
+                  เปิดผลคะแนนแบบเต็มหน้าเว็บ
+                </a>
+              )}
               <button
                 type="button"
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 py-3 font-semibold text-[var(--primary-blue-strong)] transition hover:border-sky-300 hover:bg-sky-50"
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 py-3 font-semibold text-[var(--primary-blue-strong)] transition hover:border-sky-300 hover:bg-sky-50"
                 onClick={() => {
                   setExamNo("");
                   setSuccess(false);
