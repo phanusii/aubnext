@@ -47,6 +47,25 @@ declare global {
   }
 }
 
+// ตรวจ "เจตนาเปิดผลตรง" ฝั่ง client — LIFF มักห่อ query ไว้ใน liff.state ทำให้ server อ่าน ?next=result ไม่เจอ
+function detectResultIntent(): boolean {
+  if (typeof window === "undefined") return false;
+  const sp = new URLSearchParams(window.location.search);
+  const hit = (params: URLSearchParams) => params.get("next") === "result" || params.get("go") === "web";
+  if (hit(sp)) return true;
+  const liffState = sp.get("liff.state");
+  if (liffState) {
+    try {
+      const decoded = decodeURIComponent(liffState);
+      const inner = new URLSearchParams(decoded.startsWith("?") ? decoded.slice(1) : decoded);
+      if (hit(inner)) return true;
+    } catch {
+      // ignore malformed liff.state
+    }
+  }
+  return false;
+}
+
 export function LinePortal({
   schoolName,
   logoUrl,
@@ -67,6 +86,13 @@ export function LinePortal({
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
   const [allowFallbackForm, setAllowFallbackForm] = useState(false);
+  // เจตนาเปิดผลตรงจากฝั่ง client (รวมกรณี LIFF ห่อ param ใน liff.state) — set ตอน mount ให้ตัวโหลดโชว์ทันที
+  const [intentResult, setIntentResult] = useState(false);
+  useEffect(() => {
+    // set หลัง hydration (อ่าน window/liff.state ฝั่ง client เท่านั้น) กัน hydration mismatch
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIntentResult(detectResultIntent());
+  }, []);
 
   const closeLiffWindow = useCallback(() => {
     setTimeout(() => {
@@ -146,7 +172,8 @@ export function LinePortal({
         }
         const loadedProfile = await window.liff.getProfile();
         setProfile(loadedProfile);
-        if (directResultMode) {
+        // เช็กเจตนาสด ๆ หลัง init (ตอนนี้ LIFF decode liff.state ลง window.location แล้ว)
+        if (directResultMode || detectResultIntent()) {
           await openBoundResult(loadedProfile.userId, loadedProfile.displayName);
           return;
         }
@@ -190,7 +217,7 @@ export function LinePortal({
     closeLiffWindow();
   }
 
-  const shouldOpenResultDirectly = directResultMode && !allowFallbackForm;
+  const shouldOpenResultDirectly = (directResultMode || intentResult) && !allowFallbackForm;
   const showForm = (!binding || showChangeForm) && !shouldOpenResultDirectly;
   const title = shouldOpenResultDirectly ? "กำลังเปิดผลคะแนน" : binding && !showChangeForm ? "เชื่อมต่อบัญชี LINE" : "กรอกรหัสนักเรียน";
   const description = shouldOpenResultDirectly
