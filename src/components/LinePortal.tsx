@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Link2, Loader2, Search, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
@@ -34,6 +34,24 @@ type ActiveExamInfo = {
 type LineResultResponse =
   | { ok: true; result: StudentResult }
   | { error?: string };
+
+// จำ lineUserId ของผู้ใช้ไว้ (LINE userId คงที่ต่อ user/channel) → เปิดครั้งถัดไปเริ่มโหลดผลได้ทันที
+// โดยไม่ต้องรอ LIFF init + getProfile (เร่ง "เช็คผลผ่านเว็บ" ให้เร็วขึ้นมาก)
+const lineUserIdStorageKey = "line_user_id_v1";
+function rememberLineUserId(userId: string) {
+  try {
+    window.localStorage.setItem(lineUserIdStorageKey, userId);
+  } catch {
+    // localStorage อาจใช้ไม่ได้ (โหมดส่วนตัว) — ไม่เป็นไร แค่เสียการเร่งความเร็วครั้งถัดไป
+  }
+}
+function readRememberedLineUserId() {
+  try {
+    return window.localStorage.getItem(lineUserIdStorageKey);
+  } catch {
+    return null;
+  }
+}
 
 declare global {
   interface Window {
@@ -124,6 +142,8 @@ export function LinePortal({
     setMessage(messageOverride ?? `พร้อมเชื่อมต่อบัญชี${displayName ? `: ${displayName}` : ""}`);
   }, []);
 
+  // กันยิงผลซ้ำระหว่างเส้นทางเร็ว (lineUserId ที่จำไว้) กับเส้น LIFF
+  const resultOpenStartedRef = useRef(false);
   const openBoundResult = useCallback(async (lineUserId: string, displayName?: string) => {
     setBusy(true);
     setMessage("กำลังเปิดผลคะแนน...");
@@ -135,12 +155,15 @@ export function LinePortal({
     const data = (await response.json()) as LineResultResponse;
 
     if (response.ok && "ok" in data && data.ok) {
+      rememberLineUserId(lineUserId);
       cacheStudentResultForPage(data.result);
       setMessage("พบผลคะแนนแล้ว กำลังเปิดหน้าแสดงผล...");
       router.replace("/check-result/result");
       return;
     }
 
+    // เปิดไม่สำเร็จ (เช่น userId ที่จำไว้ใช้ไม่ได้/ยังไม่ผูก) → ปล่อยให้เส้น LIFF ลองใหม่ด้วย profile จริง
+    resultOpenStartedRef.current = false;
     setBusy(false);
     setAllowFallbackForm(true);
     await loadBindingStatus(
@@ -149,6 +172,18 @@ export function LinePortal({
       !("ok" in data) && data.error ? data.error : "ยังไม่พบผลคะแนนสำหรับบัญชี LINE นี้",
     );
   }, [loadBindingStatus, router]);
+
+  // เส้นทางเร็ว: ถ้าเคยจำ lineUserId ไว้ + ตั้งใจเปิดผล → เริ่มโหลดผลทันทีโดยไม่รอ LIFF SDK init/getProfile
+  // เส้น LIFF ด้านล่างยังทำงานคู่ขนาน (เผื่อ userId เก่าใช้ไม่ได้ จะ fallback ด้วย profile จริง)
+  useEffect(() => {
+    if (!directResultMode && !detectResultIntent()) return;
+    if (resultOpenStartedRef.current) return;
+    const rememberedId = readRememberedLineUserId();
+    if (!rememberedId) return;
+    resultOpenStartedRef.current = true;
+    // เลื่อนออกจาก effect body กัน cascading render (openBoundResult setState ทันทีตอนเริ่ม)
+    queueMicrotask(() => void openBoundResult(rememberedId));
+  }, [directResultMode, openBoundResult]);
 
   useEffect(() => {
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
@@ -172,9 +207,14 @@ export function LinePortal({
         }
         const loadedProfile = await window.liff.getProfile();
         setProfile(loadedProfile);
+        rememberLineUserId(loadedProfile.userId);
         // เช็กเจตนาสด ๆ หลัง init (ตอนนี้ LIFF decode liff.state ลง window.location แล้ว)
         if (directResultMode || detectResultIntent()) {
-          await openBoundResult(loadedProfile.userId, loadedProfile.displayName);
+          // ถ้าเส้นทางเร็ว (lineUserId ที่จำไว้) เริ่มไปแล้ว ไม่ต้องยิงซ้ำ
+          if (!resultOpenStartedRef.current) {
+            resultOpenStartedRef.current = true;
+            await openBoundResult(loadedProfile.userId, loadedProfile.displayName);
+          }
           return;
         }
         await loadBindingStatus(loadedProfile.userId, loadedProfile.displayName);
