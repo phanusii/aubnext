@@ -1911,3 +1911,59 @@ export async function findUnpublishedStudentExam(input: { examNo: string }) {
     hasCalculatedResult: student.resultSnapshots.some((snapshot) => snapshot.examSessionId === student.examSessionId),
   };
 }
+
+// บันทึกประวัติการเข้าดูผล (upsert 1 แถวต่อนักเรียนต่อรอบสอบที่ประกาศแล้ว) — เบา ไม่บล็อกผู้ใช้
+export async function recordResultView(input: { examNo: string; channel?: string }) {
+  const examNo = input.examNo.trim();
+  if (!examNo) return { ok: false as const };
+  const active = await getActivePublishedExamId();
+  if (!active) return { ok: false as const };
+
+  const prisma = getPrisma();
+  const student = await prisma.student.findUnique({
+    where: { examSessionId_examNo: { examSessionId: active.activeExamId, examNo } },
+    select: { name: true, room: true },
+  });
+  if (!student) return { ok: false as const };
+
+  const channel = input.channel === "line" ? "line" : "web";
+  const now = new Date();
+  await prisma.resultView.upsert({
+    where: { examSessionId_examNo: { examSessionId: active.activeExamId, examNo } },
+    create: {
+      examSessionId: active.activeExamId,
+      examNo,
+      name: student.name,
+      room: student.room,
+      channel,
+      firstViewedAt: now,
+      lastViewedAt: now,
+    },
+    update: {
+      viewCount: { increment: 1 },
+      lastViewedAt: now,
+      channel,
+      name: student.name,
+      room: student.room,
+    },
+  });
+  return { ok: true as const };
+}
+
+// อ่านประวัติการเข้าดูผลของรอบสอบ (สำหรับหน้า admin) — เรียงเข้าล่าสุดก่อน
+export async function getResultViews(examSessionId: string) {
+  const prisma = getPrisma();
+  return prisma.resultView.findMany({
+    where: { examSessionId },
+    orderBy: { lastViewedAt: "desc" },
+    select: {
+      examNo: true,
+      name: true,
+      room: true,
+      channel: true,
+      viewCount: true,
+      firstViewedAt: true,
+      lastViewedAt: true,
+    },
+  });
+}

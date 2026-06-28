@@ -54,6 +54,25 @@ model ExamSession {
   importBatches   ImportBatch[]
   resultSnapshots ResultSnapshot[]
   lineBindings    LineBinding[]
+  resultViews     ResultView[]
+}
+
+// ประวัติการเข้าดูผลคะแนน — 1 แถวต่อนักเรียน (upsert: เข้าซ้ำ = บวก viewCount + อัปเดต lastViewedAt)
+model ResultView {
+  id            String   @id @default(cuid())
+  examSessionId String
+  examNo        String
+  name          String
+  room          String
+  channel       String   @default("web")
+  viewCount     Int      @default(1)
+  firstViewedAt DateTime @default(now())
+  lastViewedAt  DateTime @default(now())
+
+  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([examSessionId, examNo])
+  @@index([examSessionId])
 }
 
 model Subject {
