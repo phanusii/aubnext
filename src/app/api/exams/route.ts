@@ -9,6 +9,8 @@ const createSchema = z.object({
   classLevel: z.string().min(1),
   selectionMode: z.enum(["PER_ROOM", "WHOLE_LEVEL"]),
   wholeLevelQuota: z.number().int().nonnegative().optional().nullable(),
+  eventLogoUrl: z.string().max(1_400_000, "โลโก้งานใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB").optional().nullable(),
+  showEventLogo: z.boolean().optional(),
   rooms: z.array(z.object({ room: z.string().min(1), quota: z.number().int().nonnegative() })).default([]),
 });
 

@@ -6,6 +6,7 @@ import { CheckCircle2, Link2, Loader2, Search, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 import { type StudentResult } from "@/components/PublicResultView";
 import { cacheStudentResultForPage } from "@/components/ResultPageClient";
+import { LogoPair } from "@/components/LogoPair";
 
 type LineProfile = {
   userId: string;
@@ -30,6 +31,8 @@ type ActiveExamInfo = {
   name: string;
   classLevel: string;
   status: "DRAFT" | "PUBLISHED";
+  eventLogoUrl?: string | null;
+  showEventLogo?: boolean;
 };
 type LineResultResponse =
   | { ok: true; result: StudentResult }
@@ -272,12 +275,13 @@ export function LinePortal({
     return (
       <main className="grid min-h-screen place-items-center bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] px-6 text-center text-[var(--text-main)]">
         <div className="flex flex-col items-center gap-4">
-          {logoUrl && (
-            <div className="grid size-16 place-items-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-sky-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={logoUrl} alt={schoolName} className="size-full object-cover" />
-            </div>
-          )}
+          <LogoPair
+            schoolName={schoolName}
+            schoolLogoUrl={logoUrl}
+            eventLogoUrl={activeExam?.showEventLogo ? activeExam.eventLogoUrl : null}
+            eventName={activeExam?.name}
+            size="sm"
+          />
           <Loader2 size={30} className="animate-spin text-[var(--primary-blue-strong)]" />
           <p className="text-base font-semibold text-slate-900">กำลังเปิดผลคะแนน...</p>
         </div>
@@ -289,12 +293,14 @@ export function LinePortal({
     <main className="min-h-screen bg-[#f8fbff] text-[var(--text-main)]">
       <section className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-8">
         <div className="mb-6 text-center">
-          {logoUrl && (
-            <div className="mx-auto mb-3 grid size-20 place-items-center overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-sky-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={logoUrl} alt={schoolName} className="size-full object-cover" />
-            </div>
-          )}
+          <LogoPair
+            schoolName={schoolName}
+            schoolLogoUrl={logoUrl}
+            eventLogoUrl={activeExam?.showEventLogo ? activeExam.eventLogoUrl : null}
+            eventName={activeExam?.name}
+            size="md"
+            className="mx-auto mb-3"
+          />
           <p className="text-lg font-semibold leading-tight text-slate-950">{schoolName}</p>
           {activeExam && (
             <div className="mx-auto mt-4 max-w-full rounded-[1.25rem] bg-white px-4 py-3 text-center ring-1 ring-sky-100">

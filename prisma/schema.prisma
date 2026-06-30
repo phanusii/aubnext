@@ -45,6 +45,8 @@ model ExamSession {
   publishedAt      DateTime?
   passTitle        String?
   passInstructions String?
+  eventLogoUrl     String?
+  showEventLogo    Boolean       @default(false)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

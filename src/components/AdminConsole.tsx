@@ -22,7 +22,6 @@ import {
   Pencil,
   Plus,
   Save,
-  School,
   Search,
   Settings,
   Table2,
@@ -36,6 +35,7 @@ import { prepareRoomImportTable } from "@/lib/room-import-table";
 import { countScoreDraftChanges, readScoreDraft } from "@/lib/score-draft-storage";
 import { ScoreEntryCard } from "@/components/ScoreEntryCard";
 import { AppFooter } from "@/components/AppFooter";
+import { LogoPair } from "@/components/LogoPair";
 
 type RoomQuota = { id?: string; room: string; quota: number };
 type Subject = {
@@ -55,6 +55,8 @@ type Exam = {
   publishedAt: string | null;
   passTitle: string | null;
   passInstructions: string | null;
+  eventLogoUrl: string | null;
+  showEventLogo: boolean;
   roomQuotas: RoomQuota[];
   subjects: Subject[];
   _count?: { students: number; resultSnapshots: number };
@@ -217,6 +219,8 @@ export function AdminConsole() {
   const [newClassLevel, setNewClassLevel] = useState("ป.6");
   const [newSelectionMode, setNewSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
   const [newWholeQuota, setNewWholeQuota] = useState(10);
+  const [newEventLogoUrl, setNewEventLogoUrl] = useState("");
+  const [newShowEventLogo, setNewShowEventLogo] = useState(false);
   const [roomCount, setRoomCount] = useState(3);
   const [createExamOpen, setCreateExamOpen] = useState(false);
   const [editExamOpen, setEditExamOpen] = useState(false);
@@ -224,6 +228,8 @@ export function AdminConsole() {
   const [editClassLevel, setEditClassLevel] = useState("");
   const [editSelectionMode, setEditSelectionMode] = useState<"PER_ROOM" | "WHOLE_LEVEL">("PER_ROOM");
   const [editWholeQuota, setEditWholeQuota] = useState(0);
+  const [editEventLogoUrl, setEditEventLogoUrl] = useState("");
+  const [editShowEventLogo, setEditShowEventLogo] = useState(false);
   const [passTitle, setPassTitle] = useState("");
   const [passInstructions, setPassInstructions] = useState("");
   const [rooms, setRooms] = useState<RoomQuota[]>([]);
@@ -419,6 +425,8 @@ export function AdminConsole() {
       setEditClassLevel(selectedExam.classLevel);
       setEditSelectionMode(selectedExam.selectionMode);
       setEditWholeQuota(Number(selectedExam.wholeLevelQuota ?? 0));
+      setEditEventLogoUrl(selectedExam.eventLogoUrl ?? "");
+      setEditShowEventLogo(Boolean(selectedExam.showEventLogo && selectedExam.eventLogoUrl));
       setPassTitle(selectedExam.passTitle ?? "");
       setPassInstructions(selectedExam.passInstructions ?? "");
       setCalculatedResults([]);
@@ -529,7 +537,7 @@ export function AdminConsole() {
     setMessage("บันทึกตั้งค่าระบบแล้ว");
   }
 
-  function uploadLogo(file: File) {
+  function readLogoFile(file: File, onLoad: (logoUrl: string) => void) {
     if (!file.type.startsWith("image/")) {
       setMessage("กรุณาเลือกไฟล์รูปภาพ");
       return;
@@ -547,10 +555,30 @@ export function AdminConsole() {
         return;
       }
 
-      setLogoChanged(true);
-      setSettings((current) => ({ ...current, logoUrl }));
+      onLoad(logoUrl);
     };
     reader.readAsDataURL(file);
+  }
+
+  function uploadLogo(file: File) {
+    readLogoFile(file, (logoUrl) => {
+      setLogoChanged(true);
+      setSettings((current) => ({ ...current, logoUrl }));
+    });
+  }
+
+  function uploadNewEventLogo(file: File) {
+    readLogoFile(file, (logoUrl) => {
+      setNewEventLogoUrl(logoUrl);
+      setNewShowEventLogo(true);
+    });
+  }
+
+  function uploadEditEventLogo(file: File) {
+    readLogoFile(file, (logoUrl) => {
+      setEditEventLogoUrl(logoUrl);
+      setEditShowEventLogo(true);
+    });
   }
 
   function buildInitialRooms() {
@@ -570,6 +598,8 @@ export function AdminConsole() {
         classLevel: newClassLevel,
         selectionMode: newSelectionMode,
         wholeLevelQuota: newWholeQuota,
+        eventLogoUrl: newEventLogoUrl || null,
+        showEventLogo: newShowEventLogo,
         rooms: buildInitialRooms(),
       }),
     });
@@ -583,6 +613,8 @@ export function AdminConsole() {
 
     setMessage("สร้างรอบสอบแล้ว กรุณาสร้างวิชาและนำเข้ารายชื่อทีละห้อง");
     setCreateExamOpen(false);
+    setNewEventLogoUrl("");
+    setNewShowEventLogo(false);
     await loadExams(data.exam.id);
   }
 
@@ -599,6 +631,8 @@ export function AdminConsole() {
         wholeLevelQuota: editSelectionMode === "WHOLE_LEVEL" ? editWholeQuota : null,
         passTitle,
         passInstructions,
+        eventLogoUrl: editEventLogoUrl || null,
+        showEventLogo: editShowEventLogo,
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -1020,14 +1054,13 @@ export function AdminConsole() {
       <div className="mx-auto w-full max-w-7xl px-5 py-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#eff6ff,#fdf2f8)] px-5 py-4 shadow-[var(--shadow-soft)]">
           <div className="flex items-center gap-4">
-            {settings.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={settings.logoUrl} alt="" className="size-14 rounded-xl object-cover ring-2 ring-white" />
-            ) : (
-              <div className="grid size-14 place-items-center rounded-xl bg-[linear-gradient(135deg,#38bdf8,#f472b6)] text-white">
-                <School size={26} />
-              </div>
-            )}
+            <LogoPair
+              schoolName={settings.schoolName}
+              schoolLogoUrl={settings.logoUrl}
+              eventLogoUrl={selectedExam?.showEventLogo ? selectedExam.eventLogoUrl : null}
+              eventName={selectedExam?.name}
+              size="sm"
+            />
             <div>
               <h1 className="text-2xl font-semibold">{settings.schoolName}</h1>
               <p className="text-sm text-[var(--text-muted)]">{selectedExam?.name ?? "จัดการรอบสอบและประกาศผล"}</p>
@@ -1191,14 +1224,7 @@ export function AdminConsole() {
                 </div>
               </div>
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--blue-wash)] p-4">
-                {settings.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={settings.logoUrl} alt="" className="mx-auto size-28 rounded-2xl object-cover ring-2 ring-white" />
-                ) : (
-                  <div className="mx-auto grid size-28 place-items-center rounded-2xl bg-[var(--primary-blue)] text-white">
-                    <School size={40} />
-                  </div>
-                )}
+                <LogoPair schoolName={settings.schoolName} schoolLogoUrl={settings.logoUrl} size="lg" />
                 <p className="mt-3 text-center text-sm font-semibold">{settings.schoolName}</p>
               </div>
             </div>
@@ -1248,6 +1274,43 @@ export function AdminConsole() {
                   <Field label="จำนวนห้องในชั้น">
                     <input className="app-input" type="number" min={1} value={roomCount} onFocus={selectNumberInput} onChange={(event) => setRoomCount(Number(event.target.value))} />
                   </Field>
+                  <div className="mt-3 rounded-2xl border border-sky-100 bg-white/80 p-3">
+                    <label className="flex items-center justify-between gap-3 text-sm font-semibold text-[var(--text-main)]">
+                      <span>แสดงโลโก้งานคู่กับโลโก้โรงเรียน</span>
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-sky-500"
+                        checked={newShowEventLogo}
+                        onChange={(event) => setNewShowEventLogo(event.target.checked)}
+                      />
+                    </label>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <LogoPair
+                        schoolName={settings.schoolName}
+                        schoolLogoUrl={settings.logoUrl}
+                        eventLogoUrl={newShowEventLogo ? newEventLogoUrl : null}
+                        eventName={newExamName}
+                        size="sm"
+                      />
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700">
+                        <ImageUp size={15} />
+                        อัปโหลดโลโก้งาน
+                        <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => event.target.files?.[0] && uploadNewEventLogo(event.target.files[0])} />
+                      </label>
+                      {newEventLogoUrl && (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                          onClick={() => {
+                            setNewEventLogoUrl("");
+                            setNewShowEventLogo(false);
+                          }}
+                        >
+                          ลบโลโก้งาน
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <button type="button" onClick={createExam} disabled={busy} className="app-button-primary mt-4">
                     <Plus size={16} />
                     สร้างรอบสอบ
@@ -1338,6 +1401,46 @@ export function AdminConsole() {
                           />
                         </Field>
                       )}
+                      <div className="mt-3 rounded-2xl border border-sky-100 bg-white/80 p-3">
+                        <label className="flex items-center justify-between gap-3 text-sm font-semibold text-[var(--text-main)]">
+                          <span>แสดงโลโก้งานคู่กับโลโก้โรงเรียน</span>
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-sky-500"
+                            checked={editShowEventLogo}
+                            onChange={(event) => setEditShowEventLogo(event.target.checked)}
+                          />
+                        </label>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <LogoPair
+                            schoolName={settings.schoolName}
+                            schoolLogoUrl={settings.logoUrl}
+                            eventLogoUrl={editShowEventLogo ? editEventLogoUrl : null}
+                            eventName={editExamName}
+                            size="sm"
+                          />
+                          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700">
+                            <ImageUp size={15} />
+                            อัปโหลดโลโก้งาน
+                            <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => event.target.files?.[0] && uploadEditEventLogo(event.target.files[0])} />
+                          </label>
+                          {editEventLogoUrl && (
+                            <button
+                              type="button"
+                              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                              onClick={() => {
+                                setEditEventLogoUrl("");
+                                setEditShowEventLogo(false);
+                              }}
+                            >
+                              ลบโลโก้งาน
+                            </button>
+                          )}
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                          ถ้าเปิดใช้งาน โลโก้งานจะแสดงคู่กับโลโก้โรงเรียนในหน้าเว็บและหน้าผลคะแนนของรอบสอบนี้
+                        </p>
+                      </div>
                       <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
                         เปลี่ยนรูปแบบคัดเลือกหรือจำนวนผู้ผ่านทั้งชั้น ระบบจะล้างผลที่คำนวณไว้ ต้องคำนวณและประกาศผลใหม่
                       </p>

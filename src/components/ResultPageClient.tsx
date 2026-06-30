@@ -11,7 +11,7 @@ const storageMaxAgeMs = 30 * 60 * 1000;
 type PublicResultSettings = {
   schoolName: string;
   logoUrl?: string | null;
-  activeExam?: { name: string; classLevel: string } | null;
+  activeExam?: { name: string; classLevel: string; eventLogoUrl?: string | null; showEventLogo?: boolean } | null;
 };
 
 type StoredResultPayload = {

@@ -21,6 +21,8 @@ export type PublicStudentResult = {
     publishedAt: string | null;
     passTitle: string | null;
     passInstructions: string | null;
+    eventLogoUrl?: string | null;
+    showEventLogo?: boolean;
   };
   student: {
     examNo: string;
@@ -98,6 +100,8 @@ type ResultStudent = {
     publishedAt: Date | null;
     passTitle: string | null;
     passInstructions: string | null;
+    eventLogoUrl: string | null;
+    showEventLogo: boolean;
     subjects: Array<{ id: string; name: string }>;
   };
   resultSnapshots: Array<{
@@ -143,6 +147,8 @@ type PublicResultExamInput = {
   publishedAt: Date | null;
   passTitle: string | null;
   passInstructions: string | null;
+  eventLogoUrl: string | null;
+  showEventLogo: boolean;
   subjects: Array<{ id: string; name: string; maxScore: number | null }>;
 };
 
@@ -266,12 +272,12 @@ export async function getPublicResultSettings() {
   const activeExam = settings.activeExamSessionId
     ? await prisma.examSession.findUnique({
         where: { id: settings.activeExamSessionId },
-        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true },
+        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true, eventLogoUrl: true, showEventLogo: true },
       })
     : await prisma.examSession.findFirst({
         where: { status: "PUBLISHED" },
         orderBy: { publishedAt: "desc" },
-        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true },
+        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true, eventLogoUrl: true, showEventLogo: true },
       });
 
   return {
@@ -282,7 +288,12 @@ export async function getPublicResultSettings() {
     activeExamSessionId: settings.activeExamSessionId,
     schoolContact: settings.schoolContact,
     updatedAt: settings.updatedAt,
-    activeExam,
+    activeExam: activeExam
+      ? {
+          ...activeExam,
+          eventLogoUrl: publicExamLogoUrl(activeExam.id, activeExam.eventLogoUrl, activeExam.showEventLogo),
+        }
+      : null,
   };
 }
 
@@ -291,6 +302,8 @@ export async function createExamSession(input: {
   classLevel: string;
   selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
   wholeLevelQuota?: number | null;
+  eventLogoUrl?: string | null;
+  showEventLogo?: boolean;
   rooms: Array<{ room: string; quota: number }>;
 }) {
   const prisma = getPrisma();
@@ -301,6 +314,8 @@ export async function createExamSession(input: {
         classLevel: input.classLevel,
         selectionMode: input.selectionMode,
         wholeLevelQuota: input.selectionMode === "WHOLE_LEVEL" ? Number(input.wholeLevelQuota ?? 0) : null,
+        eventLogoUrl: input.eventLogoUrl?.trim() || null,
+        showEventLogo: Boolean(input.showEventLogo && input.eventLogoUrl?.trim()),
       },
     });
 
@@ -327,11 +342,13 @@ export async function updateExamSession(input: {
   wholeLevelQuota?: number | null;
   passTitle?: string | null;
   passInstructions?: string | null;
+  eventLogoUrl?: string | null;
+  showEventLogo?: boolean;
 }) {
   const prisma = getPrisma();
   const current = await prisma.examSession.findUnique({
     where: { id: input.examSessionId },
-    select: { id: true, name: true, classLevel: true, selectionMode: true, wholeLevelQuota: true },
+    select: { id: true, name: true, classLevel: true, selectionMode: true, wholeLevelQuota: true, eventLogoUrl: true },
   });
   if (!current) throw new Error("ไม่พบรอบสอบ");
 
@@ -359,6 +376,12 @@ export async function updateExamSession(input: {
   const rankingRuleChanged =
     nextSelectionMode !== current.selectionMode || nextWholeLevelQuota !== current.wholeLevelQuota;
   const classLevelChanged = nextClassLevel !== current.classLevel;
+  const nextEventLogoUrl =
+    input.eventLogoUrl !== undefined ? input.eventLogoUrl?.trim() || null : current.eventLogoUrl;
+  const nextShowEventLogo =
+    input.showEventLogo !== undefined || input.eventLogoUrl !== undefined
+      ? Boolean(input.showEventLogo && nextEventLogoUrl)
+      : undefined;
 
   const updated = await prisma.$transaction(async (tx) => {
     const exam = await tx.examSession.update({
@@ -372,6 +395,8 @@ export async function updateExamSession(input: {
           : {}),
         ...(input.passTitle !== undefined ? { passTitle: input.passTitle?.trim() || null } : {}),
         ...(input.passInstructions !== undefined ? { passInstructions: input.passInstructions?.trim() || null } : {}),
+        ...(input.eventLogoUrl !== undefined ? { eventLogoUrl: nextEventLogoUrl } : {}),
+        ...(nextShowEventLogo !== undefined ? { showEventLogo: nextShowEventLogo } : {}),
         ...(rankingRuleChanged ? { status: "DRAFT" as const, publishedAt: null } : {}),
       },
     });
@@ -1038,6 +1063,12 @@ function publicLogoUrl(logoUrl?: string | null) {
   return logoUrl;
 }
 
+function publicExamLogoUrl(examId: string, logoUrl?: string | null, showEventLogo?: boolean | null) {
+  if (!showEventLogo || !logoUrl) return null;
+  if (logoUrl.startsWith("data:image/") && logoUrl.length > 20_000) return `/api/exams/${examId}/event-logo`;
+  return logoUrl;
+}
+
 function publicSchoolFromSettings(settings: Awaited<ReturnType<typeof getSchoolSettings>>) {
   return {
     schoolName: settings.schoolName,
@@ -1162,6 +1193,8 @@ function buildPublicResultPayloads(
             publishedAt: exam.publishedAt ? exam.publishedAt.toISOString() : null,
             passTitle: exam.passTitle,
             passInstructions: exam.passInstructions,
+            eventLogoUrl: publicExamLogoUrl(exam.id, exam.eventLogoUrl, exam.showEventLogo),
+            showEventLogo: exam.showEventLogo,
           },
           student: {
             examNo: snapshot.student.examNo,
@@ -1186,6 +1219,8 @@ function buildPublicResultPayloads(
           publishedAt: exam.publishedAt ? exam.publishedAt.toISOString() : null,
           passTitle: exam.passTitle,
           passInstructions: exam.passInstructions,
+          eventLogoUrl: publicExamLogoUrl(exam.id, exam.eventLogoUrl, exam.showEventLogo),
+          showEventLogo: exam.showEventLogo,
         },
         student: {
           examNo: snapshot.student.examNo,
@@ -1307,6 +1342,8 @@ function buildPrivateResult(
       publishedAt: student.examSession.publishedAt ? student.examSession.publishedAt.toISOString() : null,
       passTitle: student.examSession.passTitle,
       passInstructions: student.examSession.passInstructions,
+      eventLogoUrl: publicExamLogoUrl(student.examSession.id, student.examSession.eventLogoUrl, student.examSession.showEventLogo),
+      showEventLogo: student.examSession.showEventLogo,
     },
     student: {
       examNo: student.examNo,
@@ -1497,6 +1534,12 @@ async function findCachedPublicResultSession(
           id: true,
           examNo: true,
           examSessionId: true,
+          examSession: {
+            select: {
+              eventLogoUrl: true,
+              showEventLogo: true,
+            },
+          },
         },
       },
     },
@@ -1510,6 +1553,12 @@ async function findCachedPublicResultSession(
   if (!result || result.exam.id !== snapshot.student.examSessionId || result.student.examNo !== snapshot.student.examNo) {
     return null;
   }
+  result.exam.eventLogoUrl = publicExamLogoUrl(
+    snapshot.student.examSessionId,
+    snapshot.student.examSession.eventLogoUrl,
+    snapshot.student.examSession.showEventLogo,
+  );
+  result.exam.showEventLogo = snapshot.student.examSession.showEventLogo;
 
   return {
     lookup: {

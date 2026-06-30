@@ -3,8 +3,9 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { BarChart3, ChevronLeft, School } from "lucide-react";
+import { BarChart3, ChevronLeft } from "lucide-react";
 import type { PublicStudentResult } from "@/lib/repository";
+import { LogoPair } from "@/components/LogoPair";
 
 // แผง "ภาพรวมเพื่อการพัฒนา" ใหญ่ (~560 บรรทัด) และพับเก็บ default + อยู่ใต้ fold
 // → lazy-load แยก chunk โหลดทีหลัง ลด JS ที่ต้อง parse ตอนเปิดหน้าผลครั้งแรก (เร็วขึ้นบนมือถือ)
@@ -95,14 +96,14 @@ export function ResultContent({ result }: { result: StudentResult }) {
       <article className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-[0_18px_55px_rgba(15,23,42,0.10)]">
         <header className="bg-[linear-gradient(135deg,#cbd5e1_0%,#e2e8f0_100%)] p-4 md:p-6">
           <div className="flex gap-3 md:gap-4">
-            {result.school.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={result.school.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-2 ring-white/60 md:size-20" />
-            ) : (
-              <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/60 text-slate-500 ring-2 ring-white/60 md:size-20">
-                <School size={34} />
-              </div>
-            )}
+            <LogoPair
+              schoolName={result.school.schoolName}
+              schoolLogoUrl={result.school.logoUrl}
+              eventLogoUrl={result.exam.showEventLogo ? result.exam.eventLogoUrl : null}
+              eventName={result.exam.name}
+              size="md"
+              light
+            />
             <div className="min-w-0">
               <p className="text-lg font-semibold leading-tight text-slate-800 md:text-2xl">{result.school.schoolName}</p>
               <h1 className="mt-1 text-base font-semibold leading-snug text-slate-700 md:text-2xl">{result.exam.name}</h1>
@@ -155,14 +156,14 @@ export function ResultContent({ result }: { result: StudentResult }) {
           </div>
         )}
         <div className="relative flex gap-3 md:gap-4">
-          {result.school.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={result.school.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-2 ring-white/60 md:size-20" />
-          ) : (
-            <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/25 text-white ring-2 ring-white/50 backdrop-blur md:size-20">
-              <School size={34} />
-            </div>
-          )}
+          <LogoPair
+            schoolName={result.school.schoolName}
+            schoolLogoUrl={result.school.logoUrl}
+            eventLogoUrl={result.exam.showEventLogo ? result.exam.eventLogoUrl : null}
+            eventName={result.exam.name}
+            size="md"
+            light
+          />
           <div className="min-w-0">
             <p className="text-lg font-semibold leading-tight text-white md:text-2xl">{result.school.schoolName}</p>
             <h1 className="mt-1 text-base font-semibold leading-snug text-white/95 md:text-2xl">{result.exam.name}</h1>
@@ -257,19 +258,19 @@ export function MissingResult({
 }: {
   schoolName: string;
   logoUrl?: string | null;
-  activeExam?: { name: string; classLevel: string } | null;
+  activeExam?: { name: string; classLevel: string; eventLogoUrl?: string | null; showEventLogo?: boolean } | null;
   message?: string;
 }) {
   return (
     <div className="rounded-[1.5rem] border border-[var(--border-soft)] bg-white p-6 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)] md:p-8">
-      <div className="mx-auto mb-4 grid size-16 place-items-center overflow-hidden rounded-2xl bg-[var(--blue-wash)] text-[var(--primary-blue-strong)]">
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="" className="size-full object-cover" />
-        ) : (
-          <School size={30} />
-        )}
-      </div>
+      <LogoPair
+        schoolName={schoolName}
+        schoolLogoUrl={logoUrl}
+        eventLogoUrl={activeExam?.showEventLogo ? activeExam.eventLogoUrl : null}
+        eventName={activeExam?.name}
+        size="sm"
+        className="mx-auto mb-4"
+      />
       <p className="text-sm font-semibold text-[var(--primary-blue-strong)]">{schoolName}</p>
       <h1 className="mx-auto mt-2 max-w-2xl text-2xl font-semibold leading-tight md:text-3xl">
         {activeExam?.name ?? "ประกาศผลสอบ"}

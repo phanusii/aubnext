@@ -15,6 +15,8 @@ const updateSchema = z.object({
   wholeLevelQuota: z.number().int().nonnegative().optional().nullable(),
   passTitle: z.string().max(300).optional().nullable(),
   passInstructions: z.string().max(3_000).optional().nullable(),
+  eventLogoUrl: z.string().max(1_400_000, "โลโก้งานใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB").optional().nullable(),
+  showEventLogo: z.boolean().optional(),
 });
 
 // แก้ไขข้อมูลรอบสอบ (ชื่อ/ชั้น/รูปแบบคัดเลือก/โควตารวม)

@@ -1,4 +1,4 @@
-import { School } from "lucide-react";
+import { LogoPair } from "@/components/LogoPair";
 
 export type PublicSettings = {
   schoolName: string;
@@ -7,6 +7,8 @@ export type PublicSettings = {
     name: string;
     classLevel: string;
     status: "DRAFT" | "PUBLISHED";
+    eventLogoUrl?: string | null;
+    showEventLogo?: boolean;
   } | null;
 };
 
@@ -15,14 +17,13 @@ export type PublicSettings = {
 export function PublicBrandingCard({ settings }: { settings: PublicSettings }) {
   return (
     <div className="flex items-start gap-3 sm:items-center">
-      {settings.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={settings.logoUrl} alt="" className="size-14 shrink-0 rounded-2xl object-cover ring-1 ring-sky-100" />
-      ) : (
-        <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-sky-50 text-[var(--primary-blue-strong)] ring-1 ring-sky-100">
-          <School size={26} />
-        </div>
-      )}
+      <LogoPair
+        schoolName={settings.schoolName}
+        schoolLogoUrl={settings.logoUrl}
+        eventLogoUrl={settings.activeExam?.showEventLogo ? settings.activeExam.eventLogoUrl : null}
+        eventName={settings.activeExam?.name}
+        size="md"
+      />
       <div className="min-w-0">
         <p className="text-xl font-semibold leading-tight text-sky-700 md:text-2xl">{settings.schoolName}</p>
         <h1 className="mt-1 text-lg font-semibold leading-snug text-slate-950 md:text-2xl">

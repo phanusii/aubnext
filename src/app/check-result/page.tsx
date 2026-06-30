@@ -23,6 +23,8 @@ async function SettingsHeader() {
               name: settings.activeExam.name,
               classLevel: settings.activeExam.classLevel,
               status: settings.activeExam.status,
+              eventLogoUrl: settings.activeExam.eventLogoUrl,
+              showEventLogo: settings.activeExam.showEventLogo,
             }
           : null,
       }}

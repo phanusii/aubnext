@@ -2,11 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, LockKeyhole, LogIn, School, Search, XCircle } from "lucide-react";
+import { GraduationCap, LockKeyhole, LogIn, Search, XCircle } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 import { cacheStudentResultForPage, studentResultSessionStorageKey } from "@/components/ResultPageClient";
+import { LogoPair } from "@/components/LogoPair";
 
-type ActiveExam = { name: string; classLevel: string; status: "DRAFT" | "PUBLISHED" } | null;
+type ActiveExam = {
+  name: string;
+  classLevel: string;
+  status: "DRAFT" | "PUBLISHED";
+  eventLogoUrl?: string | null;
+  showEventLogo?: boolean;
+} | null;
 type Tab = "student" | "teacher";
 
 export function HomePortal({
@@ -106,14 +113,14 @@ export function HomePortal({
       <section className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-10">
         {/* โลโก้ + ชื่อโรงเรียน + ชื่อรอบสอบ */}
         <div className="text-center">
-          <div className="mx-auto grid size-24 place-items-center overflow-hidden rounded-[1.75rem] bg-white shadow-[0_18px_55px_rgba(14,165,233,0.18)] ring-1 ring-sky-100">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={schoolName} className="size-full object-cover" />
-            ) : (
-              <School size={44} className="text-[var(--primary-blue-strong)]" />
-            )}
-          </div>
+          <LogoPair
+            schoolName={schoolName}
+            schoolLogoUrl={logoUrl}
+            eventLogoUrl={activeExam?.showEventLogo ? activeExam.eventLogoUrl : null}
+            eventName={activeExam?.name}
+            size="lg"
+            className="mx-auto"
+          />
           <h1 className="mt-4 text-xl font-bold leading-tight text-slate-950">{schoolName}</h1>
 
           {activeExam ? (
