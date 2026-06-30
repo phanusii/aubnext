@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
+import { countScoreDraftChanges, readScoreDraft } from "@/lib/score-draft-storage";
 import { ScoreEntryCard } from "@/components/ScoreEntryCard";
 import { AppFooter } from "@/components/AppFooter";
 
@@ -724,6 +725,13 @@ export function AdminConsole() {
 
   function openExamActionDialog(action: ExamAction) {
     if (!selectedExam || busy) return;
+    const pendingDraft = readScoreDraft(selectedExam.id);
+    if (pendingDraft) {
+      const pendingCount = countScoreDraftChanges(pendingDraft);
+      setActiveTab("scores");
+      window.alert(`ยังมีคะแนนที่รอบันทึก ${pendingCount} รายการ\nกรุณารอให้ระบบบันทึกอัตโนมัติ หรือกด "ส่งคะแนนค้าง" ให้เรียบร้อยก่อน${action === "publish" ? "ประกาศผล" : "คำนวณผล"}`);
+      return;
+    }
     setPendingExamAction(action);
   }
 
@@ -1598,7 +1606,7 @@ export function AdminConsole() {
         {activeTab === "scores" && selectedExam && (
           <Panel icon={<ListChecks size={18} />} title="กรอกคะแนนรายคน">
             <p className="mb-3 text-sm text-[var(--text-muted)]">
-              กรอก/แก้คะแนนแต่ละวิชาได้โดยตรง (สำหรับนำเข้ารายชื่อก่อนแล้วค่อยกรอกคะแนน) · เว้นว่าง = ยังไม่กรอก · กดบันทึกเมื่อแก้เสร็จ
+              กรอก/แก้คะแนนแต่ละวิชาได้โดยตรง · ระบบบันทึกอัตโนมัติ และเก็บคะแนนค้างไว้ในเครื่องหากอินเทอร์เน็ตไม่พร้อม · เว้นว่าง = ยังไม่กรอก
             </p>
             <ScoreEntryCard key={selectedExam.id} examId={selectedExam.id} classLevel={selectedExam.classLevel} />
           </Panel>
