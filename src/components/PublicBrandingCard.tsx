@@ -16,13 +16,14 @@ export type PublicSettings = {
 // แยกออกมาเป็น component ของตัวเองเพื่อให้ห่อ <Suspense> ได้ ส่วนที่เหลือของฟอร์มเป็น static shell
 export function PublicBrandingCard({ settings }: { settings: PublicSettings }) {
   return (
-    <div className="flex items-start gap-3 sm:items-center">
+    <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:text-left">
       <LogoPair
         schoolName={settings.schoolName}
         schoolLogoUrl={settings.logoUrl}
         eventLogoUrl={settings.activeExam?.showEventLogo ? settings.activeExam.eventLogoUrl : null}
         eventName={settings.activeExam?.name}
         size="md"
+        className="mx-auto sm:mx-0"
       />
       <div className="min-w-0">
         <p className="text-xl font-semibold leading-tight text-sky-700 md:text-2xl">{settings.schoolName}</p>

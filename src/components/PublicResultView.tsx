@@ -95,7 +95,7 @@ export function ResultContent({ result }: { result: StudentResult }) {
     return (
       <article className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-[0_18px_55px_rgba(15,23,42,0.10)]">
         <header className="bg-[linear-gradient(135deg,#cbd5e1_0%,#e2e8f0_100%)] p-4 md:p-6">
-          <div className="flex gap-3 md:gap-4">
+          <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:text-left md:gap-4">
             <LogoPair
               schoolName={result.school.schoolName}
               schoolLogoUrl={result.school.logoUrl}
@@ -103,6 +103,7 @@ export function ResultContent({ result }: { result: StudentResult }) {
               eventName={result.exam.name}
               size="md"
               light
+              className="mx-auto sm:mx-0"
             />
             <div className="min-w-0">
               <p className="text-lg font-semibold leading-tight text-slate-800 md:text-2xl">{result.school.schoolName}</p>
@@ -155,14 +156,15 @@ export function ResultContent({ result }: { result: StudentResult }) {
             ))}
           </div>
         )}
-        <div className="relative flex gap-3 md:gap-4">
+        <div className="relative flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:text-left md:gap-4">
           <LogoPair
             schoolName={result.school.schoolName}
             schoolLogoUrl={result.school.logoUrl}
             eventLogoUrl={result.exam.showEventLogo ? result.exam.eventLogoUrl : null}
             eventName={result.exam.name}
-            size="md"
+            size="lg"
             light
+            className="mx-auto sm:mx-0"
           />
           <div className="min-w-0">
             <p className="text-lg font-semibold leading-tight text-white md:text-2xl">{result.school.schoolName}</p>
