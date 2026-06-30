@@ -184,6 +184,98 @@ const emptySubject = (sortOrder = 0): Subject => ({
   tieBreakOrder: null,
 });
 
+const richMenuSize = { width: 2500, height: 1686 };
+const richMenuPreviewAreas = [
+  { label: "ผูกบัญชี", x: 55, y: 500, width: 1160, height: 455 },
+  { label: "ดูผลคะแนน", x: 1260, y: 500, width: 1185, height: 455 },
+  { label: "เช็คผลผ่านเว็บ", x: 55, y: 975, width: 1160, height: 455 },
+  { label: "ติดต่อโรงเรียน", x: 1260, y: 975, width: 1185, height: 455 },
+];
+
+function dataUrlByteSize(dataUrl: string) {
+  const base64 = dataUrl.split(",")[1] ?? "";
+  return Math.floor((base64.length * 3) / 4);
+}
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(2)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1000))} KB`;
+}
+
+function canvasToJpegDataUrl(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<string>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("แปลงรูป Rich Menu ไม่สำเร็จ"));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("อ่านรูป Rich Menu ไม่สำเร็จ"));
+        reader.readAsDataURL(blob);
+      },
+      "image/jpeg",
+      quality,
+    );
+  });
+}
+
+async function resizeRichMenuImage(file: File) {
+  if (!file.type.startsWith("image/")) throw new Error("กรุณาเลือกไฟล์รูปภาพ");
+
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    const loaded = new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("เปิดรูป Rich Menu ไม่สำเร็จ"));
+    });
+    image.src = sourceUrl;
+    await loaded;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = richMenuSize.width;
+    canvas.height = richMenuSize.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("เบราว์เซอร์ไม่รองรับการย่อรูป");
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const sourceRatio = image.naturalWidth / image.naturalHeight;
+    const targetRatio = canvas.width / canvas.height;
+    let drawWidth = canvas.width;
+    let drawHeight = canvas.height;
+    let drawX = 0;
+    let drawY = 0;
+
+    // ใช้แบบ cover เพื่อให้พื้นที่ปุ่มทั้ง 4 ตรงกับ canvas ของ LINE ไม่มีขอบว่างด้านข้าง
+    if (sourceRatio > targetRatio) {
+      drawHeight = canvas.height;
+      drawWidth = drawHeight * sourceRatio;
+      drawX = (canvas.width - drawWidth) / 2;
+    } else {
+      drawWidth = canvas.width;
+      drawHeight = drawWidth / sourceRatio;
+      drawY = (canvas.height - drawHeight) / 2;
+    }
+
+    context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+    const qualities = [0.9, 0.82, 0.74, 0.66, 0.58, 0.5, 0.42, 0.34, 0.28];
+    for (const quality of qualities) {
+      const dataUrl = await canvasToJpegDataUrl(canvas, quality);
+      const bytes = dataUrlByteSize(dataUrl);
+      if (bytes <= 1_000_000) return { dataUrl, bytes, quality };
+    }
+    throw new Error("รูปยังเกิน 1MB หลัง resize กรุณาเลือกรูปที่รายละเอียดน้อยลง");
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
@@ -204,12 +296,16 @@ export function AdminConsole() {
     adminEmail: "phanu9818@anubanubon.ac.th",
     adminPassword: "",
     adminPasswordConfirm: "",
+    lineRichMenuImageUrl: "",
   });
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [logoChanged, setLogoChanged] = useState(false);
+  const [lineRichMenuImageChanged, setLineRichMenuImageChanged] = useState(false);
+  const [lineRichMenuImageInfo, setLineRichMenuImageInfo] = useState("");
+  const [lineRichMenuUploading, setLineRichMenuUploading] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("exam");
   const [lineLinkCopied, setLineLinkCopied] = useState(false);
   const [warming, setWarming] = useState(false);
@@ -315,7 +411,11 @@ export function AdminConsole() {
       adminEmail: data.adminEmail ?? current.adminEmail,
       adminPassword: "",
       adminPasswordConfirm: "",
+      lineRichMenuImageUrl: data.lineRichMenuImageUrl ?? current.lineRichMenuImageUrl,
     }));
+    if (data.lineRichMenuImageUrl) {
+      setLineRichMenuImageInfo(`ใช้ภาพที่บันทึกไว้ (${formatBytes(dataUrlByteSize(data.lineRichMenuImageUrl))})`);
+    }
   }, []);
 
   // แถบแจ้งเตือนแสดงสักครู่แล้วหายเอง (~4.5 วิ)
@@ -335,6 +435,7 @@ export function AdminConsole() {
           logoUrl: data.logoUrl ?? "",
           activeExamSessionId: data.activeExamSessionId ?? "",
           schoolContact: data.schoolContact ?? "",
+          lineRichMenuImageUrl: data.lineRichMenuImageUrl ?? current.lineRichMenuImageUrl,
         })),
       )
       .catch(() => undefined);
@@ -579,6 +680,22 @@ export function AdminConsole() {
       setEditEventLogoUrl(logoUrl);
       setEditShowEventLogo(true);
     });
+  }
+
+  async function uploadLineRichMenuImage(file: File) {
+    setLineRichMenuUploading(true);
+    setMessage("กำลัง resize รูป Rich Menu ให้ตรงขนาด LINE และไม่เกิน 1MB");
+    try {
+      const resized = await resizeRichMenuImage(file);
+      setSettings((current) => ({ ...current, lineRichMenuImageUrl: resized.dataUrl }));
+      setLineRichMenuImageChanged(true);
+      setLineRichMenuImageInfo(`พร้อมอัปเดต: ${richMenuSize.width}×${richMenuSize.height}px · ${formatBytes(resized.bytes)} · JPEG quality ${Math.round(resized.quality * 100)}%`);
+      setMessage("เตรียมรูป Rich Menu ใหม่แล้ว ตรวจตัวอย่าง 4 ปุ่มก่อนกดอัปเดต");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "เตรียมรูป Rich Menu ไม่สำเร็จ");
+    } finally {
+      setLineRichMenuUploading(false);
+    }
   }
 
   function buildInitialRooms() {
@@ -924,7 +1041,11 @@ export function AdminConsole() {
   async function updateLineRichMenu() {
     setBusy(true);
     setMessage("");
-    const response = await fetch("/api/line/rich-menu", { method: "POST" });
+    const response = await fetch("/api/line/rich-menu", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lineRichMenuImageChanged ? { imageUrl: settings.lineRichMenuImageUrl || null } : {}),
+    });
     const data = await response.json().catch(() => ({}));
     setBusy(false);
 
@@ -934,6 +1055,10 @@ export function AdminConsole() {
       return;
     }
 
+    if (response.ok) {
+      setLineRichMenuImageChanged(false);
+      setLineRichMenuImageInfo(settings.lineRichMenuImageUrl ? `ใช้ภาพที่บันทึกไว้ (${formatBytes(dataUrlByteSize(settings.lineRichMenuImageUrl))})` : "กลับไปใช้ภาพ Rich Menu เริ่มต้น");
+    }
     setMessage(response.ok ? "อัปเดต Rich Menu ใน LINE แล้ว" : data.error ?? "อัปเดต Rich Menu ไม่สำเร็จ");
   }
 
@@ -1875,10 +2000,42 @@ export function AdminConsole() {
           <Panel icon={<Link2 size={18} />} title="LINE เช็คผลด้วยตัวเอง">
             <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
-                <div className="overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-white">
+                <div className="rounded-2xl border border-[var(--border-soft)] bg-white p-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-[var(--text-main)]">ภาพลิสต์เมนู LINE</p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        ระบบตรวจพื้นที่ปุ่มครบ {richMenuPreviewAreas.length}/4 ปุ่ม และ resize เป็น {richMenuSize.width}×{richMenuSize.height}px ไม่เกิน 1MB
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <label className={cx("inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700", lineRichMenuUploading && "pointer-events-none opacity-60")}>
+                        <ImageUp size={15} />
+                        {lineRichMenuUploading ? "กำลัง resize..." : "อัปโหลดภาพใหม่"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          onChange={(event) => event.target.files?.[0] && uploadLineRichMenuImage(event.target.files[0])}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"
+                        onClick={() => {
+                          setSettings((current) => ({ ...current, lineRichMenuImageUrl: "" }));
+                          setLineRichMenuImageChanged(true);
+                          setLineRichMenuImageInfo("จะกลับไปใช้ภาพ Rich Menu เริ่มต้นหลังอัปเดต");
+                        }}
+                      >
+                        ใช้ภาพเริ่มต้น
+                      </button>
+                    </div>
+                  </div>
+                  <div className="relative overflow-hidden rounded-xl border border-sky-100 bg-slate-50">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/line-rich-menu-preview.jpg"
+                    src={settings.lineRichMenuImageUrl || "/line-rich-menu-preview.jpg"}
                     alt="ตัวอย่าง Rich Menu LINE"
                     width={720}
                     height={486}
@@ -1886,6 +2043,29 @@ export function AdminConsole() {
                     decoding="async"
                     className="h-auto w-full"
                   />
+                    <div className="pointer-events-none absolute inset-0">
+                      {richMenuPreviewAreas.map((area, index) => (
+                        <div
+                          key={area.label}
+                          className="absolute rounded-lg border-2 border-white/95 bg-sky-500/10 shadow-[0_0_0_1px_rgba(2,132,199,0.55)]"
+                          style={{
+                            left: `${(area.x / richMenuSize.width) * 100}%`,
+                            top: `${(area.y / richMenuSize.height) * 100}%`,
+                            width: `${(area.width / richMenuSize.width) * 100}%`,
+                            height: `${(area.height / richMenuSize.height) * 100}%`,
+                          }}
+                        >
+                          <span className="absolute left-2 top-2 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                            {index + 1}. {area.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                    ตรวจพบพื้นที่ปุ่มครบ 4 ปุ่ม: ผูกบัญชี, ดูผลคะแนน, เช็คผลผ่านเว็บ, ติดต่อโรงเรียน
+                    {lineRichMenuImageInfo ? ` · ${lineRichMenuImageInfo}` : ""}
+                  </div>
                 </div>
                 <p><span className="font-semibold text-[var(--text-main)]">1. ผูกบัญชี</span> นักเรียนเปิด LIFF จาก Rich Menu แล้วกรอกรหัสนักเรียน</p>
                 <p><span className="font-semibold text-[var(--text-main)]">2. ปิด LIFF อัตโนมัติ</span> หลังผูกสำเร็จ ระบบจะปิดหน้าต่างเพื่อกลับไปหน้าแชท LINE</p>
@@ -1919,7 +2099,7 @@ export function AdminConsole() {
                   <ListChecks size={16} />
                   ดู JSON ตั้งค่า Rich Menu
                 </a>
-                <button type="button" onClick={updateLineRichMenu} disabled={busy} className="app-button-pink w-full">
+                <button type="button" onClick={updateLineRichMenu} disabled={busy || lineRichMenuUploading || richMenuPreviewAreas.length !== 4} className="app-button-pink w-full">
                   <Save size={16} />
                   อัปเดต Rich Menu ใน LINE
                 </button>

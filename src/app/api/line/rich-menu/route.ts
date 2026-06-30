@@ -1,13 +1,30 @@
 import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { getLineRichMenuPayload } from "@/lib/line-rich-menu";
+import { getSchoolSettings, upsertSchoolSettings } from "@/lib/repository";
 
 // nodejs เป็น runtime default อยู่แล้ว (cacheComponents เลิกรองรับ `export const runtime`)
 
 function lineToken() {
   return process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
+}
+
+const imageSchema = z.object({
+  imageUrl: z.string().max(1_400_000, "รูป Rich Menu ใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB").optional().nullable(),
+});
+
+function parseDataImage(value: string) {
+  const match = value.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,([a-zA-Z0-9+/=]+)$/);
+  if (!match) return null;
+  const normalizedContentType = match[1] === "image/jpg" ? "image/jpeg" : match[1];
+  const bytes = Buffer.from(match[2], "base64");
+  if (bytes.byteLength > 1_000_000) {
+    throw new Error("รูป Rich Menu ต้องไม่เกิน 1MB หลัง resize");
+  }
+  return { contentType: normalizedContentType, bytes };
 }
 
 async function lineFetch(path: string, init: RequestInit & { dataHost?: boolean } = {}) {
@@ -30,14 +47,31 @@ async function lineFetch(path: string, init: RequestInit & { dataHost?: boolean 
 }
 
 export async function GET() {
+  const settings = await getSchoolSettings();
   return NextResponse.json({
-    image: "/line-rich-menu.jpg",
+    image: settings.lineRichMenuImageUrl || "/line-rich-menu.jpg",
     payload: getLineRichMenuPayload(),
   });
 }
 
-async function updateLineRichMenu() {
+async function getRichMenuImage(inputImageUrl?: string | null) {
+  const settings = await getSchoolSettings();
+  const imageUrl = inputImageUrl !== undefined ? inputImageUrl : settings.lineRichMenuImageUrl;
+  if (imageUrl) {
+    const parsed = parseDataImage(imageUrl);
+    if (!parsed) throw new Error("รูป Rich Menu ไม่ถูกต้อง กรุณาอัปโหลดรูปใหม่");
+    return parsed;
+  }
+
+  return {
+    contentType: "image/jpeg",
+    bytes: await readFile(join(process.cwd(), "public", "line-rich-menu.jpg")),
+  };
+}
+
+async function updateLineRichMenu(inputImageUrl?: string | null) {
   const payload = getLineRichMenuPayload();
+  if (payload.areas.length !== 4) throw new Error("ตั้งค่าพื้นที่ Rich Menu ไม่ครบ 4 ปุ่ม");
   const existing = await lineFetch("/v2/bot/richmenu/list") as { richmenus?: Array<{ richMenuId: string; name: string }> };
   await Promise.all(
     (existing.richmenus ?? [])
@@ -51,25 +85,45 @@ async function updateLineRichMenu() {
     body: JSON.stringify(payload),
   }) as { richMenuId: string };
 
-  const image = await readFile(join(process.cwd(), "public", "line-rich-menu.jpg"));
+  const image = await getRichMenuImage(inputImageUrl);
   await lineFetch(`/v2/bot/richmenu/${created.richMenuId}/content`, {
     method: "POST",
     dataHost: true,
-    headers: { "Content-Type": "image/jpeg" },
-    body: new Uint8Array(image),
+    headers: { "Content-Type": image.contentType },
+    body: new Uint8Array(image.bytes),
   });
   await lineFetch(`/v2/bot/user/all/richmenu/${created.richMenuId}`, { method: "POST" });
+
+  if (inputImageUrl !== undefined) {
+    const settings = await getSchoolSettings();
+    await upsertSchoolSettings({
+      schoolName: settings.schoolName,
+      examTitle: settings.examTitle,
+      logoUrl: settings.logoUrl,
+      activeExamSessionId: settings.activeExamSessionId,
+      schoolContact: settings.schoolContact,
+      adminEmail: settings.adminEmail,
+      adminPasswordHash: settings.adminPasswordHash,
+      lineRichMenuImageUrl: inputImageUrl || null,
+    });
+  }
 
   return created.richMenuId;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   try {
-    const richMenuId = await updateLineRichMenu();
+    const body = await request.json().catch(() => ({}));
+    const parsed = imageSchema.safeParse(body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message;
+      return NextResponse.json({ error: issue ?? "ข้อมูลรูป Rich Menu ไม่ถูกต้อง" }, { status: 400 });
+    }
+    const richMenuId = await updateLineRichMenu(parsed.data.imageUrl);
     return NextResponse.json({ ok: true, richMenuId });
   } catch (error) {
     console.error("Update LINE rich menu failed", error);

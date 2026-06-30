@@ -15,5 +15,6 @@ export async function GET() {
     activeExamSessionId: settings.activeExamSessionId,
     schoolContact: settings.schoolContact,
     adminEmail: settings.adminEmail || process.env.ADMIN_EMAIL || "admin@example.com",
+    lineRichMenuImageUrl: settings.lineRichMenuImageUrl,
   });
 }

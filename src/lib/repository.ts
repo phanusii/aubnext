@@ -224,6 +224,7 @@ export async function upsertSchoolSettings(input: {
   schoolContact?: string | null;
   adminEmail?: string | null;
   adminPasswordHash?: string | null;
+  lineRichMenuImageUrl?: string | null;
 }) {
   const prisma = getPrisma();
   const settings = await prisma.schoolSettings.upsert({

@@ -32,6 +32,7 @@ model SchoolSettings {
   schoolContact       String?
   adminEmail          String?
   adminPasswordHash   String?
+  lineRichMenuImageUrl String?
   updatedAt           DateTime @updatedAt
 }
 
