@@ -79,6 +79,13 @@ type ImportValidation = {
   subjectCount: number;
   scoreCellCount: number;
   errors: string[];
+  warnings: string[];
+  scoreIssues: Array<{
+    rowIndex: number;
+    rowNumber: number;
+    subject: string;
+    kind: "blank" | "zero";
+  }>;
   isReady: boolean;
 };
 type AdminTab = "settings" | "exam" | "rooms" | "import" | "scores" | "results" | "line" | "history";
@@ -1526,6 +1533,20 @@ export function AdminConsole() {
                   : pasteValidation.errors.slice(0, 4).join(" / ")}
               </div>
             )}
+            {pasteValidation && pasteValidation.scoreIssues.length > 0 && (
+              <div className="mt-3 rounded-xl border border-[var(--pink-soft)] bg-[var(--pink-wash)] px-4 py-3 text-sm text-[var(--accent-pink-strong)]">
+                <p className="font-semibold">
+                  พบช่องคะแนนว่างหรือเป็นศูนย์ {pasteValidation.scoreIssues.length} ช่อง กรุณาตรวจสอบก่อนยืนยันนำเข้า
+                </p>
+                <div className="mt-2 max-h-36 space-y-1 overflow-y-auto pr-1 text-xs leading-5">
+                  {pasteValidation.scoreIssues.map((issue) => (
+                    <p key={`${issue.rowIndex}-${issue.subject}-${issue.kind}`}>
+                      แถว {issue.rowNumber}: วิชา {issue.subject} {issue.kind === "blank" ? "ยังไม่มีคะแนน" : "เป็น 0 คะแนน"}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
             {pastePreview && pastePreview.rows.length > 0 && (
               <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border-soft)]">
                 <div className="bg-[var(--blue-wash)] px-4 py-2 text-xs font-semibold text-[var(--text-muted)]">
@@ -1543,19 +1564,29 @@ export function AdminConsole() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pastePreview.rows.slice(0, 8).map((row, index) => (
+                      {pastePreview.rows.map((row, index) => (
                         <tr key={index} className="border-t border-[var(--border-soft)]">
-                          {pastePreview.headers.map((header) => (
-                            <td key={header} className="whitespace-nowrap px-3 py-1.5">{String(row[header] ?? "")}</td>
-                          ))}
+                          {pastePreview.headers.map((header) => {
+                            const scoreIssue = pasteValidation?.scoreIssues.find(
+                              (issue) => issue.rowIndex === index && issue.subject === header,
+                            );
+                            return (
+                              <td
+                                key={header}
+                                className={cx(
+                                  "whitespace-nowrap px-3 py-1.5",
+                                  scoreIssue && "bg-[var(--pink-wash)] font-semibold text-[var(--accent-pink-strong)]",
+                                )}
+                              >
+                                {String(row[header] ?? "") || (scoreIssue?.kind === "blank" ? "ว่าง" : "")}
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                {pastePreview.rows.length > 8 && (
-                  <div className="px-4 py-2 text-xs text-[var(--text-muted)]">…และอีก {pastePreview.rows.length - 8} แถว</div>
-                )}
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -2136,6 +2167,8 @@ function validateImportPreview(text: string, subjects: Subject[], requireScores 
   const parsed = prepareRoomImportTable(text, subjects, requireScores);
   const activeSubjects = subjects.filter((subject) => subject.name.trim());
   const errors: string[] = [];
+  const warnings: string[] = [];
+  const scoreIssues: ImportValidation["scoreIssues"] = [];
   const studentIdColumn = findColumn(parsed.headers, ["student_id", "รหัสนักเรียน", "exam_no", "เลขประจำตัว", "เลขที่สอบ", "รหัสสอบ"]);
   const studentNameColumn = findColumn(parsed.headers, ["student_name", "ชื่อนักเรียน", "ชื่อ-สกุล", "ชื่อ", "name"]);
   const seenStudentIds = new Set<string>();
@@ -2168,6 +2201,15 @@ function validateImportPreview(text: string, subjects: Subject[], requireScores 
     for (const subject of activeSubjects) {
       if (!parsed.headers.includes(subject.name)) continue;
       const rawScore = row[subject.name];
+      const scoreText = String(rawScore ?? "").trim();
+      if (!scoreText) {
+        if (requireScores) {
+          const message = `แถว ${rowNumber}: คะแนนวิชา ${subject.name} ยังว่าง`;
+          errors.push(message);
+          scoreIssues.push({ rowIndex: index, rowNumber, subject: subject.name, kind: "blank" });
+        }
+        continue;
+      }
       const score = Number(rawScore);
       if (!Number.isFinite(score)) {
         errors.push(`แถว ${rowNumber}: คะแนนวิชา ${subject.name} ไม่ใช่ตัวเลข`);
@@ -2176,6 +2218,11 @@ function validateImportPreview(text: string, subjects: Subject[], requireScores 
       } else if (subject.maxScore != null && score > subject.maxScore) {
         errors.push(`แถว ${rowNumber}: คะแนนวิชา ${subject.name} เกินคะแนนเต็ม ${subject.maxScore}`);
       } else {
+        if (score === 0) {
+          const message = `แถว ${rowNumber}: คะแนนวิชา ${subject.name} เป็น 0 คะแนน`;
+          warnings.push(message);
+          scoreIssues.push({ rowIndex: index, rowNumber, subject: subject.name, kind: "zero" });
+        }
         scoreCellCount += 1;
       }
     }
@@ -2186,6 +2233,8 @@ function validateImportPreview(text: string, subjects: Subject[], requireScores 
     subjectCount: activeSubjects.length,
     scoreCellCount,
     errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+    scoreIssues,
     isReady: errors.length === 0,
   };
 }
