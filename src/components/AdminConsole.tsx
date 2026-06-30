@@ -461,7 +461,7 @@ export function AdminConsole() {
       // ถ้าเรียกไม่สำเร็จก็ยังออกจากระบบฝั่งหน้าจอได้ (cookie หมดอายุเองอยู่แล้ว)
     }
     setIsLoggedIn(false);
-    router.replace("/"); // กลับหน้าแรก (แท็บนักเรียน/ครู) ไม่โชว์หน้า login เดี่ยว
+    window.location.assign("/"); // กลับหน้าแรกแบบ reload เต็มหน้า เพื่อเคลียร์ state หลังบ้านใน Safari
   }
 
   async function saveSettings() {

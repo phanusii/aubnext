@@ -46,18 +46,32 @@ export function HomePortal({
     if (loginBusy) return;
     setLoginBusy(true);
     setLoginError("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setLoginError(data.error ?? "เข้าสู่ระบบไม่สำเร็จ");
+        setLoginBusy(false);
+        return;
+      }
+
+      // ใช้ full navigation หลัง Set-Cookie เพื่อให้ Safari/LINE/SWR cache ไม่ค้างอยู่หน้า login
+      window.location.assign("/admin");
+    } catch {
       setLoginBusy(false);
-      setLoginError(data.error ?? "เข้าสู่ระบบไม่สำเร็จ");
-      return;
+      setLoginError("เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+    } finally {
+      window.clearTimeout(timeout);
     }
-    startTransition(() => router.push("/admin"));
   }
 
   async function checkResult() {
