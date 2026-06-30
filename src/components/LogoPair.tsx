@@ -13,25 +13,22 @@ type LogoPairProps = {
 
 const logoSize = {
   sm: {
-    school: "size-14 p-1.5",
-    event: "size-11 p-1.5",
-    overlap: "h-16 w-[4.75rem]",
-    gap: "gap-1.5",
+    frame: "size-14 p-1.5",
+    overlap: "h-16 w-[6.25rem]",
+    gap: "gap-2",
     icon: 28,
   },
   md: {
-    school: "size-20 p-2",
-    event: "size-14 p-1.5",
-    overlap: "h-24 w-[7rem]",
-    gap: "gap-2",
-    icon: 36,
+    frame: "size-[4.5rem] p-2",
+    overlap: "h-[5.25rem] w-[8.25rem]",
+    gap: "gap-2.5",
+    icon: 34,
   },
   lg: {
-    school: "size-24 p-2.5",
-    event: "size-[4.25rem] p-2",
-    overlap: "h-28 w-[8.25rem]",
-    gap: "gap-2.5",
-    icon: 42,
+    frame: "size-[5.5rem] p-2.5",
+    overlap: "h-[6.25rem] w-[10rem]",
+    gap: "gap-3",
+    icon: 40,
   },
 };
 
@@ -41,7 +38,7 @@ export function LogoPair({
   eventLogoUrl,
   eventName,
   size = "md",
-  variant = "overlap",
+  variant = "side-by-side",
   className = "",
   light = false,
 }: LogoPairProps) {
@@ -56,7 +53,7 @@ export function LogoPair({
   const label = hasEventLogo ? "โลโก้โรงเรียนและโลโก้งาน" : "โลโก้โรงเรียน";
 
   const schoolLogo = (
-    <div className={`${schoolLogoUrl ? imageFrame : fallbackFrame} ${sizing.school}`}>
+    <div className={`${schoolLogoUrl ? imageFrame : fallbackFrame} ${sizing.frame}`}>
       {schoolLogoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={schoolLogoUrl} alt={schoolName} className="size-full object-contain" />
@@ -67,7 +64,7 @@ export function LogoPair({
   );
 
   const eventLogo = eventLogoUrl ? (
-    <div className={`${imageFrame} ${sizing.event}`}>
+    <div className={`${imageFrame} ${sizing.frame}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={eventLogoUrl} alt={eventName || "โลโก้งาน"} className="size-full object-contain" />
     </div>
@@ -84,7 +81,7 @@ export function LogoPair({
 
   return (
     <div
-      className={`relative shrink-0 ${hasEventLogo ? sizing.overlap : sizing.school} ${className}`}
+      className={`relative shrink-0 ${hasEventLogo ? sizing.overlap : sizing.frame} ${className}`}
       aria-label={label}
     >
       <div className={hasEventLogo ? "absolute left-0 top-0" : ""}>{schoolLogo}</div>
