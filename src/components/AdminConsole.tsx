@@ -1024,15 +1024,6 @@ export function AdminConsole() {
               <p className="text-sm text-[var(--text-muted)]">{selectedExam?.name ?? "จัดการรอบสอบและประกาศผล"}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <a href="/line" className="app-button-secondary">
-              <Link2 size={16} />
-              หน้า LINE
-            </a>
-            <a href="/check-result" className="app-button-secondary">
-              หน้าเช็คผล
-            </a>
-          </div>
         </header>
 
         {message && (
