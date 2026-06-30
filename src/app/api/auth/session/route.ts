@@ -1,19 +1,20 @@
 // รัน region เดียวกับ DB เพื่อให้การอุ่น DB ไม่ข้าม region
 export const preferredRegion = "iad1";
 
-import { connection, NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { getPrisma } from "@/lib/prisma";
 
 export async function GET() {
-  await connection();
-  // อุ่น Neon ล่วงหน้าระหว่างที่แอดมินอยู่หน้า login (กดเข้าระบบทีหลังจะได้ไม่รอ DB ตื่น)
-  // ถูกเรียกตอนเปิดหน้า admin เสมอ — ผู้ใช้พิมพ์อีเมล/รหัสไป DB ตื่นรอไป พอ submit ก็เร็ว
-  await getPrisma().$queryRaw`SELECT 1`.catch(() => {});
-
   if (!(await requireAdmin())) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
+
+  // ตรวจ session ใช้ signed cookie เท่านั้น จึงต้องตอบเร็ว ไม่รอ DB
+  // ส่วนการอุ่น Neon ให้ทำหลังส่ง response แล้ว เพื่อไม่ให้หน้า refresh ค้างที่ "กำลังตรวจสอบสิทธิ์"
+  after(async () => {
+    const { getPrisma } = await import("@/lib/prisma");
+    await getPrisma().$queryRaw`SELECT 1`.catch(() => {});
+  });
 
   return NextResponse.json({ authenticated: true });
 }

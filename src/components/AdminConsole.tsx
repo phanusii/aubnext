@@ -338,8 +338,9 @@ export function AdminConsole() {
       .then((response) => {
         if (!response.ok) return;
         setIsLoggedIn(true);
+        setSessionChecked(true);
         void loadAdminSettings();
-        return loadExams();
+        void loadExams();
       })
       .catch(() => undefined)
       .finally(() => setSessionChecked(true));
