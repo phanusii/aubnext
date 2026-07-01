@@ -178,7 +178,7 @@ function downloadCsv(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 type ResultStatusFilter = "ALL" | CalculatedResult["status"];
-type ResultSort = "rank" | "score_desc" | "score_asc" | "exam_no";
+type ResultSort = "rank" | "room" | "score_desc" | "score_asc" | "exam_no";
 type ResultExportStatus = "all" | "passed" | "failed";
 type ResultExportLayout = "rooms" | "single";
 
@@ -192,6 +192,7 @@ const resultStatusOptions: Array<{ value: ResultStatusFilter; label: string }> =
 
 const resultSortOptions: Array<{ value: ResultSort; label: string }> = [
   { value: "rank", label: "อันดับ" },
+  { value: "room", label: "เรียงตามห้อง" },
   { value: "score_desc", label: "คะแนนมากไปน้อย" },
   { value: "score_asc", label: "คะแนนน้อยไปมาก" },
   { value: "exam_no", label: "รหัสนักเรียน" },
@@ -1271,6 +1272,14 @@ export function AdminConsole() {
       }
       if (resultSort === "exam_no") {
         return first.examNo.localeCompare(second.examNo, "th", { numeric: true });
+      }
+      if (resultSort === "room") {
+        return (
+          compareRoomName(first.room, second.room) ||
+          second.totalScore - first.totalScore ||
+          first.rank - second.rank ||
+          first.examNo.localeCompare(second.examNo, "th", { numeric: true })
+        );
       }
 
       return (
