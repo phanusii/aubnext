@@ -1275,6 +1275,22 @@ export function AdminConsole() {
     const absent = visibleResults.filter((result) => result.status === "ABSENT").length;
     return { passed, review, failed, absent, total: visibleResults.length };
   }, [visibleResults]);
+  const visibleScoreSummary = useMemo(() => {
+    const scoreResults = visibleResults.filter((result) => result.status !== "ABSENT" && Number.isFinite(result.totalScore));
+    const count = scoreResults.length;
+    const total = scoreResults.reduce((sum, result) => sum + result.totalScore, 0);
+    const average = count > 0 ? total / count : 0;
+    const variance = count > 0
+      ? scoreResults.reduce((sum, result) => sum + (result.totalScore - average) ** 2, 0) / count
+      : 0;
+    return {
+      count,
+      total,
+      average,
+      sd: Math.sqrt(variance),
+      scopeLabel: resultRoomFilter === "ALL" ? "ทุกห้อง" : `ห้อง ${resultRoomFilter}`,
+    };
+  }, [resultRoomFilter, visibleResults]);
   const resultExportSummary = useMemo(() => {
     const passed = calculatedResults.filter((result) => result.status === "PASSED").length;
     const failed = calculatedResults.filter((result) => result.status === "FAILED").length;
@@ -2040,6 +2056,22 @@ export function AdminConsole() {
               <Metric label="รอตรวจ" value={`${visibleResultSummary.review} คน`} />
               <Metric label="ไม่ผ่าน" value={`${visibleResultSummary.failed} คน`} />
               <Metric label="ไม่ได้เข้าสอบ" value={`${visibleResultSummary.absent} คน`} />
+            </div>
+
+            <div className="mb-4 rounded-2xl border border-sky-100 bg-white p-4 shadow-[0_12px_32px_rgba(14,165,233,0.08)]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold text-[var(--text-main)]">สถิติคะแนน {visibleScoreSummary.scopeLabel}</h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    คำนวณจากนักเรียนที่เข้าสอบในชุดที่แสดง {visibleScoreSummary.count} คน
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <Metric label="รวมคะแนนทั้งหมด" value={formatScore(visibleScoreSummary.total)} />
+                <Metric label="ค่าเฉลี่ย" value={formatScore(visibleScoreSummary.average)} />
+                <Metric label="SD" value={formatScore(visibleScoreSummary.sd)} />
+              </div>
             </div>
 
             <div className={cx(
