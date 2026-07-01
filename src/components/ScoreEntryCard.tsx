@@ -52,6 +52,12 @@ function draftSignature(edits: Edits, absentEdits: ScoreDraftAbsentEdits) {
   return JSON.stringify({ edits: sortedEdits, absentEdits: sortedAbsent });
 }
 
+function normalizeNumberText(value: string) {
+  if (!value) return "";
+  // ไม่ให้ช่องตัวเลขค้างเป็น 04/007 แต่ยังคงทศนิยมแบบ 0.5 ได้
+  return value.replace(/^0+(?=\d)/, "");
+}
+
 export function ScoreEntryCard({ examId, classLevel, onSaved }: { examId: string; classLevel: string; onSaved?: () => void }) {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [edits, setEdits] = useState<Edits>({});
@@ -443,7 +449,10 @@ export function ScoreEntryCard({ examId, classLevel, onSaved }: { examId: string
                       max={subject.maxScore ?? undefined}
                       disabled={isAbsent(student)}
                       value={isAbsent(student) ? "" : cellValue(student, subject.id)}
-                      onChange={(event) => setCell(student.id, subject.id, event.target.value)}
+                      onFocus={(event) => {
+                        if (event.currentTarget.value === "0") event.currentTarget.select();
+                      }}
+                      onChange={(event) => setCell(student.id, subject.id, normalizeNumberText(event.target.value))}
                       className={`w-16 rounded-lg border px-2 py-1 text-center font-semibold outline-none focus:ring-2 disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-50 disabled:text-slate-300 ${
                         index % 2 === 0 ? "border-sky-100 bg-sky-50/50 text-sky-700 focus:ring-sky-200" : "border-pink-100 bg-pink-50/50 text-pink-700 focus:ring-pink-200"
                       } ${pendingClass}`}

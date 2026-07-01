@@ -284,6 +284,18 @@ function selectNumberInput(event: FocusEvent<HTMLInputElement>) {
   event.currentTarget.select();
 }
 
+function numberInputValue(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value === 0) return "";
+  return String(value);
+}
+
+function parseNumberInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function AdminConsole() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -1393,11 +1405,11 @@ export function AdminConsole() {
                   </div>
                   {newSelectionMode === "WHOLE_LEVEL" && (
                     <Field label="จำนวนผู้ผ่านทั้งชั้น">
-                      <input className="app-input" type="number" min={0} value={newWholeQuota} onFocus={selectNumberInput} onChange={(event) => setNewWholeQuota(Number(event.target.value))} />
+                      <input className="app-input" type="number" min={0} value={numberInputValue(newWholeQuota)} onFocus={selectNumberInput} onChange={(event) => setNewWholeQuota(parseNumberInput(event.target.value))} />
                     </Field>
                   )}
                   <Field label="จำนวนห้องในชั้น">
-                    <input className="app-input" type="number" min={1} value={roomCount} onFocus={selectNumberInput} onChange={(event) => setRoomCount(Number(event.target.value))} />
+                    <input className="app-input" type="number" min={1} value={numberInputValue(roomCount)} onFocus={selectNumberInput} onChange={(event) => setRoomCount(parseNumberInput(event.target.value))} />
                   </Field>
                   <div className="mt-3 rounded-2xl border border-sky-100 bg-white/80 p-3">
                     <label className="flex items-center justify-between gap-3 text-sm font-semibold text-[var(--text-main)]">
@@ -1520,9 +1532,9 @@ export function AdminConsole() {
                             className="app-input"
                             type="number"
                             min={0}
-                            value={editWholeQuota}
+                            value={numberInputValue(editWholeQuota)}
                             onFocus={selectNumberInput}
-                            onChange={(event) => setEditWholeQuota(Number(event.target.value))}
+                            onChange={(event) => setEditWholeQuota(parseNumberInput(event.target.value))}
                           />
                         </Field>
                       )}
@@ -1650,7 +1662,7 @@ export function AdminConsole() {
                   {visibleRooms.map((room) => (
                     <div key={room.id ?? `room-${room.index}`} className="grid grid-cols-[1fr_130px_56px] gap-2 p-2">
                       <input className="app-input" value={room.room} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === room.index ? { ...item, room: event.target.value } : item))} />
-                      <input className="app-input" type="number" min={0} value={room.quota} onFocus={selectNumberInput} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === room.index ? { ...item, quota: Number(event.target.value) } : item))} />
+                      <input className="app-input" type="number" min={0} value={numberInputValue(room.quota)} onFocus={selectNumberInput} onChange={(event) => setRooms(rooms.map((item, itemIndex) => itemIndex === room.index ? { ...item, quota: parseNumberInput(event.target.value) } : item))} />
                       <button type="button" className="app-icon-button" onClick={() => setRooms(rooms.filter((_, itemIndex) => itemIndex !== room.index))}>
                         <Trash2 size={16} />
                       </button>
@@ -1682,11 +1694,11 @@ export function AdminConsole() {
                     <div className="mt-2 grid grid-cols-2 gap-2 pl-8">
                       <label className="block text-xs font-medium text-[var(--text-muted)]">
                         คะแนนเต็ม
-                        <input className="app-input mt-1" type="number" min={1} value={subject.maxScore} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: Number(event.target.value) } : item))} />
+                        <input className="app-input mt-1" type="number" min={1} value={numberInputValue(subject.maxScore)} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: parseNumberInput(event.target.value) } : item))} />
                       </label>
                       <label className="block text-xs font-medium text-[var(--text-muted)]">
                         ลำดับตัดสิน <span className="font-normal text-[10px]">(ถ้าเสมอ)</span>
-                        <input className="app-input mt-1" type="number" min={1} placeholder="—" value={subject.tieBreakOrder ?? ""} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? Number(event.target.value) : null } : item))} />
+                        <input className="app-input mt-1" type="number" min={1} placeholder="—" value={numberInputValue(subject.tieBreakOrder)} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, tieBreakOrder: event.target.value ? parseNumberInput(event.target.value) || null : null } : item))} />
                       </label>
                     </div>
                   </div>
