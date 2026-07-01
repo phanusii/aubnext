@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getPrisma } from "@/lib/prisma";
+import { compareRoomName } from "@/lib/room-sort";
 
 type ExportStatus = "all" | "passed" | "failed";
 type ExportLayout = "rooms" | "single";
@@ -65,6 +66,13 @@ function exportLayoutLabel(layout: ExportLayout) {
 
 type ExamWithSnapshots = NonNullable<Awaited<ReturnType<typeof loadExamForExport>>>;
 type ExportSnapshot = ExamWithSnapshots["resultSnapshots"][number];
+type ExportStatRow = {
+  label: string;
+  count: number;
+  total: number;
+  average: number;
+  sd: number;
+};
 
 async function loadExamForExport(id: string, status: ExportStatus) {
   const prisma = getPrisma();
@@ -76,7 +84,6 @@ async function loadExamForExport(id: string, status: ExportStatus) {
         where: statusWhere(status) ? { status: statusWhere(status) } : undefined,
         include: { student: true },
         orderBy: [
-          { student: { room: "asc" } },
           { rank: "asc" },
           { student: { examNo: "asc" } },
         ],
@@ -99,6 +106,75 @@ function statusFont(status: string) {
   return { name: EXPORT_FONT, size: 11, color: { argb: "FFB45309" } };
 }
 
+function compareExportSnapshots(first: ExportSnapshot, second: ExportSnapshot) {
+  return (
+    compareRoomName(first.student.room, second.student.room) ||
+    first.rank - second.rank ||
+    first.student.examNo.localeCompare(second.student.examNo, "th", { numeric: true, sensitivity: "base" })
+  );
+}
+
+function scoreStat(label: string, values: number[]): ExportStatRow {
+  const validValues = values.filter((value) => Number.isFinite(value));
+  const count = validValues.length;
+  const total = validValues.reduce((sum, value) => sum + value, 0);
+  const average = count > 0 ? total / count : 0;
+  const variance = count > 0
+    ? validValues.reduce((sum, value) => sum + (value - average) ** 2, 0) / count
+    : 0;
+  return { label, count, total, average, sd: Math.sqrt(variance) };
+}
+
+function buildExportStats(exam: ExamWithSnapshots, snapshots: ExportSnapshot[]) {
+  const scoreSnapshots = snapshots.filter((snapshot) => snapshot.status !== "ABSENT" && Number.isFinite(Number(snapshot.totalScore)));
+  const totalStat = scoreStat("คะแนนรวม", scoreSnapshots.map((snapshot) => Number(snapshot.totalScore)));
+  const subjectStats = exam.subjects.map((subject) =>
+    scoreStat(
+      subject.maxScore != null ? `${subject.name} (${formatScore(subject.maxScore)})` : subject.name,
+      scoreSnapshots
+        .map((snapshot) => Number((snapshot.scoreBreakdown as Record<string, number>)[subject.id]))
+        .filter((value) => Number.isFinite(value)),
+    ),
+  );
+  return [totalStat, ...subjectStats];
+}
+
+function addStatsRows(worksheet: ExcelJS.Worksheet, stats: ExportStatRow[]) {
+  if (stats.length === 0) return;
+
+  worksheet.addRow([]);
+  const titleRow = worksheet.addRow(["สรุปสถิติคะแนน"]);
+  titleRow.height = 22;
+  titleRow.getCell(1).font = { name: EXPORT_FONT, size: 12, bold: true, color: { argb: "FF0F172A" } };
+
+  const headerRow = worksheet.addRow(["รายการ", "จำนวน", "รวมคะแนน", "ค่าเฉลี่ย", "SD"]);
+  headerRow.height = 20;
+  for (let column = 1; column <= 5; column += 1) {
+    const cell = headerRow.getCell(column);
+    cell.font = { name: EXPORT_FONT, size: 11, bold: true, color: { argb: "FF0369A1" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0F2FE" } };
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: column === 1 ? "left" : "center", vertical: "middle" };
+  }
+
+  for (const stat of stats) {
+    const row = worksheet.addRow([
+      stat.label,
+      stat.count,
+      formatScore(stat.total),
+      formatScore(stat.average),
+      formatScore(stat.sd),
+    ]);
+    row.height = 18;
+    for (let column = 1; column <= 5; column += 1) {
+      const cell = row.getCell(column);
+      cell.font = { name: EXPORT_FONT, size: 11, bold: column === 1 };
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: column === 1 ? "left" : "center", vertical: "middle" };
+    }
+  }
+}
+
 function addResultWorksheet(
   workbook: ExcelJS.Workbook,
   sheetName: string,
@@ -107,7 +183,7 @@ function addResultWorksheet(
 ) {
   const worksheet = workbook.addWorksheet(uniqueSheetName(workbook, sheetName));
   const columns = [
-    { header: "อันดับ", key: "rank", width: 9 },
+    { header: "ลำดับ", key: "sequence", width: 9 },
     { header: "รหัสนักเรียน", key: "examNo", width: 16 },
     { header: "ชื่อ - สกุล", key: "name", width: 32 },
     { header: "ห้อง", key: "room", width: 9 },
@@ -153,10 +229,10 @@ function addResultWorksheet(
   // ข้อมูล — เส้นขอบบาง จัดชิด (ชื่อ/เหตุผลซ้าย, อื่นกึ่งกลาง) เน้นคะแนนรวม + สีสถานะ
   const totalCol = columns.findIndex((column) => column.key === "totalScore") + 1;
   const statusCol = columns.findIndex((column) => column.key === "status") + 1;
-  for (const snapshot of snapshots) {
+  snapshots.forEach((snapshot, index) => {
     const scoreBreakdown = snapshot.scoreBreakdown as Record<string, number>;
     const row = worksheet.addRow({
-      rank: snapshot.rank,
+      sequence: index + 1,
       examNo: snapshot.student.examNo,
       name: snapshot.student.name,
       room: snapshot.student.room,
@@ -178,7 +254,9 @@ function addResultWorksheet(
     });
     row.getCell(totalCol).font = { name: EXPORT_FONT, size: 11, bold: true };
     row.getCell(statusCol).font = statusFont(snapshot.status);
-  }
+  });
+
+  addStatsRows(worksheet, buildExportStats(exam, snapshots));
 
   worksheet.views = [{ state: "frozen", ySplit: HEADER_ROW }];
   worksheet.autoFilter = {
@@ -208,16 +286,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "AUBNEXT";
   workbook.created = new Date();
+  const sortedSnapshots = [...exam.resultSnapshots].sort(compareExportSnapshots);
 
   if (layout === "single") {
-    addResultWorksheet(workbook, "ทุกห้อง", exam, exam.resultSnapshots);
+    addResultWorksheet(workbook, "ทุกห้อง", exam, sortedSnapshots);
   } else {
     const grouped = new Map<string, typeof exam.resultSnapshots>();
-    for (const snapshot of exam.resultSnapshots) {
+    for (const snapshot of sortedSnapshots) {
       grouped.set(snapshot.student.room, [...(grouped.get(snapshot.student.room) ?? []), snapshot]);
     }
 
-    for (const [room, snapshots] of grouped) {
+    const rooms = Array.from(grouped.entries()).sort(([firstRoom], [secondRoom]) => compareRoomName(firstRoom, secondRoom));
+    for (const [room, snapshots] of rooms) {
       addResultWorksheet(workbook, safeSheetName(room), exam, snapshots);
     }
   }

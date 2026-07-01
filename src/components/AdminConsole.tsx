@@ -116,6 +116,18 @@ type PendingMaxScoreChange = {
   oldMaxScore: number;
   newMaxScore: number;
 };
+type ScoreStatRow = {
+  label: string;
+  count: number;
+  total: number;
+  average: number;
+  sd: number;
+};
+type ScoreSummary = {
+  count: number;
+  scopeLabel: string;
+  rows: ScoreStatRow[];
+};
 
 // เรียงรายการประวัติ: ล่าสุด / แยกห้อง / ตามคะแนน / ทั้งหมด(ตามรหัส)
 function sortHistoryRows(rows: ResultViewRow[], mode: HistorySort): ResultViewRow[] {
@@ -1277,20 +1289,22 @@ export function AdminConsole() {
   }, [visibleResults]);
   const visibleScoreSummary = useMemo(() => {
     const scoreResults = visibleResults.filter((result) => result.status !== "ABSENT" && Number.isFinite(result.totalScore));
-    const count = scoreResults.length;
-    const total = scoreResults.reduce((sum, result) => sum + result.totalScore, 0);
-    const average = count > 0 ? total / count : 0;
-    const variance = count > 0
-      ? scoreResults.reduce((sum, result) => sum + (result.totalScore - average) ** 2, 0) / count
-      : 0;
+    const scoreSubjects = subjects.filter((subject) => subject.id);
+    const totalStat = scoreStat("คะแนนรวม", scoreResults.map((result) => result.totalScore));
+    const subjectStats = scoreSubjects.map((subject) =>
+      scoreStat(
+        subject.maxScore != null ? `${subject.name} (${formatScore(subject.maxScore)})` : subject.name,
+        scoreResults
+          .map((result) => Number(result.scoreBreakdown[subject.id!]))
+          .filter((value) => Number.isFinite(value)),
+      ),
+    );
     return {
-      count,
-      total,
-      average,
-      sd: Math.sqrt(variance),
+      count: scoreResults.length,
+      rows: [totalStat, ...subjectStats],
       scopeLabel: resultRoomFilter === "ALL" ? "ทุกห้อง" : `ห้อง ${resultRoomFilter}`,
     };
-  }, [resultRoomFilter, visibleResults]);
+  }, [resultRoomFilter, subjects, visibleResults]);
   const resultExportSummary = useMemo(() => {
     const passed = calculatedResults.filter((result) => result.status === "PASSED").length;
     const failed = calculatedResults.filter((result) => result.status === "FAILED").length;
@@ -2058,21 +2072,9 @@ export function AdminConsole() {
               <Metric label="ไม่ได้เข้าสอบ" value={`${visibleResultSummary.absent} คน`} />
             </div>
 
-            <div className="mb-4 rounded-2xl border border-sky-100 bg-white p-4 shadow-[0_12px_32px_rgba(14,165,233,0.08)]">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="font-semibold text-[var(--text-main)]">สถิติคะแนน {visibleScoreSummary.scopeLabel}</h3>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    คำนวณจากนักเรียนที่เข้าสอบในชุดที่แสดง {visibleScoreSummary.count} คน
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <Metric label="รวมคะแนนทั้งหมด" value={formatScore(visibleScoreSummary.total)} />
-                <Metric label="ค่าเฉลี่ย" value={formatScore(visibleScoreSummary.average)} />
-                <Metric label="SD" value={formatScore(visibleScoreSummary.sd)} />
-              </div>
-            </div>
+            {resultRoomFilter === "ALL" && (
+              <ResultScoreStats summary={visibleScoreSummary} placement="top" />
+            )}
 
             <div className={cx(
               "mb-4 rounded-2xl border p-4",
@@ -2168,7 +2170,12 @@ export function AdminConsole() {
             {resultsLoading ? (
               <EmptyState text="กำลังโหลดผลคะแนน" />
             ) : visibleResults.length > 0 ? (
-              <ResultTable results={visibleResults} subjects={subjects} classLevel={selectedExam.classLevel} />
+              <ResultTable
+                results={visibleResults}
+                subjects={subjects}
+                classLevel={selectedExam.classLevel}
+                summary={resultRoomFilter === "ALL" ? null : visibleScoreSummary}
+              />
             ) : (
               <EmptyState text="นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล" />
             )}
@@ -2833,6 +2840,17 @@ function formatScore(value: number | undefined) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+function scoreStat(label: string, values: number[]): ScoreStatRow {
+  const validValues = values.filter((value) => Number.isFinite(value));
+  const count = validValues.length;
+  const total = validValues.reduce((sum, value) => sum + value, 0);
+  const average = count > 0 ? total / count : 0;
+  const variance = count > 0
+    ? validValues.reduce((sum, value) => sum + (value - average) ** 2, 0) / count
+    : 0;
+  return { label, count, total, average, sd: Math.sqrt(variance) };
+}
+
 function statusLabel(status: CalculatedResult["status"]) {
   if (status === "PASSED") return "ผ่าน";
   if (status === "REVIEW") return "รอตรวจ";
@@ -2840,7 +2858,49 @@ function statusLabel(status: CalculatedResult["status"]) {
   return "ไม่ผ่าน";
 }
 
-function ResultTable({ results, subjects, classLevel }: { results: CalculatedResult[]; subjects: Subject[]; classLevel: string }) {
+function ResultScoreStats({ summary, placement }: { summary: ScoreSummary; placement: "top" | "bottom" }) {
+  return (
+    <section className={cx(
+      "rounded-2xl border border-sky-100 bg-white p-4 shadow-[0_12px_32px_rgba(14,165,233,0.08)]",
+      placement === "top" ? "mb-4" : "mt-4",
+    )}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="font-semibold text-[var(--text-main)]">สถิติคะแนน {summary.scopeLabel}</h3>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            คำนวณจากนักเรียนที่เข้าสอบในชุดที่แสดง {summary.count} คน
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--border-soft)]">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-[var(--blue-wash)] text-xs font-semibold text-[var(--text-muted)]">
+            <tr>
+              <th className="whitespace-nowrap px-3 py-2">รายการ</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center">จำนวน</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center">รวมคะแนน</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center">ค่าเฉลี่ย</th>
+              <th className="whitespace-nowrap px-3 py-2 text-center">SD</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.rows.map((row) => (
+              <tr key={row.label} className="border-t border-[var(--border-soft)]">
+                <td className="whitespace-nowrap px-3 py-2 font-semibold text-[var(--text-main)]">{row.label}</td>
+                <td className="px-3 py-2 text-center">{row.count}</td>
+                <td className="px-3 py-2 text-center">{formatScore(row.total)}</td>
+                <td className="px-3 py-2 text-center">{formatScore(row.average)}</td>
+                <td className="px-3 py-2 text-center">{formatScore(row.sd)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ResultTable({ results, subjects, classLevel, summary }: { results: CalculatedResult[]; subjects: Subject[]; classLevel: string; summary?: ScoreSummary | null }) {
   const scoreSubjects = subjects.filter((subject) => subject.id);
   // คะแนนเต็มรวม (แสดงในวงเล็บที่หัวคอลัมน์ "คะแนนรวม")
   const totalMax = scoreSubjects.every((subject) => subject.maxScore != null)
@@ -2848,45 +2908,48 @@ function ResultTable({ results, subjects, classLevel }: { results: CalculatedRes
     : null;
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border-soft)]">
-      <table className="min-w-full text-left text-sm">
-        <thead className="bg-[var(--blue-wash)] text-[var(--text-muted)]">
-          <tr>
-            {[
-              "อันดับ",
-              "รหัสนักเรียน",
-              "ชื่อ",
-              "ห้อง",
-              ...scoreSubjects.map((subject) => (subject.maxScore != null ? `${subject.name} (${subject.maxScore})` : subject.name)),
-              totalMax != null ? `คะแนนรวม (${totalMax})` : "คะแนนรวม",
-              "สถานะ",
-              "เหตุผล",
-            ].map((header) => (
-              <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {results.map((result) => (
-            <tr key={result.studentId} className="border-t border-[var(--border-soft)]">
-              <td className="px-3 py-2 font-semibold">{result.rank}</td>
-              <td className="px-3 py-2">{result.examNo}</td>
-              <td className="px-3 py-2">{result.name}</td>
-              <td className="whitespace-nowrap px-3 py-2">{classLevel}/{result.room}</td>
-              {scoreSubjects.map((subject) => (
-                <td key={subject.id} className="px-3 py-2">{formatScore(result.scoreBreakdown[subject.id!])}</td>
+    <>
+      <div className="overflow-x-auto rounded-xl border border-[var(--border-soft)]">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-[var(--blue-wash)] text-[var(--text-muted)]">
+            <tr>
+              {[
+                "อันดับ",
+                "รหัสนักเรียน",
+                "ชื่อ",
+                "ห้อง",
+                ...scoreSubjects.map((subject) => (subject.maxScore != null ? `${subject.name} (${subject.maxScore})` : subject.name)),
+                totalMax != null ? `คะแนนรวม (${totalMax})` : "คะแนนรวม",
+                "สถานะ",
+                "เหตุผล",
+              ].map((header) => (
+                <th key={header} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>
               ))}
-              <td className="px-3 py-2 font-semibold">{formatScore(result.totalScore)}</td>
-              <td className="px-3 py-2">
-                <span className={cx("rounded-full px-2 py-1 text-xs font-semibold", result.status === "PASSED" ? "bg-sky-100 text-sky-700" : result.status === "REVIEW" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600")}>
-                  {statusLabel(result.status)}
-                </span>
-              </td>
-              <td className="min-w-72 px-3 py-2 text-[var(--text-muted)]">{result.reason}</td>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {results.map((result) => (
+              <tr key={result.studentId} className="border-t border-[var(--border-soft)]">
+                <td className="px-3 py-2 font-semibold">{result.rank}</td>
+                <td className="px-3 py-2">{result.examNo}</td>
+                <td className="px-3 py-2">{result.name}</td>
+                <td className="whitespace-nowrap px-3 py-2">{classLevel}/{result.room}</td>
+                {scoreSubjects.map((subject) => (
+                  <td key={subject.id} className="px-3 py-2">{formatScore(result.scoreBreakdown[subject.id!])}</td>
+                ))}
+                <td className="px-3 py-2 font-semibold">{formatScore(result.totalScore)}</td>
+                <td className="px-3 py-2">
+                  <span className={cx("rounded-full px-2 py-1 text-xs font-semibold", result.status === "PASSED" ? "bg-sky-100 text-sky-700" : result.status === "REVIEW" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600")}>
+                    {statusLabel(result.status)}
+                  </span>
+                </td>
+                <td className="min-w-72 px-3 py-2 text-[var(--text-muted)]">{result.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {summary && <ResultScoreStats summary={summary} placement="bottom" />}
+    </>
   );
 }
