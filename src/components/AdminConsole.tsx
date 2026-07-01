@@ -296,6 +296,18 @@ function parseNumberInput(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function compareRoomName(first: string, second: string) {
+  const firstTrimmed = first.trim();
+  const secondTrimmed = second.trim();
+  const firstIsNumber = /^\d+$/.test(firstTrimmed);
+  const secondIsNumber = /^\d+$/.test(secondTrimmed);
+  const firstNumber = firstIsNumber ? Number(firstTrimmed) : 0;
+  const secondNumber = secondIsNumber ? Number(secondTrimmed) : 0;
+  if (firstIsNumber && secondIsNumber && firstNumber !== secondNumber) return firstNumber - secondNumber;
+  if (firstIsNumber !== secondIsNumber) return firstIsNumber ? -1 : 1;
+  return first.localeCompare(second, "th", { numeric: true, sensitivity: "base" });
+}
+
 export function AdminConsole() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -353,6 +365,7 @@ export function AdminConsole() {
   const [cacheRepairingExamId, setCacheRepairingExamId] = useState("");
   const autoRepairStartedExamIds = useRef<Set<string>>(new Set());
   const [roomFilter, setRoomFilter] = useState("");
+  const [roomBulkCount, setRoomBulkCount] = useState(14);
   const [resultRoomFilter, setResultRoomFilter] = useState("ALL");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("ALL");
   const [resultSort, setResultSort] = useState<ResultSort>("rank");
@@ -813,6 +826,34 @@ export function AdminConsole() {
     await loadExams(selectedExam.id);
   }
 
+  function nextRoomNumber(currentRooms: RoomQuota[]) {
+    const roomNumbers = currentRooms
+      .map((room) => room.room.trim())
+      .filter((room) => /^\d+$/.test(room))
+      .map(Number);
+    return roomNumbers.length ? Math.max(...roomNumbers) + 1 : 1;
+  }
+
+  function addSingleRoom() {
+    setRooms((current) => [...current, { room: String(nextRoomNumber(current)), quota: 0 }]);
+  }
+
+  function addRoomsUntilCount() {
+    const target = Math.max(1, Math.floor(roomBulkCount || 0));
+    setRooms((current) => {
+      const existing = new Set(current.map((room) => room.room.trim()).filter(Boolean));
+      const next = [...current];
+      for (let roomNumber = 1; roomNumber <= target; roomNumber += 1) {
+        const roomName = String(roomNumber);
+        if (!existing.has(roomName)) {
+          existing.add(roomName);
+          next.push({ room: roomName, quota: 0 });
+        }
+      }
+      return next;
+    });
+  }
+
   async function saveSubjects() {
     if (!selectedExam) return;
     setBusy(true);
@@ -1115,12 +1156,13 @@ export function AdminConsole() {
     () =>
       rooms
         .map((room, index) => ({ ...room, index }))
-        .filter((room) => room.room.toLowerCase().includes(roomFilter.trim().toLowerCase())),
+        .filter((room) => room.room.toLowerCase().includes(roomFilter.trim().toLowerCase()))
+        .sort((first, second) => compareRoomName(first.room, second.room)),
     [roomFilter, rooms],
   );
   const roomOptions = useMemo(() => {
     const values = new Set([...rooms.map((room) => room.room), ...calculatedResults.map((result) => result.room)].filter(Boolean));
-    return Array.from(values).sort((first, second) => first.localeCompare(second, "th", { numeric: true }));
+    return Array.from(values).sort(compareRoomName);
   }, [calculatedResults, rooms]);
   const visibleResults = useMemo(() => {
     const filtered = calculatedResults.filter((result) => {
@@ -1141,7 +1183,7 @@ export function AdminConsole() {
       }
 
       return (
-        first.room.localeCompare(second.room, "th", { numeric: true }) ||
+        compareRoomName(first.room, second.room) ||
         first.rank - second.rank ||
         first.examNo.localeCompare(second.examNo, "th", { numeric: true })
       );
@@ -1633,7 +1675,7 @@ export function AdminConsole() {
         {activeTab === "rooms" && selectedExam && (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.85fr)]">
             <Panel icon={<Users size={18} />} title="ห้องเรียนและโควตา">
-              <div className="mb-3 grid gap-3 md:grid-cols-[1fr_auto]">
+              <div className="mb-3 grid gap-3 xl:grid-cols-[1fr_auto_auto]">
                 <label className="relative block">
                   <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                   <input
@@ -1644,9 +1686,23 @@ export function AdminConsole() {
                     placeholder="ค้นหาห้อง"
                   />
                 </label>
-                <button type="button" className="app-button-secondary" onClick={() => setRooms([...rooms, { room: String(rooms.length + 1), quota: 0 }])}>
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-100 bg-white px-2 py-2">
+                  <span className="whitespace-nowrap text-xs font-semibold text-[var(--text-muted)]">สร้างถึงห้อง</span>
+                  <input
+                    className="app-input h-10 w-24"
+                    type="number"
+                    min={1}
+                    value={numberInputValue(roomBulkCount)}
+                    onFocus={selectNumberInput}
+                    onChange={(event) => setRoomBulkCount(parseNumberInput(event.target.value))}
+                  />
+                  <button type="button" className="app-button-secondary h-10 px-3 text-xs" onClick={addRoomsUntilCount}>
+                    สร้างห้อง
+                  </button>
+                </div>
+                <button type="button" className="app-button-secondary" onClick={addSingleRoom}>
                   <Plus size={16} />
-                  เพิ่มห้อง
+                  เพิ่มทีละห้อง
                 </button>
               </div>
               <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-5 text-amber-800">
