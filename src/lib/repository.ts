@@ -578,43 +578,36 @@ export async function updateSubjectMaxScores(input: {
       if (!subject) throw new Error("ไม่พบวิชาที่ต้องการแก้ไข");
 
       const currentMaxScore = Number(subject.maxScore ?? 0);
-      const scores = await tx.score.findMany({
-        where: { subjectId: subject.id },
-        select: {
-          id: true,
-          value: true,
-          student: { select: { examNo: true, name: true } },
-        },
-      });
-
       if (currentMaxScore === update.maxScore) {
         subjects.push({ subjectName: subject.name, oldMaxScore: subject.maxScore, newMaxScore: update.maxScore });
         continue;
       }
 
       if (input.mode === "KEEP_SCORES") {
-        const highest = scores.reduce<{ value: number; examNo: string; name: string } | null>((current, score) => {
-          if (!current || score.value > current.value) {
-            return { value: score.value, examNo: score.student.examNo, name: score.student.name };
-          }
-          return current;
-        }, null);
+        const highest = await tx.score.findFirst({
+          where: { subjectId: subject.id },
+          orderBy: { value: "desc" },
+          select: {
+            value: true,
+            student: { select: { examNo: true, name: true } },
+          },
+        });
         if (highest && highest.value > update.maxScore) {
           throw new Error(
-            `บันทึกไม่ได้ เพราะวิชา ${subject.name} มีนักเรียนได้ ${highest.value} คะแนน (${highest.examNo} ${highest.name}) แต่คะแนนเต็มใหม่คือ ${update.maxScore}`,
+            `บันทึกไม่ได้ เพราะวิชา ${subject.name} มีนักเรียนได้ ${highest.value} คะแนน (${highest.student.examNo} ${highest.student.name}) แต่คะแนนเต็มใหม่คือ ${update.maxScore}`,
           );
         }
       } else {
         if (!Number.isFinite(currentMaxScore) || currentMaxScore <= 0) {
           throw new Error(`ปรับคะแนนวิชา ${subject.name} ตามสัดส่วนไม่ได้ เพราะคะแนนเต็มเดิมไม่ถูกต้อง`);
         }
-        for (const score of scores) {
-          await tx.score.update({
-            where: { id: score.id },
-            data: { value: scaleScoreToMaxScore(score.value, currentMaxScore, update.maxScore) },
-          });
-        }
-        adjustedScores += scores.length;
+        const ratio = update.maxScore / currentMaxScore;
+        const updatedCount = await tx.$executeRaw`
+          UPDATE "Score"
+          SET "value" = ROUND(("value" * ${ratio})::numeric, 2)::double precision
+          WHERE "subjectId" = ${subject.id}
+        `;
+        adjustedScores += Number(updatedCount);
       }
 
       await tx.subject.update({
@@ -641,7 +634,7 @@ export async function updateSubjectMaxScores(input: {
       adjustedScores,
       invalidatedResults: deleted.count,
     };
-  });
+  }, { maxWait: 10_000, timeout: 20_000 });
 
   if (result.changed) {
     peerSnapshotMemoryCache.delete(input.examSessionId);
