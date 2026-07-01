@@ -10,6 +10,7 @@ import {
   type ScoreDraftEdits,
   writeScoreDraft,
 } from "@/lib/score-draft-storage";
+import { compareRoomName } from "@/lib/room-sort";
 
 type Subject = { id: string; name: string; maxScore: number | null };
 type Student = { id: string; examNo: string; name: string; room: string; absent: boolean; scores: Record<string, number> };
@@ -150,7 +151,7 @@ export function ScoreEntryCard({ examId, classLevel, onSaved }: { examId: string
 
   const rooms = useMemo(() => {
     if (!sheet) return [];
-    return [...new Set(sheet.students.map((student) => student.room))].sort((a, b) => a.localeCompare(b, "th"));
+    return [...new Set(sheet.students.map((student) => student.room))].sort(compareRoomName);
   }, [sheet]);
 
   const visibleStudents = useMemo(() => {
@@ -367,7 +368,7 @@ export function ScoreEntryCard({ examId, classLevel, onSaved }: { examId: string
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <select value={room} onChange={(event) => setRoom(event.target.value)} className="rounded-lg border border-sky-200 bg-white px-2.5 py-1.5 text-sm">
+          <select value={room} onChange={(event) => setRoom(event.target.value)} className="app-input app-select h-10 min-w-36 py-1.5 text-sm">
             <option value="ALL">ทุกห้อง</option>
             {rooms.map((roomName) => (
               <option key={roomName} value={roomName}>ห้อง {roomName}</option>

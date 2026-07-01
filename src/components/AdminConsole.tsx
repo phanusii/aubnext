@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
+import { compareRoomName } from "@/lib/room-sort";
 import { countScoreDraftChanges, readScoreDraft } from "@/lib/score-draft-storage";
 import { ScoreEntryCard } from "@/components/ScoreEntryCard";
 import { AppFooter } from "@/components/AppFooter";
@@ -296,18 +297,6 @@ function parseNumberInput(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function compareRoomName(first: string, second: string) {
-  const firstTrimmed = first.trim();
-  const secondTrimmed = second.trim();
-  const firstIsNumber = /^\d+$/.test(firstTrimmed);
-  const secondIsNumber = /^\d+$/.test(secondTrimmed);
-  const firstNumber = firstIsNumber ? Number(firstTrimmed) : 0;
-  const secondNumber = secondIsNumber ? Number(secondTrimmed) : 0;
-  if (firstIsNumber && secondIsNumber && firstNumber !== secondNumber) return firstNumber - secondNumber;
-  if (firstIsNumber !== secondIsNumber) return firstIsNumber ? -1 : 1;
-  return first.localeCompare(second, "th", { numeric: true, sensitivity: "base" });
-}
-
 export function AdminConsole() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -534,6 +523,7 @@ export function AdminConsole() {
     if (!selectedExam) return;
     queueMicrotask(() => {
       setRooms(selectedExam.roomQuotas.map((room) => ({ id: room.id, room: room.room, quota: room.quota })));
+      const firstRoom = [...selectedExam.roomQuotas].sort((first, second) => compareRoomName(first.room, second.room))[0]?.room ?? "";
       setSubjects(
         selectedExam.subjects.length > 0
           ? selectedExam.subjects.map((subject, index) => ({
@@ -545,7 +535,7 @@ export function AdminConsole() {
             }))
           : [emptySubject(0)],
       );
-      setImportRoom(selectedExam.roomQuotas[0]?.room ?? "");
+      setImportRoom(firstRoom);
       setEditExamOpen(false);
       setEditExamName(selectedExam.name);
       setEditClassLevel(selectedExam.classLevel);
@@ -1160,6 +1150,10 @@ export function AdminConsole() {
         .sort((first, second) => compareRoomName(first.room, second.room)),
     [roomFilter, rooms],
   );
+  const sortedRooms = useMemo(
+    () => [...rooms].sort((first, second) => compareRoomName(first.room, second.room)),
+    [rooms],
+  );
   const roomOptions = useMemo(() => {
     const values = new Set([...rooms.map((room) => room.room), ...calculatedResults.map((result) => result.room)].filter(Boolean));
     return Array.from(values).sort(compareRoomName);
@@ -1306,7 +1300,7 @@ export function AdminConsole() {
                   </label>
                 </Field>
                 <Field label="รอบสอบที่แสดงในหน้าเช็คผล">
-                  <select className="app-input" value={settings.activeExamSessionId} onChange={(event) => setSettings({ ...settings, activeExamSessionId: event.target.value })}>
+                  <select className="app-input app-select" value={settings.activeExamSessionId} onChange={(event) => setSettings({ ...settings, activeExamSessionId: event.target.value })}>
                     <option value="">ใช้รอบสอบที่ประกาศล่าสุด</option>
                     {exams.map((exam) => (
                       <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)} · {exam.roomQuotas.length} ห้อง</option>
@@ -1499,7 +1493,7 @@ export function AdminConsole() {
             </Panel>
 
             <Panel icon={<Megaphone size={18} />} title="รอบสอบและการประกาศผล">
-              <select className="app-input" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
+              <select className="app-input app-select" value={selectedExamId} onChange={(event) => setSelectedExamId(event.target.value)}>
                 <option value="">เลือกรอบสอบ</option>
                 {exams.map((exam) => (
                   <option key={exam.id} value={exam.id}>{formatExamOptionLabel(exam)} · {exam.roomQuotas.length} ห้อง</option>
@@ -1802,9 +1796,9 @@ export function AdminConsole() {
             </div>
             <div className="grid gap-3 md:grid-cols-[220px_1fr]">
               <Field label="เลือกห้อง">
-                <select className="app-input" value={importRoom} onChange={(event) => setImportRoom(event.target.value)}>
-                  {rooms.map((room) => (
-                    <option key={room.room} value={room.room}>{room.room}</option>
+                <select className="app-input app-select" value={importRoom} onChange={(event) => setImportRoom(event.target.value)}>
+                  {sortedRooms.map((room) => (
+                    <option key={room.room} value={room.room}>ห้อง {room.room}</option>
                   ))}
                 </select>
               </Field>
@@ -2406,7 +2400,7 @@ function FilterControlGroup({
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]">{label}</span>
-      <select className="app-input" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="app-input app-select" value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
