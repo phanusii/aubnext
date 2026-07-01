@@ -1274,8 +1274,9 @@ export function AdminConsole() {
       }
 
       return (
-        compareRoomName(first.room, second.room) ||
+        second.totalScore - first.totalScore ||
         first.rank - second.rank ||
+        compareRoomName(first.room, second.room) ||
         first.examNo.localeCompare(second.examNo, "th", { numeric: true })
       );
     });
@@ -2928,9 +2929,9 @@ function ResultTable({ results, subjects, classLevel, summary }: { results: Calc
             </tr>
           </thead>
           <tbody>
-            {results.map((result) => (
+            {results.map((result, index) => (
               <tr key={result.studentId} className="border-t border-[var(--border-soft)]">
-                <td className="px-3 py-2 font-semibold">{result.rank}</td>
+                <td className="px-3 py-2 font-semibold">{index + 1}</td>
                 <td className="px-3 py-2">{result.examNo}</td>
                 <td className="px-3 py-2">{result.name}</td>
                 <td className="whitespace-nowrap px-3 py-2">{classLevel}/{result.room}</td>
