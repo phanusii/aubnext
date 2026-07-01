@@ -152,6 +152,8 @@ type PublicResultExamInput = {
   subjects: Array<{ id: string; name: string; maxScore: number | null }>;
 };
 
+export type SubjectMaxScoreAdjustmentMode = "KEEP_SCORES" | "SCALE_SCORES";
+
 const peerSnapshotMemoryCache = new Map<string, { expiresAt: number; data: PeerResultSnapshot[] }>();
 const peerSnapshotCacheMs = 60_000;
 const activePublishedExamMemoryCache = new Map<
@@ -176,6 +178,13 @@ type ResultLookupTrace = {
 
 function clearActivePublishedExamCache() {
   activePublishedExamMemoryCache.clear();
+}
+
+export function scaleScoreToMaxScore(value: number, oldMaxScore: number, newMaxScore: number) {
+  if (!Number.isFinite(value) || !Number.isFinite(oldMaxScore) || !Number.isFinite(newMaxScore) || oldMaxScore <= 0 || newMaxScore <= 0) {
+    throw new Error("ข้อมูลคะแนนเต็มไม่ถูกต้อง");
+  }
+  return Math.round((value * newMaxScore / oldMaxScore) * 100) / 100;
 }
 
 function startResultLookupTrace(scope: string, input: PublicStudentResultLookup): ResultLookupTrace | null {
@@ -518,6 +527,128 @@ export async function saveExamSubjects(
       })),
     }),
   ]);
+}
+
+export async function updateSubjectMaxScore(input: {
+  examSessionId: string;
+  subjectId: string;
+  maxScore: number;
+  mode: SubjectMaxScoreAdjustmentMode;
+}) {
+  const result = await updateSubjectMaxScores({
+    examSessionId: input.examSessionId,
+    mode: input.mode,
+    subjects: [{ subjectId: input.subjectId, maxScore: input.maxScore }],
+  });
+  return {
+    changed: result.changed,
+    subjectName: result.subjects[0]?.subjectName ?? "",
+    adjustedScores: result.adjustedScores,
+    invalidatedResults: result.invalidatedResults,
+  };
+}
+
+export async function updateSubjectMaxScores(input: {
+  examSessionId: string;
+  mode: SubjectMaxScoreAdjustmentMode;
+  subjects: Array<{ subjectId: string; maxScore: number }>;
+}) {
+  const prisma = getPrisma();
+  if (input.subjects.length === 0) {
+    throw new Error("ไม่มีวิชาที่ต้องแก้คะแนนเต็ม");
+  }
+  const normalizedSubjects = input.subjects.map((subject) => ({
+    subjectId: subject.subjectId,
+    maxScore: Number(subject.maxScore),
+  }));
+  if (normalizedSubjects.some((subject) => !subject.subjectId || !Number.isFinite(subject.maxScore) || subject.maxScore <= 0)) {
+    throw new Error("คะแนนเต็มต้องมากกว่า 0");
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    let changed = false;
+    let adjustedScores = 0;
+    const subjects: Array<{ subjectName: string; oldMaxScore: number | null; newMaxScore: number }> = [];
+
+    for (const update of normalizedSubjects) {
+      const subject = await tx.subject.findFirst({
+        where: { id: update.subjectId, examSessionId: input.examSessionId },
+        select: { id: true, name: true, maxScore: true },
+      });
+      if (!subject) throw new Error("ไม่พบวิชาที่ต้องการแก้ไข");
+
+      const currentMaxScore = Number(subject.maxScore ?? 0);
+      const scores = await tx.score.findMany({
+        where: { subjectId: subject.id },
+        select: {
+          id: true,
+          value: true,
+          student: { select: { examNo: true, name: true } },
+        },
+      });
+
+      if (currentMaxScore === update.maxScore) {
+        subjects.push({ subjectName: subject.name, oldMaxScore: subject.maxScore, newMaxScore: update.maxScore });
+        continue;
+      }
+
+      if (input.mode === "KEEP_SCORES") {
+        const highest = scores.reduce<{ value: number; examNo: string; name: string } | null>((current, score) => {
+          if (!current || score.value > current.value) {
+            return { value: score.value, examNo: score.student.examNo, name: score.student.name };
+          }
+          return current;
+        }, null);
+        if (highest && highest.value > update.maxScore) {
+          throw new Error(
+            `บันทึกไม่ได้ เพราะวิชา ${subject.name} มีนักเรียนได้ ${highest.value} คะแนน (${highest.examNo} ${highest.name}) แต่คะแนนเต็มใหม่คือ ${update.maxScore}`,
+          );
+        }
+      } else {
+        if (!Number.isFinite(currentMaxScore) || currentMaxScore <= 0) {
+          throw new Error(`ปรับคะแนนวิชา ${subject.name} ตามสัดส่วนไม่ได้ เพราะคะแนนเต็มเดิมไม่ถูกต้อง`);
+        }
+        for (const score of scores) {
+          await tx.score.update({
+            where: { id: score.id },
+            data: { value: scaleScoreToMaxScore(score.value, currentMaxScore, update.maxScore) },
+          });
+        }
+        adjustedScores += scores.length;
+      }
+
+      await tx.subject.update({
+        where: { id: subject.id },
+        data: { maxScore: update.maxScore },
+      });
+      changed = true;
+      subjects.push({ subjectName: subject.name, oldMaxScore: subject.maxScore, newMaxScore: update.maxScore });
+    }
+
+    const deleted = changed
+      ? await tx.resultSnapshot.deleteMany({ where: { examSessionId: input.examSessionId } })
+      : { count: 0 };
+    if (changed) {
+      await tx.examSession.update({
+        where: { id: input.examSessionId },
+        data: { status: "DRAFT", publishedAt: null },
+      });
+    }
+
+    return {
+      changed,
+      subjects,
+      adjustedScores,
+      invalidatedResults: deleted.count,
+    };
+  });
+
+  if (result.changed) {
+    peerSnapshotMemoryCache.delete(input.examSessionId);
+    clearActivePublishedExamCache();
+  }
+
+  return result;
 }
 
 export async function importExam(input: {

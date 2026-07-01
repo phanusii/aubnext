@@ -447,6 +447,7 @@ export function ScoreEntryCard({ examId, classLevel, onSaved }: { examId: string
                       type="number"
                       inputMode="decimal"
                       min={0}
+                      step="0.01"
                       max={subject.maxScore ?? undefined}
                       disabled={isAbsent(student)}
                       value={isAbsent(student) ? "" : cellValue(student, subject.id)}

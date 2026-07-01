@@ -109,6 +109,13 @@ type ResultViewRow = {
 type HistorySubTab = "viewed" | "notViewed";
 type HistorySort = "latest" | "room" | "score" | "examNo";
 type ExamAction = "calculate" | "publish";
+type MaxScoreAdjustmentMode = "KEEP_SCORES" | "SCALE_SCORES";
+type PendingMaxScoreChange = {
+  subjectId: string;
+  name: string;
+  oldMaxScore: number;
+  newMaxScore: number;
+};
 
 // เรียงรายการประวัติ: ล่าสุด / แยกห้อง / ตามคะแนน / ทั้งหมด(ตามรหัส)
 function sortHistoryRows(rows: ResultViewRow[], mode: HistorySort): ResultViewRow[] {
@@ -365,6 +372,9 @@ export function AdminConsole() {
   const [viewedSort, setViewedSort] = useState<HistorySort>("latest");
   const [notViewedSort, setNotViewedSort] = useState<HistorySort>("score");
   const [excelOpen, setExcelOpen] = useState(false);
+  const [pendingMaxScoreChanges, setPendingMaxScoreChanges] = useState<PendingMaxScoreChange[]>([]);
+  const [maxScoreMode, setMaxScoreMode] = useState<MaxScoreAdjustmentMode>("KEEP_SCORES");
+  const [maxScoreDialogError, setMaxScoreDialogError] = useState("");
   const lineResultUrl = process.env.NEXT_PUBLIC_LIFF_ID ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` : "/line";
   // ลิงก์เพิ่มเพื่อนบัญชี LINE OA (ให้นักเรียนกดเพิ่มเพื่อนก่อนเช็คผล) — ตั้งทับได้ด้วย NEXT_PUBLIC_LINE_ADD_FRIEND_URL
   const lineAddFriendUrl = process.env.NEXT_PUBLIC_LINE_ADD_FRIEND_URL || "https://lin.ee/OXREHbG";
@@ -846,6 +856,46 @@ export function AdminConsole() {
 
   async function saveSubjects() {
     if (!selectedExam) return;
+    if ((selectedExam._count?.students ?? 0) > 0) {
+      const currentById = new Map(selectedExam.subjects.map((subject) => [subject.id, subject]));
+      const hasStructureChange =
+        subjects.length !== selectedExam.subjects.length ||
+        subjects.some((subject) => {
+          if (!subject.id) return true;
+          const current = currentById.get(subject.id);
+          if (!current) return true;
+          return subject.name.trim() !== current.name.trim() || (subject.tieBreakOrder ?? null) !== (current.tieBreakOrder ?? null);
+        });
+
+      if (hasStructureChange) {
+        setMessage("มีรายชื่อนักเรียน/คะแนนแล้ว แก้ได้เฉพาะคะแนนเต็มของวิชาเดิมเท่านั้น หากต้องการเพิ่ม ลบ เปลี่ยนชื่อวิชา หรือลำดับตัดสิน กรุณาสร้างรอบสอบใหม่");
+        return;
+      }
+
+      const changes = subjects
+        .map((subject) => {
+          const current = subject.id ? currentById.get(subject.id) : null;
+          if (!current || Number(subject.maxScore) === Number(current.maxScore)) return null;
+          return {
+            subjectId: subject.id!,
+            name: subject.name,
+            oldMaxScore: Number(current.maxScore),
+            newMaxScore: Number(subject.maxScore),
+          };
+        })
+        .filter((change): change is PendingMaxScoreChange => Boolean(change));
+
+      if (changes.length === 0) {
+        setMessage("ไม่มีคะแนนเต็มที่เปลี่ยนแปลง");
+        return;
+      }
+
+      setPendingMaxScoreChanges(changes);
+      setMaxScoreMode("KEEP_SCORES");
+      setMaxScoreDialogError("");
+      return;
+    }
+
     setBusy(true);
     const response = await fetch(`/api/exams/${selectedExam.id}/subjects`, {
       method: "PUT",
@@ -863,6 +913,41 @@ export function AdminConsole() {
     setBusy(false);
     setMessage(response.ok ? "บันทึกวิชาแล้ว" : data.error ?? "บันทึกวิชาไม่สำเร็จ");
     await loadExams();
+  }
+
+  async function confirmMaxScoreChanges() {
+    if (!selectedExam || pendingMaxScoreChanges.length === 0) return;
+    setBusy(true);
+    const response = await fetch(`/api/exams/${selectedExam.id}/subjects/max-scores`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: maxScoreMode,
+        subjects: pendingMaxScoreChanges.map((change) => ({
+          subjectId: change.subjectId,
+          maxScore: change.newMaxScore,
+        })),
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setBusy(false);
+
+    if (!response.ok) {
+      setMaxScoreDialogError(data.error ?? "แก้คะแนนเต็มไม่สำเร็จ");
+      return;
+    }
+
+    setPendingMaxScoreChanges([]);
+    setMaxScoreDialogError("");
+    setCalculatedResults([]);
+    setResultsLoadedExamId("");
+    setPublicResultCacheHealth(null);
+    setMessage(
+      maxScoreMode === "SCALE_SCORES"
+        ? `แก้คะแนนเต็มและปรับคะแนนนักเรียนตามสัดส่วนแล้ว (${data.adjustedScores ?? 0} คะแนนที่อัปเดต) — กรุณาคำนวณและประกาศผลใหม่`
+        : "แก้คะแนนเต็มแล้วโดยไม่เปลี่ยนคะแนนนักเรียน — กรุณาคำนวณและประกาศผลใหม่",
+    );
+    await loadExams(selectedExam.id);
   }
 
   async function importPastedRows() {
@@ -1744,7 +1829,7 @@ export function AdminConsole() {
                     <div className="mt-2 grid grid-cols-2 gap-2 pl-8">
                       <label className="block text-xs font-medium text-[var(--text-muted)]">
                         คะแนนเต็ม
-                        <input className="app-input mt-1" type="number" min={1} value={numberInputValue(subject.maxScore)} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: parseNumberInput(event.target.value) } : item))} />
+                        <input className="app-input mt-1" type="number" min={0.01} step="0.01" value={numberInputValue(subject.maxScore)} onFocus={selectNumberInput} onChange={(event) => setSubjects(subjects.map((item, itemIndex) => itemIndex === index ? { ...item, maxScore: parseNumberInput(event.target.value) } : item))} />
                       </label>
                       <label className="block text-xs font-medium text-[var(--text-muted)]">
                         ลำดับตัดสิน <span className="font-normal text-[10px]">(ถ้าเสมอ)</span>
@@ -2280,6 +2365,24 @@ export function AdminConsole() {
             })()}
           </Panel>
         )}
+        {pendingMaxScoreChanges.length > 0 && (
+          <MaxScoreAdjustmentDialog
+            changes={pendingMaxScoreChanges}
+            mode={maxScoreMode}
+            error={maxScoreDialogError}
+            busy={busy}
+            onModeChange={(mode) => {
+              setMaxScoreMode(mode);
+              setMaxScoreDialogError("");
+            }}
+            onCancel={() => {
+              if (busy) return;
+              setPendingMaxScoreChanges([]);
+              setMaxScoreDialogError("");
+            }}
+            onConfirm={confirmMaxScoreChanges}
+          />
+        )}
         {pendingExamAction && selectedExam && (
           <ExamActionDialog
             action={pendingExamAction}
@@ -2292,6 +2395,115 @@ export function AdminConsole() {
         <AppFooter />
       </div>
     </main>
+  );
+}
+
+function MaxScoreAdjustmentDialog({
+  changes,
+  mode,
+  error,
+  busy,
+  onModeChange,
+  onCancel,
+  onConfirm,
+}: {
+  changes: PendingMaxScoreChange[];
+  mode: MaxScoreAdjustmentMode;
+  error: string;
+  busy: boolean;
+  onModeChange: (mode: MaxScoreAdjustmentMode) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 px-4 py-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="max-score-dialog-title"
+        className="w-full max-w-2xl rounded-2xl border border-[var(--border-soft)] bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.22)]"
+      >
+        <div className="flex items-start gap-3">
+          <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-[var(--primary-blue)] text-white">
+            <BookOpen size={22} />
+          </div>
+          <div className="min-w-0">
+            <h2 id="max-score-dialog-title" className="text-xl font-semibold leading-tight text-[var(--text-main)]">
+              ยืนยันการแก้คะแนนเต็ม
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+              รอบสอบนี้มีคะแนนนักเรียนแล้ว เลือกวิธีจัดการคะแนนเดิมก่อนบันทึก ระบบจะล้างผลคำนวณ/ประกาศเดิมและให้คำนวณใหม่
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border-soft)]">
+          <div className="grid grid-cols-[1fr_100px_100px] gap-2 bg-[var(--blue-wash)] px-4 py-2 text-xs font-semibold text-[var(--text-muted)]">
+            <span>วิชา</span>
+            <span className="text-right">เดิม</span>
+            <span className="text-right">ใหม่</span>
+          </div>
+          <div className="divide-y divide-[var(--border-soft)]">
+            {changes.map((change) => (
+              <div key={change.subjectId} className="grid grid-cols-[1fr_100px_100px] gap-2 px-4 py-3 text-sm">
+                <span className="font-semibold text-[var(--text-main)]">{change.name}</span>
+                <span className="text-right text-[var(--text-muted)]">{formatScore(change.oldMaxScore)}</span>
+                <span className="text-right font-semibold text-[var(--accent-pink-strong)]">{formatScore(change.newMaxScore)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onModeChange("SCALE_SCORES")}
+            className={cx(
+              "rounded-2xl border px-4 py-3 text-left transition",
+              mode === "SCALE_SCORES"
+                ? "border-sky-300 bg-sky-50 shadow-[0_12px_28px_rgba(14,165,233,0.12)]"
+                : "border-[var(--border-soft)] bg-white hover:bg-sky-50/60",
+            )}
+          >
+            <span className="text-sm font-semibold text-[var(--text-main)]">ปรับคะแนนตามสัดส่วน</span>
+            <span className="mt-1 block text-xs leading-5 text-[var(--text-muted)]">
+              เช่น 24/30 เมื่อเปลี่ยนเต็มเป็น 50 จะกลายเป็น 40.00/50
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange("KEEP_SCORES")}
+            className={cx(
+              "rounded-2xl border px-4 py-3 text-left transition",
+              mode === "KEEP_SCORES"
+                ? "border-pink-300 bg-pink-50 shadow-[0_12px_28px_rgba(244,114,182,0.12)]"
+                : "border-[var(--border-soft)] bg-white hover:bg-pink-50/60",
+            )}
+          >
+            <span className="text-sm font-semibold text-[var(--text-main)]">ไม่แก้คะแนนนักเรียน</span>
+            <span className="mt-1 block text-xs leading-5 text-[var(--text-muted)]">
+              ระบบจะบันทึกเฉพาะเมื่อคะแนนเต็มใหม่ไม่น้อยกว่าคะแนนนักเรียนที่มีอยู่
+            </span>
+          </button>
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onCancel} disabled={busy} className="app-button-secondary justify-center">
+            ยกเลิก
+          </button>
+          <button type="button" onClick={onConfirm} disabled={busy} className="app-button-primary justify-center">
+            <Save size={16} />
+            {busy ? "กำลังบันทึก" : "ยืนยันแก้คะแนนเต็ม"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
