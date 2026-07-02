@@ -263,16 +263,21 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
   });
 
   // พิลล์คะแนนรายวิชา: สลับโทนฟ้า/ชมพู · ชื่อซ้าย เลขขวา (อยู่ในพิลล์เดียวกันจึงดูเป็นชุด) · เลขตัวทึบ
+  // จัดชื่อวิชา (บน, เต็ม-ตัดคำได้) / คะแนน (ล่าง, ตัวหนา) แนวตั้ง → ชื่อยาวก็แสดงเต็ม
+  // ลด padding ชดเชยไม่ให้การ์ดสูงขึ้นมาก
   const subjectPill = (name: string, value: string, tone: "sky" | "pink"): Record<string, unknown> => ({
     type: "box",
-    layout: "horizontal",
+    layout: "vertical",
     flex: 1,
+    spacing: "none",
     cornerRadius: "14px",
-    paddingAll: "8px",
+    paddingAll: "7px",
+    paddingStart: "10px",
+    paddingEnd: "10px",
     background: tone === "sky" ? gradient("#e0f2fe", "#bae6fd") : gradient("#fce7f3", "#fbcfe8"),
     contents: [
-      { type: "text", text: name, size: "sm", color: tone === "sky" ? "#075985" : "#9d174d", flex: 1, gravity: "center", wrap: false },
-      { type: "text", text: value, size: "sm", weight: "bold", color: tone === "sky" ? "#0369a1" : "#db2777", flex: 0, gravity: "center", align: "end" },
+      { type: "text", text: name, size: "xs", color: tone === "sky" ? "#075985" : "#9d174d", wrap: true },
+      { type: "text", text: value, size: "md", weight: "bold", color: tone === "sky" ? "#0369a1" : "#db2777" },
     ],
   });
 

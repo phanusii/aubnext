@@ -224,9 +224,9 @@ export function ResultContent({ result }: { result: StudentResult }) {
             {Object.entries(result.result.scoreBreakdown).map(([subject, score], idx) => {
               const sky = idx % 2 === 0;
               return (
-                <div key={subject} className={`flex items-center justify-between gap-2 rounded-2xl px-3.5 py-3 bg-gradient-to-br ${sky ? "from-sky-50 to-sky-100" : "from-pink-50 to-pink-100"}`}>
-                  <span className={`min-w-0 truncate text-sm font-medium ${sky ? "text-sky-800" : "text-pink-800"}`}>{subject}</span>
-                  <span className={`shrink-0 text-xl font-semibold ${sky ? "text-sky-700" : "text-pink-700"}`}>{renderScore(score, maxByName.get(subject))}</span>
+                <div key={subject} className={`rounded-2xl px-3.5 py-2 bg-gradient-to-br ${sky ? "from-sky-50 to-sky-100" : "from-pink-50 to-pink-100"}`}>
+                  <span className={`block text-xs font-medium leading-tight ${sky ? "text-sky-800" : "text-pink-800"}`}>{subject}</span>
+                  <span className={`block text-xl font-semibold leading-tight ${sky ? "text-sky-700" : "text-pink-700"}`}>{renderScore(score, maxByName.get(subject))}</span>
                 </div>
               );
             })}
