@@ -48,6 +48,7 @@ model ExamSession {
   passInstructions String?
   eventLogoUrl     String?
   showEventLogo    Boolean       @default(false)
+  scoreDisplayMode String        @default("RAW")
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

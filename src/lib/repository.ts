@@ -23,6 +23,7 @@ export type PublicStudentResult = {
     passInstructions: string | null;
     eventLogoUrl?: string | null;
     showEventLogo?: boolean;
+    scoreDisplayMode?: "RAW" | "PERCENT";
   };
   student: {
     examNo: string;
@@ -102,6 +103,7 @@ type ResultStudent = {
     passInstructions: string | null;
     eventLogoUrl: string | null;
     showEventLogo: boolean;
+    scoreDisplayMode: string;
     subjects: Array<{ id: string; name: string }>;
   };
   resultSnapshots: Array<{
@@ -149,6 +151,7 @@ type PublicResultExamInput = {
   passInstructions: string | null;
   eventLogoUrl: string | null;
   showEventLogo: boolean;
+  scoreDisplayMode: string;
   subjects: Array<{ id: string; name: string; maxScore: number | null }>;
 };
 
@@ -282,12 +285,12 @@ export async function getPublicResultSettings() {
   const activeExam = settings.activeExamSessionId
     ? await prisma.examSession.findUnique({
         where: { id: settings.activeExamSessionId },
-        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true, eventLogoUrl: true, showEventLogo: true },
+        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true, eventLogoUrl: true, showEventLogo: true, scoreDisplayMode: true },
       })
     : await prisma.examSession.findFirst({
         where: { status: "PUBLISHED" },
         orderBy: { publishedAt: "desc" },
-        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true, eventLogoUrl: true, showEventLogo: true },
+        select: { id: true, name: true, classLevel: true, status: true, publishedAt: true, eventLogoUrl: true, showEventLogo: true, scoreDisplayMode: true },
       });
 
   return {
@@ -354,6 +357,7 @@ export async function updateExamSession(input: {
   passInstructions?: string | null;
   eventLogoUrl?: string | null;
   showEventLogo?: boolean;
+  scoreDisplayMode?: string;
 }) {
   const prisma = getPrisma();
   const current = await prisma.examSession.findUnique({
@@ -407,6 +411,9 @@ export async function updateExamSession(input: {
         ...(input.passInstructions !== undefined ? { passInstructions: input.passInstructions?.trim() || null } : {}),
         ...(input.eventLogoUrl !== undefined ? { eventLogoUrl: nextEventLogoUrl } : {}),
         ...(nextShowEventLogo !== undefined ? { showEventLogo: nextShowEventLogo } : {}),
+        ...(input.scoreDisplayMode !== undefined
+          ? { scoreDisplayMode: input.scoreDisplayMode === "PERCENT" ? "PERCENT" : "RAW" }
+          : {}),
         ...(rankingRuleChanged ? { status: "DRAFT" as const, publishedAt: null } : {}),
       },
     });
@@ -1091,7 +1098,7 @@ export async function calculateExamResults(examSessionId: string) {
 
 export async function publishExam(
   examSessionId: string,
-  announcement?: { passTitle?: string | null; passInstructions?: string | null },
+  announcement?: { passTitle?: string | null; passInstructions?: string | null; scoreDisplayMode?: string },
 ) {
   const prisma = getPrisma();
   // คำนวณใหม่ทุกครั้งก่อนประกาศ → ผลที่ประกาศสะท้อนคะแนนล่าสุดเสมอ
@@ -1109,6 +1116,9 @@ export async function publishExam(
           ? {
               passTitle: announcement.passTitle?.trim() || null,
               passInstructions: announcement.passInstructions?.trim() || null,
+              ...(announcement.scoreDisplayMode
+                ? { scoreDisplayMode: announcement.scoreDisplayMode === "PERCENT" ? "PERCENT" : "RAW" }
+                : {}),
             }
           : {}),
       },
@@ -1320,6 +1330,7 @@ function buildPublicResultPayloads(
             passInstructions: exam.passInstructions,
             eventLogoUrl: publicExamLogoUrl(exam.id, exam.eventLogoUrl, exam.showEventLogo),
             showEventLogo: exam.showEventLogo,
+            scoreDisplayMode: exam.scoreDisplayMode === "PERCENT" ? "PERCENT" : "RAW",
           },
           student: {
             examNo: snapshot.student.examNo,
@@ -1346,6 +1357,7 @@ function buildPublicResultPayloads(
           passInstructions: exam.passInstructions,
           eventLogoUrl: publicExamLogoUrl(exam.id, exam.eventLogoUrl, exam.showEventLogo),
           showEventLogo: exam.showEventLogo,
+          scoreDisplayMode: exam.scoreDisplayMode === "PERCENT" ? "PERCENT" : "RAW",
         },
         student: {
           examNo: snapshot.student.examNo,
@@ -1469,6 +1481,7 @@ function buildPrivateResult(
       passInstructions: student.examSession.passInstructions,
       eventLogoUrl: publicExamLogoUrl(student.examSession.id, student.examSession.eventLogoUrl, student.examSession.showEventLogo),
       showEventLogo: student.examSession.showEventLogo,
+      scoreDisplayMode: student.examSession.scoreDisplayMode,
     },
     student: {
       examNo: student.examNo,
@@ -1663,6 +1676,7 @@ async function findCachedPublicResultSession(
             select: {
               eventLogoUrl: true,
               showEventLogo: true,
+              scoreDisplayMode: true,
             },
           },
         },
@@ -1684,6 +1698,7 @@ async function findCachedPublicResultSession(
     snapshot.student.examSession.showEventLogo,
   );
   result.exam.showEventLogo = snapshot.student.examSession.showEventLogo;
+  result.exam.scoreDisplayMode = snapshot.student.examSession.scoreDisplayMode === "PERCENT" ? "PERCENT" : "RAW";
 
   return {
     lookup: {

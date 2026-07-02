@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { BarChart3, ChevronLeft } from "lucide-react";
 import type { PublicStudentResult } from "@/lib/repository";
 import { LogoPair } from "@/components/LogoPair";
+import { displayScore, isPercentMode } from "@/lib/score-display";
 
 // แผง "ภาพรวมเพื่อการพัฒนา" ใหญ่ (~560 บรรทัด) และพับเก็บ default + อยู่ใต้ fold
 // → lazy-load แยก chunk โหลดทีหลัง ลด JS ที่ต้อง parse ตอนเปิดหน้าผลครั้งแรก (เร็วขึ้นบนมือถือ)
@@ -142,6 +143,11 @@ export function ResultContent({ result }: { result: StudentResult }) {
     <>{rank}<span className="text-base font-medium opacity-60"> /{count}</span></>
   );
 
+  // โหมดร้อยละ: แปลงคะแนนวิชา/รวมเป็น % (เต็ม 100) — ถ้าไม่มีคะแนนเต็มก็ตกกลับเป็นคะแนนจริง
+  const percentMode = isPercentMode(result.exam.scoreDisplayMode);
+  const renderScore = (score: number, max?: number, suffixSize = "text-sm") =>
+    percentMode ? displayScore(score, max ?? null, "PERCENT") : <>{formatScore(score)}{maxSuffix(max, suffixSize)}</>;
+
   const total = result.statistics.total;
   const totalCmpMax = Math.max(total.score, total.roomAverage, total.levelAverage, 1);
 
@@ -196,7 +202,7 @@ export function ResultContent({ result }: { result: StudentResult }) {
             <div className="col-span-2 rounded-[1.35rem] bg-gradient-to-br from-pink-100 to-pink-50 p-4 shadow-[0_8px_24px_rgba(244,114,182,0.10)] sm:col-span-1">
               <div className="text-xs font-semibold text-pink-700/80 md:text-sm">🏆 คะแนนรวม</div>
               <div className="mt-1 text-[2rem] font-bold leading-none text-pink-700 md:text-[2.4rem]">
-                {formatScore(result.result.totalScore)}{maxSuffix(totalMax, "text-xl")}
+                {renderScore(result.result.totalScore, totalMax, "text-xl")}
               </div>
             </div>
             <Metric emoji="🥇" label="อันดับในห้อง" value={rankValue(total.roomRank, total.roomCount)} tone="sky" />
@@ -220,7 +226,7 @@ export function ResultContent({ result }: { result: StudentResult }) {
               return (
                 <div key={subject} className={`flex items-center justify-between gap-2 rounded-2xl px-3.5 py-3 bg-gradient-to-br ${sky ? "from-sky-50 to-sky-100" : "from-pink-50 to-pink-100"}`}>
                   <span className={`min-w-0 truncate text-sm font-medium ${sky ? "text-sky-800" : "text-pink-800"}`}>{subject}</span>
-                  <span className={`shrink-0 text-xl font-semibold ${sky ? "text-sky-700" : "text-pink-700"}`}>{formatScore(score)}{maxSuffix(maxByName.get(subject))}</span>
+                  <span className={`shrink-0 text-xl font-semibold ${sky ? "text-sky-700" : "text-pink-700"}`}>{renderScore(score, maxByName.get(subject))}</span>
                 </div>
               );
             })}
@@ -237,12 +243,12 @@ export function ResultContent({ result }: { result: StudentResult }) {
             <div className="rounded-[1.35rem] border border-sky-100 bg-[linear-gradient(135deg,#ffffff,#f0f9ff)] p-4 shadow-[0_10px_30px_rgba(14,165,233,0.08)]">
               <p className="mb-3 text-sm font-semibold text-sky-900">คะแนนรวม</p>
               <div className="space-y-2.5">
-                <ChartBar label="ของเรา" value={total.score} max={totalCmpMax} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" highlight />
-                <ChartBar label="เฉลี่ยห้อง" value={total.roomAverage} max={totalCmpMax} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
-                <ChartBar label="เฉลี่ยทั้งชั้น" value={total.levelAverage} max={totalCmpMax} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
+                <ChartBar label="ของเรา" value={total.score} max={totalCmpMax} displayMax={totalMax} percentMode={percentMode} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" highlight />
+                <ChartBar label="เฉลี่ยห้อง" value={total.roomAverage} max={totalCmpMax} displayMax={totalMax} percentMode={percentMode} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
+                <ChartBar label="เฉลี่ยทั้งชั้น" value={total.levelAverage} max={totalCmpMax} displayMax={totalMax} percentMode={percentMode} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
               </div>
             </div>
-            <SubjectComparisonCharts subjects={result.statistics.subjects} />
+            <SubjectComparisonCharts subjects={result.statistics.subjects} percentMode={percentMode} />
           </div>
         </section>
 
@@ -320,13 +326,16 @@ function SectionTitle({ title, icon, emoji }: { title: string; icon?: ReactNode;
 
 function SubjectComparisonCharts({
   subjects,
+  percentMode = false,
 }: {
   subjects: StudentResult["statistics"]["subjects"];
+  percentMode?: boolean;
 }) {
   return (
     <div className="space-y-3">
       {subjects.map((subject) => {
         const maxScore = Math.max(subject.score, subject.roomAverage, subject.levelAverage, 1);
+        const subjectMax = typeof subject.maxScore === "number" && subject.maxScore > 0 ? subject.maxScore : null;
         return (
           <article key={subject.id} className="rounded-[1.35rem] border border-sky-100 bg-white p-3.5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -337,9 +346,9 @@ function SubjectComparisonCharts({
               </div>
             </div>
             <div className="space-y-2.5">
-              <ChartBar label="ของเรา" value={subject.score} max={maxScore} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" highlight />
-              <ChartBar label="เฉลี่ยห้อง" value={subject.roomAverage} max={maxScore} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
-              <ChartBar label="เฉลี่ยทั้งชั้น" value={subject.levelAverage} max={maxScore} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
+              <ChartBar label="ของเรา" value={subject.score} max={maxScore} displayMax={subjectMax} percentMode={percentMode} colorClass="bg-gradient-to-r from-sky-400 to-sky-600" valueClass="text-sky-700" highlight />
+              <ChartBar label="เฉลี่ยห้อง" value={subject.roomAverage} max={maxScore} displayMax={subjectMax} percentMode={percentMode} colorClass="bg-gradient-to-r from-pink-300 to-pink-500" valueClass="text-pink-700" />
+              <ChartBar label="เฉลี่ยทั้งชั้น" value={subject.levelAverage} max={maxScore} displayMax={subjectMax} percentMode={percentMode} colorClass="bg-gradient-to-r from-sky-200 to-sky-300" valueClass="text-sky-600" />
             </div>
           </article>
         );
@@ -355,6 +364,8 @@ function ChartBar({
   colorClass,
   valueClass,
   highlight = false,
+  displayMax = null,
+  percentMode = false,
 }: {
   label: string;
   value: number;
@@ -362,12 +373,15 @@ function ChartBar({
   colorClass: string;
   valueClass: string;
   highlight?: boolean;
+  displayMax?: number | null;
+  percentMode?: boolean;
 }) {
+  // แถบยังใช้สัดส่วนคะแนนจริง (proportion เท่ากันทั้งสองโหมด) แต่ตัวเลขแสดงเป็น % เมื่อโหมดร้อยละ
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-3 text-sm">
         <span className={highlight ? "font-semibold text-slate-900" : "font-medium text-slate-600"}>{label}</span>
-        <span className={`font-semibold ${valueClass}`}>{formatScore(value)}</span>
+        <span className={`font-semibold ${valueClass}`}>{percentMode ? displayScore(value, displayMax, "PERCENT") : formatScore(value)}</span>
       </div>
       <div className={`overflow-hidden rounded-full bg-slate-100 ${highlight ? "h-3 md:h-3.5" : "h-2.5"}`}>
         <div className={`h-full rounded-full ${colorClass}`} style={{ width: `${percent(value, max)}%` }} />
