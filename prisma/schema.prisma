@@ -128,8 +128,8 @@ model LineBinding {
   examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
 
   @@unique([lineUserId, examSessionId])
-  @@unique([studentId, examSessionId])
   @@index([examSessionId])
+  @@index([studentId, examSessionId])
 }
 
 model Score {

@@ -1847,17 +1847,8 @@ export async function bindLineStudent(input: { lineUserId: string; examNo: strin
     return { ok: false as const, error: "ไม่พบรหัสนักเรียนนี้ในรอบสอบ" };
   }
 
-  const existingStudentBinding = await prisma.lineBinding.findUnique({
-    where: {
-      studentId_examSessionId: {
-        studentId: student.id,
-        examSessionId: student.examSessionId,
-      },
-    },
-  });
-  if (existingStudentBinding && existingStudentBinding.lineUserId !== input.lineUserId) {
-    return { ok: false as const, error: "รหัสนักเรียนนี้ผูกกับบัญชี LINE อื่นแล้ว" };
-  }
+  // 1 รหัสนักเรียนผูกได้หลายบัญชี LINE (ผู้ปกครอง+นักเรียนคนละเครื่อง) → ไม่บล็อกถ้ารหัสถูกผูกกับบัญชีอื่นแล้ว
+  // แต่ละบัญชี LINE ยังผูกได้ 1 รหัสต่อรอบสอบ (upsert ตาม lineUserId ด้านล่าง)
 
   await prisma.lineBinding.upsert({
     where: {
