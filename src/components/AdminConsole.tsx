@@ -31,6 +31,7 @@ import {
   Zap,
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
+import { displayScore, isPercentMode } from "@/lib/score-display";
 import { prepareRoomImportTable } from "@/lib/room-import-table";
 import { compareRoomName } from "@/lib/room-sort";
 import { countScoreDraftChanges, readScoreDraft } from "@/lib/score-draft-storage";
@@ -58,6 +59,7 @@ type Exam = {
   passInstructions: string | null;
   eventLogoUrl: string | null;
   showEventLogo: boolean;
+  scoreDisplayMode?: string;
   roomQuotas: RoomQuota[];
   subjects: Subject[];
   _count?: { students: number; resultSnapshots: number };
@@ -360,6 +362,7 @@ export function AdminConsole() {
   const [editEventLogoUrl, setEditEventLogoUrl] = useState("");
   const [editShowEventLogo, setEditShowEventLogo] = useState(false);
   const [passTitle, setPassTitle] = useState("");
+  const [scoreDisplayMode, setScoreDisplayMode] = useState("RAW");
   const [passInstructions, setPassInstructions] = useState("");
   const [rooms, setRooms] = useState<RoomQuota[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([emptySubject(0)]);
@@ -568,6 +571,7 @@ export function AdminConsole() {
       setEditShowEventLogo(Boolean(selectedExam.showEventLogo && selectedExam.eventLogoUrl));
       setPassTitle(selectedExam.passTitle ?? "");
       setPassInstructions(selectedExam.passInstructions ?? "");
+      setScoreDisplayMode(selectedExam.scoreDisplayMode === "PERCENT" ? "PERCENT" : "RAW");
       setCalculatedResults([]);
       setPublicResultCacheHealth(null);
       setResultsLoadedExamId("");
@@ -788,6 +792,7 @@ export function AdminConsole() {
         passInstructions,
         eventLogoUrl: editEventLogoUrl || null,
         showEventLogo: editShowEventLogo,
+        scoreDisplayMode,
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -1073,6 +1078,7 @@ export function AdminConsole() {
         ? JSON.stringify({
             passTitle,
             passInstructions,
+            scoreDisplayMode,
           })
         : undefined,
     });
@@ -1771,6 +1777,31 @@ export function AdminConsole() {
                         </div>
                       </div>
 
+                      <div className="mt-4 border-t border-sky-100 pt-4">
+                        <div className="mb-3 flex items-center gap-2 font-semibold">
+                          <Calculator size={18} />
+                          รูปแบบคะแนนที่ประกาศ
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            ["RAW", "คะแนนจริง"],
+                            ["PERCENT", "ร้อยละ (%)"],
+                          ] as const).map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setScoreDisplayMode(value)}
+                              className={cx("app-segment", scoreDisplayMode === value && "app-segment-active")}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                          “ร้อยละ” จะแปลงคะแนนทุกวิชาและคะแนนรวมเป็น % (เต็ม 100) ทั้งหน้าครู เว็บ และ LINE — อันดับยังคิดจากคะแนนจริง · กด “บันทึกการแก้ไข” หรือประกาศผลเพื่อใช้งาน
+                        </p>
+                      </div>
+
                       <button type="button" onClick={saveExamDetails} disabled={busy} className="app-button-primary mt-4">
                         <Save size={16} />
                         บันทึกการแก้ไข
@@ -2185,6 +2216,7 @@ export function AdminConsole() {
                 subjects={subjects}
                 classLevel={selectedExam.classLevel}
                 summary={resultRoomFilter === "ALL" ? null : visibleScoreSummary}
+                scoreMode={selectedExam.scoreDisplayMode}
               />
             ) : (
               <EmptyState text="นำเข้าคะแนนแล้วกดคำนวณ เพื่อดูคะแนนรวม อันดับ และรายชื่อผู้ผ่านเกณฑ์ก่อนประกาศผล" />
@@ -2910,12 +2942,15 @@ function ResultScoreStats({ summary, placement }: { summary: ScoreSummary; place
   );
 }
 
-function ResultTable({ results, subjects, classLevel, summary }: { results: CalculatedResult[]; subjects: Subject[]; classLevel: string; summary?: ScoreSummary | null }) {
+function ResultTable({ results, subjects, classLevel, summary, scoreMode }: { results: CalculatedResult[]; subjects: Subject[]; classLevel: string; summary?: ScoreSummary | null; scoreMode?: string }) {
   const scoreSubjects = subjects.filter((subject) => subject.id);
+  const percent = isPercentMode(scoreMode);
   // คะแนนเต็มรวม (แสดงในวงเล็บที่หัวคอลัมน์ "คะแนนรวม")
   const totalMax = scoreSubjects.every((subject) => subject.maxScore != null)
     ? scoreSubjects.reduce((sum, subject) => sum + (subject.maxScore ?? 0), 0)
     : null;
+  const subjectHeader = (subject: Subject) =>
+    percent ? `${subject.name} (%)` : subject.maxScore != null ? `${subject.name} (${subject.maxScore})` : subject.name;
 
   return (
     <>
@@ -2928,8 +2963,8 @@ function ResultTable({ results, subjects, classLevel, summary }: { results: Calc
                 "รหัสนักเรียน",
                 "ชื่อ",
                 "ห้อง",
-                ...scoreSubjects.map((subject) => (subject.maxScore != null ? `${subject.name} (${subject.maxScore})` : subject.name)),
-                totalMax != null ? `คะแนนรวม (${totalMax})` : "คะแนนรวม",
+                ...scoreSubjects.map((subject) => subjectHeader(subject)),
+                percent ? "คะแนนรวม (%)" : totalMax != null ? `คะแนนรวม (${totalMax})` : "คะแนนรวม",
                 "สถานะ",
                 "เหตุผล",
               ].map((header) => (
@@ -2945,9 +2980,9 @@ function ResultTable({ results, subjects, classLevel, summary }: { results: Calc
                 <td className="px-3 py-2">{result.name}</td>
                 <td className="whitespace-nowrap px-3 py-2">{classLevel}/{result.room}</td>
                 {scoreSubjects.map((subject) => (
-                  <td key={subject.id} className="px-3 py-2">{formatScore(result.scoreBreakdown[subject.id!])}</td>
+                  <td key={subject.id} className="px-3 py-2">{displayScore(result.scoreBreakdown[subject.id!], subject.maxScore, scoreMode)}</td>
                 ))}
-                <td className="px-3 py-2 font-semibold">{formatScore(result.totalScore)}</td>
+                <td className="px-3 py-2 font-semibold">{displayScore(result.totalScore, totalMax, scoreMode)}</td>
                 <td className="px-3 py-2">
                   <span className={cx("rounded-full px-2 py-1 text-xs font-semibold", result.status === "PASSED" ? "bg-sky-100 text-sky-700" : result.status === "REVIEW" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600")}>
                     {statusLabel(result.status)}

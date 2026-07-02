@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { signLineResultWebToken } from "@/lib/security";
 import type { LineResultWebLookup } from "@/lib/security";
+import { displayScore, isPercentMode } from "@/lib/score-display";
 
 type LineMessage = Record<string, unknown>;
 type LineStudentResult = {
@@ -11,6 +12,7 @@ type LineStudentResult = {
     selectionMode: "PER_ROOM" | "WHOLE_LEVEL";
     passTitle?: string | null;
     passInstructions?: string | null;
+    scoreDisplayMode?: string;
   };
   student: { examNo: string; name: string; classLevel: string; room: string };
   result: {
@@ -295,13 +297,15 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
     REVIEW: { bg: gradient("#fde68a", "#fcd34d"), color: "#b45309", text: "รอตรวจสอบโดยกรรมการ" },
   }[result.result.status];
 
-  // คะแนนเต็มรายวิชา (จาก statistics ถ้ามี) → แสดงเป็น "คะแนน/เต็ม"
+  // คะแนนเต็มรายวิชา (จาก statistics ถ้ามี) → แสดงเป็น "คะแนน/เต็ม" หรือ "ร้อยละ%" ตามโหมด
+  const percentMode = isPercentMode(result.exam.scoreDisplayMode);
   const maxByName = new Map<string, number>();
   for (const subject of result.statistics?.subjects ?? []) {
     if (subject?.name && typeof subject.maxScore === "number" && subject.maxScore > 0) maxByName.set(subject.name, subject.maxScore);
   }
   const withMax = (subject: string, score: number) => {
-    const max = maxByName.get(subject);
+    const max = maxByName.get(subject) ?? null;
+    if (percentMode) return displayScore(score, max, "PERCENT");
     return max ? `${formatScore(score)}/${formatScore(max)}` : formatScore(score);
   };
 
@@ -318,9 +322,11 @@ export function buildResultFlexMessage(result: LineStudentResult, webLookup?: Li
 
   // คะแนนรวม/เต็ม (ถ้ามีคะแนนเต็มรวม)
   const totalMax = result.statistics?.total?.maxScore;
-  const totalText = totalMax && totalMax > 0
-    ? `${formatScore(result.result.totalScore)}/${formatScore(totalMax)}`
-    : formatScore(result.result.totalScore);
+  const totalText = percentMode
+    ? displayScore(result.result.totalScore, totalMax ?? null, "PERCENT")
+    : totalMax && totalMax > 0
+      ? `${formatScore(result.result.totalScore)}/${formatScore(totalMax)}`
+      : formatScore(result.result.totalScore);
 
 
   return {

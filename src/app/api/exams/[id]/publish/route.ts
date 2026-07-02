@@ -9,6 +9,7 @@ import { publishExam } from "@/lib/repository";
 const schema = z.object({
   passTitle: z.string().max(300).optional().nullable(),
   passInstructions: z.string().max(3_000).optional().nullable(),
+  scoreDisplayMode: z.enum(["RAW", "PERCENT"]).optional(),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

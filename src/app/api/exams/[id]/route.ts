@@ -17,6 +17,7 @@ const updateSchema = z.object({
   passInstructions: z.string().max(3_000).optional().nullable(),
   eventLogoUrl: z.string().max(1_400_000, "โลโก้งานใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB").optional().nullable(),
   showEventLogo: z.boolean().optional(),
+  scoreDisplayMode: z.enum(["RAW", "PERCENT"]).optional(),
 });
 
 // แก้ไขข้อมูลรอบสอบ (ชื่อ/ชั้น/รูปแบบคัดเลือก/โควตารวม)
