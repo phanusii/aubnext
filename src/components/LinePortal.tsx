@@ -233,27 +233,6 @@ export function LinePortal({
     };
   }, [directResultMode, loadBindingStatus, openBoundResult]);
 
-  // ดูผลคะแนนของรหัสที่กรอก โดยไม่ผูกบัญชี (ใครมีรหัสก็ดูได้เหมือนหน้าเว็บ) — ใช้เมื่อรหัสผูกบัญชี LINE อื่นแล้ว
-  async function viewResultByExamNo() {
-    const code = examNo.trim();
-    if (!code) return;
-    setBusy(true);
-    setMessage("กำลังเปิดผลคะแนน...");
-    const response = await fetch("/api/check-result/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ examNo: code }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (response.ok && data.result) {
-      cacheStudentResultForPage(data.result);
-      router.replace("/check-result/result");
-      return;
-    }
-    setBusy(false);
-    setMessage(data.error ?? "ไม่พบผลคะแนนของรหัสนี้ หรือรอบสอบยังไม่ประกาศผล");
-  }
-
   async function bindAccount() {
     if (!profile) return;
     setBusy(true);
@@ -406,18 +385,6 @@ export function LinePortal({
                 <Search size={18} />
                 {binding ? "ยืนยันเปลี่ยนบัญชี" : "เชื่อมต่อบัญชี"}
               </button>
-              <button
-                type="button"
-                disabled={busy || !examNo.trim()}
-                onClick={() => void viewResultByExamNo()}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 py-3 font-semibold text-[var(--primary-blue-strong)] transition hover:border-sky-300 hover:bg-sky-50 disabled:opacity-50"
-              >
-                <Search size={18} />
-                ดูผลคะแนน (ไม่ต้องผูกบัญชี)
-              </button>
-              <p className="-mt-1 text-xs leading-5 text-slate-500">
-                ถ้ารหัสนี้ผูกกับบัญชี LINE อื่นแล้ว ก็ยังกด “ดูผลคะแนน” เพื่อเปิดผลได้เลยโดยไม่ต้องเปลี่ยนบัญชี
-              </p>
             </form>
           )}
 
