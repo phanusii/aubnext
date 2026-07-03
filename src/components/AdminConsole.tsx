@@ -247,6 +247,38 @@ function canvasToJpegDataUrl(canvas: HTMLCanvasElement, quality: number) {
   });
 }
 
+// ย่อรูปโลโก้ฝั่ง client ก่อนบันทึก — ลด base64 จากหลักร้อย KB เหลือ ~5-15KB (ลด egress/bandwidth)
+// webp เล็กสุด + คงพื้นโปร่งใส; ถ้าเบราว์เซอร์ไม่รองรับ fallback เป็น png
+function resizeImageFile(file: File, maxSize: number, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("อ่านไฟล์รูปไม่สำเร็จ"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("โหลดรูปไม่สำเร็จ"));
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("แปลงรูปไม่สำเร็จ"));
+          return;
+        }
+        context.drawImage(img, 0, 0, width, height);
+        let out = canvas.toDataURL("image/webp", quality);
+        if (!out.startsWith("data:image/webp")) out = canvas.toDataURL("image/png");
+        resolve(out);
+      };
+      img.src = String(reader.result ?? "");
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function resizeRichMenuImage(file: File) {
   if (!file.type.startsWith("image/")) throw new Error("กรุณาเลือกไฟล์รูปภาพ");
 
@@ -689,22 +721,14 @@ export function AdminConsole() {
       setMessage("กรุณาเลือกไฟล์รูปภาพ");
       return;
     }
-    if (file.size > 1024 * 1024) {
-      setMessage("โลโก้ต้องมีขนาดไม่เกิน 1MB");
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage("ไฟล์รูปใหญ่เกินไป (เกิน 5MB)");
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const logoUrl = String(reader.result ?? "");
-      if (logoUrl.length > 1_400_000) {
-        setMessage("โลโก้ใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 1MB");
-        return;
-      }
-
-      onLoad(logoUrl);
-    };
-    reader.readAsDataURL(file);
+    // ย่ออัตโนมัติเป็น ~256px ก่อนบันทึก → base64 เล็กลงมาก (ลด egress/bandwidth)
+    resizeImageFile(file, 256, 0.85)
+      .then((logoUrl) => onLoad(logoUrl))
+      .catch(() => setMessage("ประมวลผลรูปไม่สำเร็จ กรุณาลองรูปอื่น"));
   }
 
   function uploadLogo(file: File) {
