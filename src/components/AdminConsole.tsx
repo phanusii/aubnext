@@ -112,7 +112,7 @@ type ResultViewRow = {
   lastViewedAt: string | null;
 };
 type HistorySubTab = "viewed" | "notViewed";
-type HistorySort = "latest" | "room" | "score" | "examNo";
+type HistorySort = "latest" | "room" | "score" | "examNo" | "views";
 type ExamAction = "calculate" | "publish";
 type MaxScoreAdjustmentMode = "KEEP_SCORES" | "SCALE_SCORES";
 type PendingMaxScoreChange = {
@@ -144,6 +144,7 @@ function sortHistoryRows(rows: ResultViewRow[], mode: HistorySort): ResultViewRo
   if (mode === "latest") arr.sort((a, b) => byLatest(a, b) || byScore(a, b));
   else if (mode === "room") arr.sort((a, b) => byRoom(a, b) || byScore(a, b));
   else if (mode === "examNo") arr.sort(byExamNo);
+  else if (mode === "views") arr.sort((a, b) => b.viewCount - a.viewCount || byLatest(a, b));
   else arr.sort((a, b) => byScore(a, b) || byRoom(a, b));
   return arr;
 }
@@ -2380,6 +2381,7 @@ export function AdminConsole() {
               const sortOptions = isViewedTab
                 ? [
                     { value: "latest", label: "ล่าสุด" },
+                    { value: "views", label: "เข้าชมมากสุด" },
                     { value: "room", label: "แยกห้อง" },
                     { value: "score", label: "เรียงตามคะแนน" },
                   ]
