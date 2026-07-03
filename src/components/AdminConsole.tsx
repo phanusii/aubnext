@@ -19,6 +19,7 @@ import {
   Loader2,
   LogOut,
   Megaphone,
+  Menu,
   Pencil,
   Plus,
   Save,
@@ -28,6 +29,7 @@ import {
   Trash2,
   UploadCloud,
   Users,
+  X,
   Zap,
 } from "lucide-react";
 import { formatExamOptionLabel } from "@/lib/exam-label";
@@ -95,6 +97,7 @@ type ImportValidation = {
   isReady: boolean;
 };
 type AdminTab = "settings" | "exam" | "rooms" | "import" | "scores" | "results" | "line" | "history";
+type AdminNavItem = { id: AdminTab; label: string; icon: ReactNode; step?: number; description?: string };
 
 type ResultViewRow = {
   examNo: string;
@@ -342,6 +345,7 @@ export function AdminConsole() {
   const [lineRichMenuImageInfo, setLineRichMenuImageInfo] = useState("");
   const [lineRichMenuUploading, setLineRichMenuUploading] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("exam");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [lineLinkCopied, setLineLinkCopied] = useState(false);
   const [warming, setWarming] = useState(false);
   const [pendingExamAction, setPendingExamAction] = useState<ExamAction | null>(null);
@@ -1340,24 +1344,36 @@ export function AdminConsole() {
   }
 
   // ขั้นตอนการทำงานหลัก (เรียงลำดับ 1→5) + เมนูตั้งค่า (แยกกลุ่ม)
-  const workflowTabs: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
-    { id: "exam", label: "รอบสอบ", icon: <Megaphone size={16} /> },
-    { id: "rooms", label: "ห้องและวิชา", icon: <Table2 size={16} /> },
-    { id: "import", label: "นำเข้านักเรียน", icon: <ClipboardList size={16} /> },
-    { id: "scores", label: "กรอกคะแนน", icon: <ListChecks size={16} /> },
-    { id: "results", label: "ผลคะแนน", icon: <Calculator size={16} /> },
+  const workflowTabs: AdminNavItem[] = [
+    { id: "exam", label: "รอบสอบ", icon: <Megaphone size={16} />, step: 1, description: "สร้าง แก้ไข และประกาศรอบสอบ" },
+    { id: "rooms", label: "ห้องและวิชา", icon: <Table2 size={16} />, step: 2, description: "กำหนดห้อง โควตา และคะแนนเต็ม" },
+    { id: "import", label: "นำเข้านักเรียน", icon: <ClipboardList size={16} />, step: 3, description: "วางรายชื่อหรือคะแนนจาก Excel" },
+    { id: "scores", label: "กรอกคะแนน", icon: <ListChecks size={16} />, step: 4, description: "ตรวจ แก้ไข และบันทึกคะแนน" },
+    { id: "results", label: "ผลคะแนน", icon: <Calculator size={16} />, step: 5, description: "คำนวณ สรุป และดาวน์โหลด Excel" },
   ];
-  const utilityTabs: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
-    { id: "history", label: "ประวัติเข้าดู", icon: <History size={16} /> },
-    { id: "line", label: "LINE", icon: <Link2 size={16} /> },
-    { id: "settings", label: "ตั้งค่า", icon: <Settings size={16} /> },
+  const utilityTabs: AdminNavItem[] = [
+    { id: "history", label: "ประวัติเข้าดู", icon: <History size={16} />, description: "ดูว่านักเรียนเปิดผลแล้วหรือยัง" },
+    { id: "line", label: "LINE", icon: <Link2 size={16} />, description: "จัดการ Rich Menu และลิงก์ LINE" },
+    { id: "settings", label: "ตั้งค่า", icon: <Settings size={16} />, description: "ตั้งค่าโรงเรียน ผู้ดูแล และระบบ" },
   ];
+  function selectAdminTab(tab: AdminTab) {
+    setActiveTab(tab);
+    setMobileNavOpen(false);
+  }
 
   return (
-    <main className="min-h-screen bg-[var(--app-bg)] text-[var(--text-main)]">
-      <div className="mx-auto w-full max-w-7xl px-5 py-6">
-        <header className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#eff6ff,#fdf2f8)] px-5 py-4 shadow-[var(--shadow-soft)]">
-          <div className="flex items-center gap-4">
+    <main className="admin-teacher-shell min-h-screen text-[var(--text-main)]">
+      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-5 sm:py-6">
+        <header className="admin-teacher-topbar mb-4 flex items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="grid size-12 shrink-0 place-items-center rounded-2xl border border-[var(--border-soft)] bg-white text-slate-800 shadow-[0_10px_26px_rgba(15,23,42,0.08)] transition hover:border-sky-200 hover:text-[var(--primary-blue-strong)] lg:hidden"
+              aria-label="เปิดเมนูครู"
+            >
+              <Menu size={22} />
+            </button>
             <LogoPair
               schoolName={settings.schoolName}
               schoolLogoUrl={settings.logoUrl}
@@ -1365,11 +1381,20 @@ export function AdminConsole() {
               eventName={selectedExam?.name}
               size="sm"
             />
-            <div>
-              <h1 className="text-2xl font-semibold">{settings.schoolName}</h1>
-              <p className="text-sm text-[var(--text-muted)]">{selectedExam?.name ?? "จัดการรอบสอบและประกาศผล"}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[var(--primary-blue-strong)]">ครูผู้ดูแลระบบ</p>
+              <h1 className="truncate text-xl font-bold tracking-[0] text-slate-950 sm:text-2xl">{settings.schoolName}</h1>
+              <p className="truncate text-sm font-medium text-[var(--text-muted)]">{selectedExam?.name ?? "จัดการรอบสอบและประกาศผล"}</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => selectAdminTab("settings")}
+            className="hidden min-h-12 items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-white px-4 text-sm font-bold text-slate-700 shadow-[0_10px_26px_rgba(15,23,42,0.07)] transition hover:border-sky-200 hover:text-[var(--primary-blue-strong)] sm:inline-flex"
+          >
+            <Settings size={18} />
+            ตั้งค่า
+          </button>
         </header>
 
         {message && (
@@ -1378,41 +1403,22 @@ export function AdminConsole() {
           </div>
         )}
 
-        <nav className="mb-5 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#f0f9ff,#fdf2f8)] p-2 shadow-[var(--shadow-soft)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <span className="shrink-0 px-2 text-xs font-semibold text-[var(--text-muted)]">ขั้นตอน</span>
-          {workflowTabs.map((tab, index) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={cx(
-                "flex min-w-max items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition",
-                activeTab === tab.id
-                  ? "bg-[linear-gradient(135deg,#38bdf8,#f472b6)] text-white shadow-sm"
-                  : "text-[var(--text-muted)] hover:bg-white/70",
-              )}
-            >
-              <span className={cx("grid size-5 place-items-center rounded-full text-[11px]", activeTab === tab.id ? "bg-white/25" : "bg-white text-sky-700 ring-1 ring-sky-100")}>{index + 1}</span>
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-          <span className="mx-1 h-6 w-px shrink-0 bg-sky-200" />
-          {utilityTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={cx(
-                "flex min-w-max items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition",
-                activeTab === tab.id ? "bg-white text-pink-600 shadow-sm ring-1 ring-pink-100" : "text-[var(--text-muted)] hover:bg-white/70",
-              )}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <AdminDesktopNav
+          workflowTabs={workflowTabs}
+          utilityTabs={utilityTabs}
+          activeTab={activeTab}
+          onSelect={selectAdminTab}
+        />
+        <AdminMobileDrawer
+          open={mobileNavOpen}
+          workflowTabs={workflowTabs}
+          utilityTabs={utilityTabs}
+          activeTab={activeTab}
+          schoolName={settings.schoolName}
+          examName={selectedExam?.name}
+          onSelect={selectAdminTab}
+          onClose={() => setMobileNavOpen(false)}
+        />
 
         {selectedExam && <ExamContextBar exam={selectedExam} />}
 
@@ -2655,9 +2661,189 @@ function ExamActionDialog({
   );
 }
 
+function AdminDesktopNav({
+  workflowTabs,
+  utilityTabs,
+  activeTab,
+  onSelect,
+}: {
+  workflowTabs: AdminNavItem[];
+  utilityTabs: AdminNavItem[];
+  activeTab: AdminTab;
+  onSelect: (tab: AdminTab) => void;
+}) {
+  return (
+    <nav className="mb-5 hidden items-center gap-2 rounded-[1.35rem] border border-white/80 bg-white/75 p-2 shadow-[0_22px_60px_rgba(37,99,235,0.12)] ring-1 ring-sky-100/80 backdrop-blur-xl lg:flex">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <span className="shrink-0 px-2 text-xs font-black uppercase tracking-[0.08em] text-slate-400">ขั้นตอน</span>
+        {workflowTabs.map((tab) => (
+          <AdminNavButton key={tab.id} tab={tab} active={activeTab === tab.id} onSelect={onSelect} />
+        ))}
+      </div>
+      <div className="h-9 w-px shrink-0 bg-sky-100" />
+      <div className="flex shrink-0 items-center gap-2">
+        {utilityTabs.map((tab) => (
+          <AdminNavButton key={tab.id} tab={tab} active={activeTab === tab.id} onSelect={onSelect} utility />
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function AdminMobileDrawer({
+  open,
+  workflowTabs,
+  utilityTabs,
+  activeTab,
+  schoolName,
+  examName,
+  onSelect,
+  onClose,
+}: {
+  open: boolean;
+  workflowTabs: AdminNavItem[];
+  utilityTabs: AdminNavItem[];
+  activeTab: AdminTab;
+  schoolName: string;
+  examName?: string;
+  onSelect: (tab: AdminTab) => void;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 lg:hidden">
+      <button
+        type="button"
+        aria-label="ปิดเมนูครู"
+        className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <aside className="relative h-full w-[min(88vw,390px)] overflow-y-auto rounded-r-[2rem] border-r border-white/80 bg-white px-5 py-5 shadow-[28px_0_80px_rgba(15,23,42,0.24)]">
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(135deg,#dbeafe,#fce7f3)] text-[var(--primary-blue-strong)] ring-1 ring-sky-100">
+              <Megaphone size={25} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-xl font-black tracking-[0] text-slate-950">{schoolName}</h2>
+              <p className="truncate text-sm font-bold text-slate-400">{examName ?? "แผงควบคุมครู"}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid size-11 shrink-0 place-items-center rounded-2xl border border-slate-100 bg-white text-slate-700 shadow-sm"
+            aria-label="ปิดเมนู"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-sky-100 bg-sky-50/70 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.08em] text-sky-500">กำลังจัดการ</p>
+          <p className="mt-1 line-clamp-2 text-sm font-bold leading-6 text-slate-700">
+            {examName ?? "เลือกรอบสอบเพื่อเริ่มทำงาน"}
+          </p>
+        </div>
+
+        <AdminMobileSection title="ขั้นตอน" tabs={workflowTabs} activeTab={activeTab} onSelect={onSelect} />
+        <AdminMobileSection title="เครื่องมือ" tabs={utilityTabs} activeTab={activeTab} onSelect={onSelect} />
+
+        <div className="mt-6 rounded-[1.35rem] bg-[linear-gradient(135deg,#22c55e,#16a34a)] p-4 text-white shadow-[0_18px_45px_rgba(34,197,94,0.24)]">
+          <p className="text-base font-black">พร้อมจัดการผลสอบ</p>
+          <p className="mt-1 text-sm font-medium text-white/80">เลือกเมนูที่ต้องการ แล้วระบบจะพาไปยังส่วนทำงานทันที</p>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function AdminMobileSection({
+  title,
+  tabs,
+  activeTab,
+  onSelect,
+}: {
+  title: string;
+  tabs: AdminNavItem[];
+  activeTab: AdminTab;
+  onSelect: (tab: AdminTab) => void;
+}) {
+  return (
+    <section className="mt-5">
+      <h3 className="mb-2 px-2 text-xs font-black uppercase tracking-[0.08em] text-slate-400">{title}</h3>
+      <div className="space-y-2">
+        {tabs.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onSelect(tab.id)}
+              className={cx(
+                "flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition",
+                active
+                  ? "border border-blue-100 bg-blue-50 text-blue-700 shadow-[0_12px_30px_rgba(37,99,235,0.12)]"
+                  : "text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              <span className={cx(
+                "grid size-11 shrink-0 place-items-center rounded-2xl",
+                active ? "bg-white text-blue-600 shadow-sm" : "bg-slate-50 text-slate-400",
+              )}>
+                {tab.step ? <span className="text-sm font-black">{tab.step}</span> : tab.icon}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-base font-black">{tab.label}</span>
+                {tab.description && <span className="mt-0.5 line-clamp-1 block text-xs font-semibold text-slate-400">{tab.description}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AdminNavButton({
+  tab,
+  active,
+  onSelect,
+  utility = false,
+}: {
+  tab: AdminNavItem;
+  active: boolean;
+  onSelect: (tab: AdminTab) => void;
+  utility?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(tab.id)}
+      className={cx(
+        "flex min-h-12 min-w-max items-center gap-2 rounded-2xl px-3.5 py-2 text-sm font-black transition",
+        active
+          ? "bg-[linear-gradient(135deg,#2563eb,#3b82f6)] text-white shadow-[0_16px_34px_rgba(37,99,235,0.24)]"
+          : utility
+            ? "bg-white text-slate-600 ring-1 ring-slate-100 hover:text-[var(--primary-blue-strong)] hover:ring-sky-100"
+            : "text-slate-500 hover:bg-sky-50 hover:text-blue-700",
+      )}
+    >
+      <span className={cx(
+        "grid size-8 shrink-0 place-items-center rounded-xl",
+        active ? "bg-white/20 text-white" : "bg-white text-blue-600 ring-1 ring-sky-100",
+      )}>
+        {tab.step ? <span className="text-xs">{tab.step}</span> : tab.icon}
+      </span>
+      <span>{tab.label}</span>
+    </button>
+  );
+}
+
 function ExamContextBar({ exam }: { exam: Exam }) {
   return (
-    <section className="mb-5 rounded-2xl border border-sky-100 bg-white/95 px-4 py-3 shadow-[0_12px_35px_rgba(14,165,233,0.07)]">
+    <section className="mb-5 rounded-[1.35rem] border border-white/80 bg-white/80 px-4 py-3 shadow-[0_18px_48px_rgba(37,99,235,0.1)] ring-1 ring-sky-100/70 backdrop-blur-xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-[var(--primary-blue-strong)]">รอบสอบที่กำลังจัดการ</p>
@@ -2706,9 +2892,9 @@ function FilterControlGroup({
 
 function Panel({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-[var(--shadow-soft)]">
+    <section className="rounded-[1.45rem] border border-white/80 bg-white/90 p-5 shadow-[0_24px_70px_rgba(37,99,235,0.11)] ring-1 ring-sky-100/70 backdrop-blur-xl">
       <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
-        <span className="grid size-8 place-items-center rounded-lg bg-[var(--pink-wash)] text-[var(--accent-pink-strong)]">{icon}</span>
+        <span className="grid size-9 place-items-center rounded-2xl bg-[linear-gradient(135deg,#dbeafe,#fce7f3)] text-[var(--primary-blue-strong)] shadow-sm">{icon}</span>
         {title}
       </h2>
       {children}

@@ -18,6 +18,10 @@
   --border-soft: #dbeafe;
   --border-strong: #93c5fd;
   --shadow-soft: 0 24px 70px rgba(14, 165, 233, 0.12);
+  --teacher-bg:
+    radial-gradient(circle at 6% 10%, rgba(56, 189, 248, 0.18), transparent 30%),
+    radial-gradient(circle at 92% 4%, rgba(244, 114, 182, 0.16), transparent 28%),
+    linear-gradient(180deg, #f7fbff 0%, #eef5ff 52%, #f8fbff 100%);
 }
 
 @theme inline {
@@ -31,6 +35,20 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+}
+
+.admin-teacher-shell {
+  background: var(--teacher-bg);
+}
+
+.admin-teacher-topbar {
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 1.45rem;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(239, 246, 255, 0.78)),
+    linear-gradient(135deg, rgba(219, 234, 254, 0.55), rgba(252, 231, 243, 0.5));
+  box-shadow: 0 24px 70px rgba(37, 99, 235, 0.12);
+  backdrop-filter: blur(18px);
 }
 
 button,
