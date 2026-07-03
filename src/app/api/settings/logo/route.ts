@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connection } from "next/server";
-import { getSchoolSettings } from "@/lib/repository";
+import { getSchoolLogoData } from "@/lib/repository";
 
 function parseDataImage(value: string) {
   const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -14,8 +14,7 @@ function parseDataImage(value: string) {
 export async function GET() {
   // อ่าน DB ตอน request จริง ไม่ใช่ตอน build (cacheComponents จะ prerender route handler ที่ไม่มี dynamic signal)
   await connection();
-  const settings = await getSchoolSettings();
-  const logoUrl = settings.logoUrl?.trim();
+  const logoUrl = (await getSchoolLogoData())?.trim();
 
   if (!logoUrl) return NextResponse.json({ error: "ไม่พบโลโก้" }, { status: 404 });
 

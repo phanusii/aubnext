@@ -251,15 +251,40 @@ export async function upsertSchoolSettings(input: {
 
 async function loadSchoolSettings() {
   const prisma = getPrisma();
-  // อ่านอย่างเดียว (findUnique) — เดิมใช้ upsert ซึ่งเป็น write ทุกครั้งบนเส้นทางอ่าน
-  const existing = await prisma.schoolSettings.findUnique({ where: { id: "main" } });
-  if (existing) return existing;
-  // ยังไม่มีแถว (รันครั้งแรกเท่านั้น) ค่อยสร้าง
-  return prisma.schoolSettings.upsert({
-    where: { id: "main" },
-    update: {},
-    create: { id: "main" },
-  });
+  // สำคัญ (egress): ไม่ดึง base64 ของรูป (logoUrl ~97KB, lineRichMenuImageUrl ~1.1MB) ในเส้นทางอ่านทั่วไป
+  // เดิม findUnique ทั้งแถว → ดึง ~1.2MB ทุกครั้ง × เรียกบ่อย (ทุกการเช็คผลผ่าน getActivePublishedExamId
+  // + refresh ทุก 30 วิ/instance) = egress พุ่งเป็น GB. รูปจริงเสิร์ฟผ่าน route เฉพาะ (CDN cache แล้ว)
+  const existing =
+    (await prisma.schoolSettings.findUnique({
+      where: { id: "main" },
+      omit: { logoUrl: true, lineRichMenuImageUrl: true },
+    })) ??
+    (await prisma.schoolSettings.upsert({
+      where: { id: "main" },
+      update: {},
+      create: { id: "main" },
+      omit: { logoUrl: true, lineRichMenuImageUrl: true },
+    }));
+  // เช็คว่ามีรูปไหมโดยไม่ดึง base64 (โอนแค่ boolean) แล้วแทนด้วย pointer ไป route รูป
+  const meta = await prisma.$queryRaw<Array<{ hasLogo: boolean; hasRichMenu: boolean }>>`
+    SELECT ("logoUrl" IS NOT NULL AND "logoUrl" <> '') AS "hasLogo",
+           ("lineRichMenuImageUrl" IS NOT NULL AND "lineRichMenuImageUrl" <> '') AS "hasRichMenu"
+    FROM "SchoolSettings" WHERE id = 'main'`;
+  return {
+    ...existing,
+    logoUrl: meta[0]?.hasLogo ? "/api/settings/logo" : null,
+    lineRichMenuImageUrl: meta[0]?.hasRichMenu ? "/api/settings/rich-menu-image" : null,
+  };
+}
+
+// ดึง base64 ของรูปจริง — ใช้เฉพาะ route รูป (CDN cache) กับตอนอัปโหลด Rich Menu ขึ้น LINE
+export async function getSchoolLogoData() {
+  const row = await getPrisma().schoolSettings.findUnique({ where: { id: "main" }, select: { logoUrl: true } });
+  return row?.logoUrl ?? null;
+}
+export async function getSchoolRichMenuImageData() {
+  const row = await getPrisma().schoolSettings.findUnique({ where: { id: "main" }, select: { lineRichMenuImageUrl: true } });
+  return row?.lineRichMenuImageUrl ?? null;
 }
 
 export async function getSchoolSettings() {
