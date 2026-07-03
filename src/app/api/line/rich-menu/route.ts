@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { getLineRichMenuPayload } from "@/lib/line-rich-menu";
-import { getSchoolSettings, upsertSchoolSettings } from "@/lib/repository";
+import { getSchoolRichMenuImageData, getSchoolSettings, upsertSchoolSettings } from "@/lib/repository";
 
 // nodejs เป็น runtime default อยู่แล้ว (cacheComponents เลิกรองรับ `export const runtime`)
 
@@ -47,16 +47,15 @@ async function lineFetch(path: string, init: RequestInit & { dataHost?: boolean 
 }
 
 export async function GET() {
-  const settings = await getSchoolSettings();
+  const hasImage = Boolean(await getSchoolRichMenuImageData());
   return NextResponse.json({
-    image: settings.lineRichMenuImageUrl || "/line-rich-menu.jpg",
+    image: hasImage ? "/api/settings/rich-menu-image" : "/line-rich-menu.jpg",
     payload: getLineRichMenuPayload(),
   });
 }
 
 async function getRichMenuImage(inputImageUrl?: string | null) {
-  const settings = await getSchoolSettings();
-  const imageUrl = inputImageUrl !== undefined ? inputImageUrl : settings.lineRichMenuImageUrl;
+  const imageUrl = inputImageUrl !== undefined ? inputImageUrl : await getSchoolRichMenuImageData();
   if (imageUrl) {
     const parsed = parseDataImage(imageUrl);
     if (!parsed) throw new Error("รูป Rich Menu ไม่ถูกต้อง กรุณาอัปโหลดรูปใหม่");
@@ -95,15 +94,10 @@ async function updateLineRichMenu(inputImageUrl?: string | null) {
   await lineFetch(`/v2/bot/user/all/richmenu/${created.richMenuId}`, { method: "POST" });
 
   if (inputImageUrl !== undefined) {
+    // อัปเดตเฉพาะรูป Rich Menu — field อื่นเป็น undefined = Prisma ไม่แตะ (กันทับ logoUrl ที่ตอนนี้เป็น pointer)
     const settings = await getSchoolSettings();
     await upsertSchoolSettings({
       schoolName: settings.schoolName,
-      examTitle: settings.examTitle,
-      logoUrl: settings.logoUrl,
-      activeExamSessionId: settings.activeExamSessionId,
-      schoolContact: settings.schoolContact,
-      adminEmail: settings.adminEmail,
-      adminPasswordHash: settings.adminPasswordHash,
       lineRichMenuImageUrl: inputImageUrl || null,
     });
   }
