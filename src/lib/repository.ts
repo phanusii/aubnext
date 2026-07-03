@@ -163,12 +163,13 @@ const activePublishedExamMemoryCache = new Map<
   string,
   { expiresAt: number; data: Awaited<ReturnType<typeof getActivePublishedExamIdUncached>> }
 >();
-const activePublishedExamCacheMs = 30_000;
+// เขียน settings/publish ล้าง cache ทันที (clearActivePublishedExamCache) → ยืด TTL ได้ ลด Neon query ตอนคนรุม
+const activePublishedExamCacheMs = 300_000;
 
 // SchoolSettings ถูกอ่านในแทบทุก request (LINE + เว็บ + auth) แต่เปลี่ยนนาน ๆ ครั้ง
 // แคชในหน่วยความจำ (per-isolate) สั้น ๆ ลดทั้ง query และ "write บนเส้นทางอ่าน" (เดิม upsert ทุกครั้ง)
 let schoolSettingsMemoryCache: { expiresAt: number; data: Awaited<ReturnType<typeof loadSchoolSettings>> } | null = null;
-const schoolSettingsCacheMs = 30_000;
+const schoolSettingsCacheMs = 300_000;
 
 function clearSchoolSettingsCache() {
   schoolSettingsMemoryCache = null;
