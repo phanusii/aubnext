@@ -3,6 +3,7 @@
 import { type ReactNode, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { XCircle } from "lucide-react";
+import { AmbientBackground } from "@/components/AmbientBackground";
 import { AppFooter } from "@/components/AppFooter";
 import { cacheStudentResultForPage, studentResultSessionStorageKey } from "@/components/ResultPageClient";
 
@@ -48,20 +49,23 @@ export function CheckResultForm({ header }: { header: ReactNode }) {
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] text-[var(--text-main)]">
-      <section className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-5 sm:px-5 sm:py-8">
-        <div className="rounded-[1.75rem] border border-sky-100 bg-white/90 p-4 shadow-[0_18px_55px_rgba(14,165,233,0.10)] backdrop-blur md:p-5">
+    <main className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] text-[var(--text-main)]">
+      <AmbientBackground />
+      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-5 sm:px-5 sm:py-8">
+        <div className="animate-fade-up rounded-[1.75rem] border border-sky-100 bg-white/90 p-4 shadow-[0_18px_55px_rgba(14,165,233,0.10)] backdrop-blur md:p-5">
           {header}
         </div>
 
-        <div className="mt-8 text-center">
+        <div className="animate-fade-up-1 mt-8 text-center">
           <p className="text-sm font-semibold text-sky-700">ระบบประกาศผลสอบ</p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">เช็คผลสอบ</h2>
+          <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
+            <span className="text-gradient">เช็คผลสอบ</span>
+          </h2>
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">กรอกรหัสนักเรียนเพื่อดูผลคะแนน</p>
         </div>
 
         <form
-          className="mt-6 rounded-[1.75rem] border border-sky-100 bg-white/95 p-4 shadow-[0_18px_55px_rgba(14,165,233,0.10)] backdrop-blur sm:p-5"
+          className="animate-fade-up-2 mt-6 app-card-fancy p-4 sm:p-5"
           onSubmit={(event) => {
             event.preventDefault();
             void checkResult();

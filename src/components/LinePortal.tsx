@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Link2, Loader2, Search, XCircle } from "lucide-react";
+import { AmbientBackground } from "@/components/AmbientBackground";
 import { AppFooter } from "@/components/AppFooter";
 import { type StudentResult } from "@/components/PublicResultView";
 import { cacheStudentResultForPage } from "@/components/ResultPageClient";
@@ -273,8 +274,9 @@ export function LinePortal({
   // ไม่โชว์การ์ด/ฟอร์ม/ข้อความ error ให้รก — จะแสดง portal เต็มเฉพาะตอน fallback (ยังไม่ผูก/หาผลไม่เจอ)
   if (shouldOpenResultDirectly) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] px-6 text-center text-[var(--text-main)]">
-        <div className="flex flex-col items-center gap-4">
+      <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[linear-gradient(180deg,#f0f9ff_0%,#fff7fb_55%,#ffffff_100%)] px-6 text-center text-[var(--text-main)]">
+        <AmbientBackground />
+        <div className="animate-fade-up relative z-10 flex flex-col items-center gap-4">
           <LogoPair
             schoolName={schoolName}
             schoolLogoUrl={logoUrl}
@@ -290,9 +292,10 @@ export function LinePortal({
   }
 
   return (
-    <main className="min-h-screen bg-[#f8fbff] text-[var(--text-main)]">
-      <section className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-8">
-        <div className="mb-6 text-center">
+    <main className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#eef6ff_0%,#fdf1f8_48%,#ffffff_100%)] text-[var(--text-main)]">
+      <AmbientBackground />
+      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-8">
+        <div className="animate-fade-up mb-6 text-center">
           <LogoPair
             schoolName={schoolName}
             schoolLogoUrl={logoUrl}
@@ -303,22 +306,24 @@ export function LinePortal({
           />
           <p className="text-lg font-semibold leading-tight text-slate-950">{schoolName}</p>
           {activeExam && (
-            <div className="mx-auto mt-4 max-w-full rounded-[1.25rem] bg-white px-4 py-3 text-center ring-1 ring-sky-100">
-              <p className="line-clamp-2 text-sm font-semibold leading-6 text-sky-700">{activeExam.name}</p>
+            <div className="mx-auto mt-4 max-w-full rounded-[1.25rem] bg-white/80 px-4 py-3 text-center shadow-[0_12px_40px_rgba(14,165,233,0.10)] ring-1 ring-sky-100 backdrop-blur">
+              <p className="line-clamp-2 bg-[linear-gradient(120deg,#0284c7,#db2777)] bg-clip-text text-sm font-bold leading-6 text-transparent">{activeExam.name}</p>
               <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
-                <span className="text-slate-400">·</span>
                 <span className="text-sky-700">ระดับชั้น {activeExam.classLevel}</span>
+                <span className="text-slate-300">·</span>
                 <span className={activeExam.status === "PUBLISHED" ? "text-emerald-700" : "text-slate-500"}>
                   {activeExam.status === "PUBLISHED" ? "ประกาศแล้ว" : "ฉบับร่าง"}
                 </span>
               </div>
             </div>
           )}
-          <h1 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">{title}</h1>
+          <h1 className="mt-4 text-2xl font-semibold tracking-normal">
+            <span className="text-gradient">{title}</span>
+          </h1>
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[var(--text-muted)]">{description}</p>
         </div>
 
-        <div className="rounded-[1.5rem] border border-[var(--border-soft)] bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+        <div className="animate-fade-up-1 app-card-fancy p-5">
           <div className="mb-5 flex items-start gap-3 rounded-2xl bg-[#f7fbff] px-4 py-3 text-sm text-[var(--text-muted)]">
             {busy ? (
               <Loader2 size={18} className="mt-0.5 shrink-0 animate-spin text-[var(--primary-blue-strong)]" />

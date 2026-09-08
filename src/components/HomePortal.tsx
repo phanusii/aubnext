@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { GraduationCap, LockKeyhole, LogIn, Search, XCircle } from "lucide-react";
+import { AmbientBackground } from "@/components/AmbientBackground";
 import { AppFooter } from "@/components/AppFooter";
 import { cacheStudentResultForPage, studentResultSessionStorageKey } from "@/components/ResultPageClient";
 import { LogoPair } from "@/components/LogoPair";
@@ -109,10 +110,11 @@ export function HomePortal({
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#eef6ff_0%,#fdf1f8_48%,#ffffff_100%)] text-[var(--text-main)]">
-      <section className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-10">
+    <main className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#eef6ff_0%,#fdf1f8_48%,#ffffff_100%)] text-[var(--text-main)]">
+      <AmbientBackground />
+      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-10">
         {/* โลโก้ + ชื่อโรงเรียน + ชื่อรอบสอบ */}
-        <div className="text-center">
+        <div className="animate-fade-up text-center">
           <LogoPair
             schoolName={schoolName}
             schoolLogoUrl={logoUrl}
@@ -147,7 +149,7 @@ export function HomePortal({
         </div>
 
         {/* แท็บ นักเรียน / ครู */}
-        <div className="mt-7 grid grid-cols-2 gap-2 rounded-2xl bg-white/70 p-1.5 shadow-inner ring-1 ring-sky-100">
+        <div className="animate-fade-up-1 mt-7 grid grid-cols-2 gap-2 rounded-2xl bg-white/70 p-1.5 shadow-inner ring-1 ring-sky-100">
           <button
             type="button"
             onClick={() => setTab("student")}
@@ -177,10 +179,10 @@ export function HomePortal({
         </div>
 
         {/* เนื้อหาแท็บ */}
-        <div className="mt-5">
+        <div className="animate-fade-up-2 mt-5">
           {tab === "student" ? (
             <form
-              className="rounded-[1.75rem] border border-sky-100 bg-white/95 p-5 shadow-[0_18px_55px_rgba(14,165,233,0.12)] backdrop-blur"
+              className="app-card-fancy p-5"
               onSubmit={(event) => {
                 event.preventDefault();
                 void checkResult();
@@ -220,7 +222,7 @@ export function HomePortal({
             </form>
           ) : (
             <form
-              className="rounded-[1.75rem] border border-sky-100 bg-white/95 p-5 text-center shadow-[0_18px_55px_rgba(14,165,233,0.12)] backdrop-blur"
+              className="app-card-fancy p-5 text-center"
               onSubmit={(event) => {
                 event.preventDefault();
                 void login();
